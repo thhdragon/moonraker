@@ -185,7 +185,7 @@ class Server:
             The application arguments.
 
         """
-        return dict(self.app_args)  # type: ignore[return-value]
+        return dict(self.app_args)
 
     def get_app_arg(self, key: str, default=Sentinel.MISSING) -> object:
         """Get a specific application argument.
