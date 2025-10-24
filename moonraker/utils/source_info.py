@@ -5,34 +5,37 @@
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 from __future__ import annotations
+
 import importlib.resources as ilr
-import pathlib
-import sys
-import site
-import re
 import json
 import logging
+import pathlib
+import re
+import site
+import sys
 from dataclasses import dataclass
-from importlib_metadata import Distribution, PathDistribution, PackageMetadata
-from .exceptions import ServerError
 
 # Annotation imports
-from typing import (
-    Optional,
-    Dict,
-    Any
-)
+from typing import Any
+
+from importlib_metadata import Distribution, PackageMetadata, PathDistribution
+
+from .exceptions import ServerError
+
 
 def package_path() -> pathlib.Path:
     return pathlib.Path(__file__).parent.parent
 
+
 def source_path() -> pathlib.Path:
     return package_path().parent
+
 
 def is_git_repo(src_path: pathlib.Path | None = None) -> bool:
     if src_path is None:
         src_path = source_path()
     return src_path.joinpath(".git").exists()
+
 
 def find_git_repo(src_path: pathlib.Path | None = None) -> pathlib.Path | None:
     if src_path is None:
@@ -44,9 +47,9 @@ def find_git_repo(src_path: pathlib.Path | None = None) -> pathlib.Path | None:
             return parent
     return None
 
+
 def is_dist_package(item_path: pathlib.Path | None = None) -> bool:
-    """
-    Check if the supplied path exists within a python dist installation or
+    """Check if the supplied path exists within a python dist installation or
     site installation.
     """
     if item_path is None:
@@ -72,9 +75,11 @@ def is_dist_package(item_path: pathlib.Path | None = None) -> bool:
             return True
     return False
 
+
 def package_version() -> str | None:
     try:
         import moonraker.__version__ as ver  # type: ignore
+
         version = ver.__version__
     except Exception:
         pass
@@ -83,31 +88,24 @@ def package_version() -> str | None:
             return version
     return None
 
+
 def read_asset(asset_name: str) -> str | None:
-    if sys.version_info < (3, 10):
-        with ilr.path("moonraker.assets", asset_name) as p:
-            if not p.is_file():
-                return None
-            return p.read_text()
-    else:
-        files = ilr.files("moonraker.assets")
-        with ilr.as_file(files.joinpath(asset_name)) as p:
-            if not p.is_file():
-                return None
-            return p.read_text()
+    files = ilr.files("moonraker.assets")
+    with ilr.as_file(files.joinpath(asset_name)) as p:
+        if not p.is_file():
+            return None
+        return p.read_text()
+
 
 def get_asset_path() -> pathlib.Path | None:
-    if sys.version_info < (3, 10):
-        with ilr.path("moonraker.assets", "__init__.py") as p:
-            asset_path = p.parent
-    else:
-        files = ilr.files("moonraker.assets")
-        with ilr.as_file(files.joinpath("__init__.py")) as p:
-            asset_path = p.parent
+    files = ilr.files("moonraker.assets")
+    with ilr.as_file(files.joinpath("__init__.py")) as p:
+        asset_path = p.parent
     if not asset_path.is_dir():
         # Somehow running in a zipapp.  This is an error.
         return None
     return asset_path
+
 
 def _load_release_info_json(dist_info: Distribution) -> dict[str, Any] | None:
     files = dist_info.files
@@ -125,6 +123,7 @@ def _load_release_info_json(dist_info: Distribution) -> dict[str, Any] | None:
                 logging.exception(f"Failed to load release_info from {dist_file}")
     return None
 
+
 def _load_direct_url_json(dist_info: Distribution) -> dict[str, Any] | None:
     ret: str | None = dist_info.read_text("direct_url.json")
     if ret is None:
@@ -135,12 +134,12 @@ def _load_direct_url_json(dist_info: Distribution) -> dict[str, Any] | None:
         return None
     return direct_url
 
-def normalize_project_name(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).lower().replace('-', '_')
 
-def load_distribution_info(
-    venv_path: pathlib.Path, project_name: str
-) -> PackageInfo:
+def normalize_project_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower().replace("-", "_")
+
+
+def load_distribution_info(venv_path: pathlib.Path, project_name: str) -> PackageInfo:
     proj_name_normalized = normalize_project_name(project_name)
     site_items = venv_path.joinpath("lib").glob("python*/site-packages/")
     lib_paths = [str(p) for p in site_items if p.is_dir()]
@@ -156,15 +155,14 @@ def load_distribution_info(
             continue
         release_info = _load_release_info_json(dist_info)
         install_info = _load_direct_url_json(dist_info)
-        return PackageInfo(
-            dist_info, metadata, release_info, install_info
-        )
+        return PackageInfo(dist_info, metadata, release_info, install_info)
     raise ServerError(f"Failed to find distribution info for project {project_name}")
+
 
 def is_vitualenv_project(
     venv_path: pathlib.Path | None = None,
     pkg_path: pathlib.Path | None = None,
-    project_name: str = "moonraker"
+    project_name: str = "moonraker",
 ) -> bool:
     if venv_path is None:
         venv_path = pathlib.Path(sys.exec_prefix)
@@ -184,6 +182,7 @@ def is_vitualenv_project(
         except Exception:
             pass
     return True
+
 
 @dataclass(frozen=True)
 class PackageInfo:

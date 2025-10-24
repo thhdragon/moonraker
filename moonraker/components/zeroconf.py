@@ -16,14 +16,7 @@ from zeroconf import IPVersion
 from zeroconf.asyncio import AsyncServiceInfo, AsyncZeroconf
 from ..common import RequestType, TransportType
 
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    List,
-    Optional,
-    Tuple
-)
+from typing import TYPE_CHECKING, Any, Optional
 from collections.abc import Iterator
 
 if TYPE_CHECKING:
@@ -33,6 +26,7 @@ if TYPE_CHECKING:
     from .machine import Machine
 
 ZC_SERVICE_TYPE = "_moonraker._tcp.local."
+
 
 class AsyncRunner:
     def __init__(self, ip_version: IPVersion) -> None:
@@ -81,7 +75,8 @@ class ZeroconfRegistrar:
         self.bound_all = addr in ["0.0.0.0", "::"]
         if self.bound_all:
             self.server.register_event_handler(
-                "machine:net_state_changed", self._update_service)
+                "machine:net_state_changed", self._update_service
+            )
         self.ssdp_server: SSDPServer | None = None
         if config.getboolean("enable_ssdp", False):
             self.ssdp_server = SSDPServer(config)
@@ -93,8 +88,8 @@ class ZeroconfRegistrar:
         app_args = self.server.get_app_args()
         instance_uuid: str = app_args["instance_uuid"]
         if (
-            machine.get_provider_type().startswith("systemd") and
-            "unit_name" in machine.get_moonraker_service_info()
+            machine.get_provider_type().startswith("systemd")
+            and "unit_name" in machine.get_moonraker_service_info()
         ):
             # Use the name of the systemd service unit to identify service
             instance_name = machine.unit_name.capitalize()
@@ -107,7 +102,7 @@ class ZeroconfRegistrar:
             "uuid": instance_uuid,
             "https_port": hi["ssl_port"] if app.https_enabled() else "",
             "version": app_args["software_version"],
-            "route_prefix": app.route_prefix
+            "route_prefix": app.route_prefix,
         }
         if self.bound_all:
             if not host:
@@ -158,9 +153,8 @@ class ZeroconfRegistrar:
                     continue
                 addr_obj = ipaddress.ip_address(addr_info["address"])
                 ver = addr_obj.version
-                if (
-                    (self.ip_version == IPVersion.V4Only and ver == 6) or
-                    (self.ip_version == IPVersion.V6Only and ver == 4)
+                if (self.ip_version == IPVersion.V4Only and ver == 6) or (
+                    self.ip_version == IPVersion.V6Only and ver == 4
                 ):
                     continue
                 yield addr_obj.packed
@@ -193,6 +187,7 @@ SSDP_DEVICE_XML = """
 </root>
 """.strip()
 
+
 class SSDPServer(asyncio.protocols.DatagramProtocol):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -215,13 +210,13 @@ class SSDPServer(asyncio.protocols.DatagramProtocol):
             transports=TransportType.HTTP,
             wrap_result=False,
             content_type="application/xml",
-            auth_required=False
+            auth_required=False,
         )
 
     def _create_ssdp_socket(
         self,
         source_addr: tuple[str, int] = ("0.0.0.0", 0),
-        target_addr: tuple[str, int] = SSDP_ADDR
+        target_addr: tuple[str, int] = SSDP_ADDR,
     ) -> socket.socket:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -269,14 +264,12 @@ class SSDPServer(asyncio.protocols.DatagramProtocol):
         self.close_fut = self.server.get_event_loop().create_future()
         self.transport.close()
         try:
-            await asyncio.wait_for(self.close_fut, 2.)
+            await asyncio.wait_for(self.close_fut, 2.0)
         except TimeoutError:
             pass
         self.close_fut = None
 
-    def register_service(
-        self, name: str, host_name_or_ip: str, port: int
-    ) -> None:
+    def register_service(self, name: str, host_name_or_ip: str, port: int) -> None:
         if len(name) > 64:
             name = name[:64]
         self.name = name
@@ -311,19 +304,17 @@ class SSDPServer(asyncio.protocols.DatagramProtocol):
             model_number=app_args["software_version"],
             serial_number=self.unique_id.hex,
             device_uuid=str(self.unique_id),
-            presentation_url=self.base_url
+            presentation_url=self.base_url,
         )
 
     def _advertise_presence(self, eventtime: float) -> float:
         if self.running and self.registered:
             cur_ad = next(self.advertisements)
             self.transport.sendto(cur_ad, SSDP_ADDR)
-        delay = random.uniform(SSDP_MAX_AGE / 6., SSDP_MAX_AGE / 3.)
+        delay = random.uniform(SSDP_MAX_AGE / 6.0, SSDP_MAX_AGE / 3.0)
         return eventtime + delay
 
-    def connection_made(
-        self, transport: asyncio.transports.BaseTransport
-    ) -> None:
+    def connection_made(self, transport: asyncio.transports.BaseTransport) -> None:
         logging.debug("SSDP Server Connected")
 
     def connection_lost(self, exc: Exception | None) -> None:
@@ -355,8 +346,8 @@ class SSDPServer(asyncio.protocols.DatagramProtocol):
                 continue
             headers[parts[0].upper()] = parts[1].strip()
         if (
-            ssdp_command != "M-SEARCH * HTTP/1.1" or
-            headers.get("MAN") != '"ssdp:discover"'
+            ssdp_command != "M-SEARCH * HTTP/1.1"
+            or headers.get("MAN") != '"ssdp:discover"'
         ):
             # Not a discovery request
             return
@@ -390,25 +381,27 @@ class SSDPServer(asyncio.protocols.DatagramProtocol):
         notify_types = [
             ("upnp:rootdevice", f"uuid:{self.unique_id}::upnp:rootdevice"),
             (f"uuid:{self.unique_id}", f"uuid:{self.unique_id}"),
-            (SSDP_DEVICE_TYPE, f"uuid:{self.unique_id}::{SSDP_DEVICE_TYPE}")
+            (SSDP_DEVICE_TYPE, f"uuid:{self.unique_id}::{SSDP_DEVICE_TYPE}"),
         ]
-        for (nt, usn) in notify_types:
+        for nt, usn in notify_types:
             notifications.append(
-                "\r\n".join([
-                    "NOTIFY * HTTP/1.1",
-                    f"HOST: {SSDP_ADDR[0]}:{SSDP_ADDR[1]}",
-                    f"NTS: {nts}",
-                    f"NT: {nt}",
-                    f"USN: {usn}",
-                    f"LOCATION: {self.base_url}/server/zeroconf/ssdp",
-                    "EXT:",
-                    f"SERVER: {SSDP_SERVER_ID}",
-                    f"CACHE-CONTROL: max-age={SSDP_MAX_AGE}",
-                    f"BOOTID.UPNP.ORG: {self.boot_id}",
-                    f"CONFIGID.UPNP.ORG: {self.config_id}",
-                    "",
-                    ""
-                ]).encode()
+                "\r\n".join(
+                    [
+                        "NOTIFY * HTTP/1.1",
+                        f"HOST: {SSDP_ADDR[0]}:{SSDP_ADDR[1]}",
+                        f"NTS: {nts}",
+                        f"NT: {nt}",
+                        f"USN: {usn}",
+                        f"LOCATION: {self.base_url}/server/zeroconf/ssdp",
+                        "EXT:",
+                        f"SERVER: {SSDP_SERVER_ID}",
+                        f"CACHE-CONTROL: max-age={SSDP_MAX_AGE}",
+                        f"BOOTID.UPNP.ORG: {self.boot_id}",
+                        f"CONFIGID.UPNP.ORG: {self.config_id}",
+                        "",
+                        "",
+                    ]
+                ).encode()
             )
         return notifications
 

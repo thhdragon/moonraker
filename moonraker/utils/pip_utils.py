@@ -5,67 +5,66 @@
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 from __future__ import annotations
+
+import logging
 import os
+import pathlib
 import re
 import shlex
-import subprocess
-import pathlib
 import shutil
+import subprocess
 import threading
-import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 # Annotation imports
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Optional,
-    Union,
-    Dict,
-    List,
-    Tuple,
-    IO
-)
-from collections.abc import Callable
+from typing import IO, TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ..server import Server
     from ..components.shell_command import ShellCommandFactory
+    from ..server import Server
 
 MAX_PIP_VERSION = (25, 2)
 MIN_PYTHON_VERSION = (3, 7)
 
+
 class PipException(Exception):
     pass
+
 
 # Synchronous Subprocess Helpers
 def _run_subprocess_with_response(
     cmd: str,
     timeout: float | None = None,
-    env: dict[str, str] | None = None
+    env: dict[str, str] | None = None,
 ) -> str:
     prog = shlex.split(cmd)
     proc = subprocess.run(
-        prog, capture_output=True, timeout=timeout, env=env,
-        check=True, text=True, errors="ignore", encoding="utf-8"
+        prog,
+        capture_output=True,
+        timeout=timeout,
+        env=env,
+        check=True,
+        text=True,
+        errors="ignore",
+        encoding="utf-8",
     )
     if proc.returncode == 0:
         return proc.stdout.strip()
     err = proc.stderr
     raise PipException(f"Failed to run pip command '{cmd}': {err}")
 
-def _process_subproc_output(
-    stdout: IO[str],
-    callback: Callable[[str], None]
-) -> None:
+
+def _process_subproc_output(stdout: IO[str], callback: Callable[[str], None]) -> None:
     for line in stdout:
         callback(line.rstrip("\n"))
+
 
 def _run_subprocess(
     cmd: str,
     timeout: float | None = None,
     env: dict[str, str] | None = None,
-    response_cb: Callable[[str], None] | None = None
+    response_cb: Callable[[str], None] | None = None,
 ) -> None:
     prog = shlex.split(cmd)
     params: dict[str, Any] = {"errors": "ignore", "encoding": "utf-8"}
@@ -74,7 +73,8 @@ def _run_subprocess(
     with subprocess.Popen(prog, text=True, env=env, **params) as process:
         if process.stdout is not None and response_cb is not None:
             reader_thread = threading.Thread(
-                target=_process_subproc_output, args=(process.stdout, response_cb)
+                target=_process_subproc_output,
+                args=(process.stdout, response_cb),
             )
             reader_thread.start()
             reader_thread.join(timeout)
@@ -85,6 +85,7 @@ def _run_subprocess(
     ret = process.poll()
     if ret != 0:
         raise PipException(f"Failed to run pip command '{cmd}'")
+
 
 @dataclass(frozen=True)
 class PipVersionInfo:
@@ -110,18 +111,20 @@ class PipVersionInfo:
             return (20, 3, 4)
         if python_version < (3, 8):
             return (24, 0)
-        elif python_version < (3, 9):
+        if python_version < (3, 9):
             return (25, 0, 1)
-        else:
-            return MAX_PIP_VERSION
+        return MAX_PIP_VERSION
 
     @property
     def max_pip_version_string(self) -> str:
         return ".".join(str(p) for p in self.max_pip_version)
 
+
 class PipExecutor:
     def __init__(
-        self, pip_cmd: str, response_handler: Callable[[str], None] | None = None
+        self,
+        pip_cmd: str,
+        response_handler: Callable[[str], None] | None = None,
     ) -> None:
         self.pip_cmd = pip_cmd
         self.response_hdlr = response_handler
@@ -130,7 +133,7 @@ class PipExecutor:
         self,
         args: str,
         timeout: float | None = None,
-        env: dict[str, str] | None = None
+        env: dict[str, str] | None = None,
     ) -> str:
         return _run_subprocess_with_response(f"{self.pip_cmd} {args}", timeout, env)
 
@@ -138,33 +141,33 @@ class PipExecutor:
         self,
         args: str,
         timeout: float | None = None,
-        env: dict[str, str] | None = None
+        env: dict[str, str] | None = None,
     ) -> None:
         _run_subprocess(f"{self.pip_cmd} {args}", timeout, env, self.response_hdlr)
 
     def get_pip_version(self) -> PipVersionInfo:
-        resp = self.call_pip_with_response("--version", 10.)
+        resp = self.call_pip_with_response("--version", 10.0)
         return parse_pip_version(resp)
 
     def update_pip(self, version: str | None = None) -> None:
         if version is None:
             version = ".".join([str(part) for part in MAX_PIP_VERSION])
         try:
-            self.call_pip(f"install -U pip<={version}", 120.)
+            self.call_pip(f"install -U pip<={version}", 120.0)
         except PipException:
             logging.exception("Failed to update pip")
 
     def install_packages(
         self,
         packages: pathlib.Path | list[str],
-        sys_env_vars: dict[str, Any] | None = None
+        sys_env_vars: dict[str, Any] | None = None,
     ) -> None:
         args = prepare_install_args(packages)
         env: dict[str, str] | None = None
         if sys_env_vars is not None:
             env = dict(os.environ)
             env.update(sys_env_vars)
-        self.call_pip(f"install {args}", timeout=1200., env=env)
+        self.call_pip(f"install {args}", timeout=1200.0, env=env)
 
     def build_virtualenv(self, py_exec: pathlib.Path, args: str) -> None:
         bin_dir = py_exec.parent
@@ -173,18 +176,19 @@ class PipExecutor:
             shutil.rmtree(env_path)
         _run_subprocess(
             f"virtualenv {args} {env_path}",
-            timeout=600.,
-            response_cb=self.response_hdlr
+            timeout=600.0,
+            response_cb=self.response_hdlr,
         )
         if not py_exec.exists():
             raise Exception("Failed to create new virtualenv", 500)
+
 
 class AsyncPipExecutor:
     def __init__(
         self,
         pip_cmd: str,
         server: Server,
-        notify_callback: Callable[[bytes], None] | None = None
+        notify_callback: Callable[[bytes], None] | None = None,
     ) -> None:
         self.pip_cmd = pip_cmd
         self.server = server
@@ -196,9 +200,9 @@ class AsyncPipExecutor:
     async def call_pip_with_response(
         self,
         args: str,
-        timeout: float = 30.,
+        timeout: float = 30.0,
         attempts: int = 3,
-        sys_env_vars: dict[str, Any] | None = None
+        sys_env_vars: dict[str, Any] | None = None,
     ) -> str:
         env: dict[str, str] | None = None
         if sys_env_vars is not None:
@@ -206,16 +210,19 @@ class AsyncPipExecutor:
             env.update(sys_env_vars)
         shell_cmd = self.get_shell_cmd()
         return await shell_cmd.exec_cmd(
-            f"{self.pip_cmd} {args}", attempts=attempts,
-            timeout=timeout, env=env, log_stderr=True
+            f"{self.pip_cmd} {args}",
+            attempts=attempts,
+            timeout=timeout,
+            env=env,
+            log_stderr=True,
         )
 
     async def call_pip(
         self,
         args: str,
-        timeout: float = 30.,
+        timeout: float = 30.0,
         attempts: int = 3,
-        sys_env_vars: dict[str, Any] | None = None
+        sys_env_vars: dict[str, Any] | None = None,
     ) -> None:
         env: dict[str, str] | None = None
         if sys_env_vars is not None:
@@ -223,14 +230,20 @@ class AsyncPipExecutor:
             env.update(sys_env_vars)
         shell_cmd = self.get_shell_cmd()
         await shell_cmd.run_cmd_async(
-            f"{self.pip_cmd} {args}", self.notify_callback,
-            timeout=timeout, attempts=attempts, env=env,
-            log_stderr=True
+            f"{self.pip_cmd} {args}",
+            self.notify_callback,
+            timeout=timeout,
+            attempts=attempts,
+            env=env,
+            log_stderr=True,
         )
 
     async def get_pip_version(self) -> PipVersionInfo:
         resp: str = await self.get_shell_cmd().exec_cmd(
-            f"{self.pip_cmd} --version", timeout=30., attempts=3, log_stderr=True
+            f"{self.pip_cmd} --version",
+            timeout=30.0,
+            attempts=3,
+            log_stderr=True,
         )
         return parse_pip_version(resp)
 
@@ -241,7 +254,10 @@ class AsyncPipExecutor:
         try:
             await shell_cmd.run_cmd_async(
                 f"{self.pip_cmd} install -U pip<={version}",
-                self.notify_callback, timeout=1200., attempts=1, log_stderr=True
+                self.notify_callback,
+                timeout=1200.0,
+                attempts=1,
+                log_stderr=True,
             )
         except shell_cmd.error:
             logging.exception("Failed to Update Pip")
@@ -249,7 +265,7 @@ class AsyncPipExecutor:
     async def install_packages(
         self,
         packages: pathlib.Path | list[str],
-        sys_env_vars: dict[str, Any] | None = None
+        sys_env_vars: dict[str, Any] | None = None,
     ) -> None:
         # Update python dependencies
         args = prepare_install_args(packages)
@@ -259,8 +275,12 @@ class AsyncPipExecutor:
             env.update(sys_env_vars)
         shell_cmd = self.get_shell_cmd()
         await shell_cmd.run_cmd_async(
-            f"{self.pip_cmd} install {args}", self.notify_callback,
-            timeout=1200., attempts=3, env=env, log_stderr=True
+            f"{self.pip_cmd} install {args}",
+            self.notify_callback,
+            timeout=1200.0,
+            attempts=3,
+            env=env,
+            log_stderr=True,
         )
 
     async def build_virtualenv(self, py_exec: pathlib.Path, args: str) -> None:
@@ -269,9 +289,10 @@ class AsyncPipExecutor:
         if env_path.exists():
             shutil.rmtree(env_path)
         shell_cmd = self.get_shell_cmd()
-        await shell_cmd.exec_cmd(f"virtualenv {args} {env_path}", timeout=600.)
+        await shell_cmd.exec_cmd(f"virtualenv {args} {env_path}", timeout=600.0)
         if not py_exec.exists():
             raise self.server.error("Failed to create new virtualenv", 500)
+
 
 def read_requirements_file(requirements_path: pathlib.Path) -> list[str]:
     if not requirements_path.is_file():
@@ -284,13 +305,15 @@ def read_requirements_file(requirements_path: pathlib.Path) -> list[str]:
             continue
         match = re.search(r"\s#", line)
         if match is not None:
-            line = line[:match.start()].strip()
+            line = line[: match.start()].strip()
         modules.append(line)
     return modules
 
+
 def parse_pip_version(pip_response: str) -> PipVersionInfo:
     match = re.match(
-        r"^pip ([0-9.]+) from .+? \(python ([0-9.]+)\)$", pip_response.strip()
+        r"^pip ([0-9.]+) from .+? \(python ([0-9.]+)\)$",
+        pip_response.strip(),
     )
     if match is None:
         raise ValueError("Unable to parse pip version from response")
@@ -298,12 +321,11 @@ def parse_pip_version(pip_response: str) -> PipVersionInfo:
     pyver_str: str = match.group(2).strip()
     return PipVersionInfo(pipver_str, pyver_str)
 
+
 def prepare_install_args(packages: pathlib.Path | list[str]) -> str:
     if isinstance(packages, pathlib.Path):
         if not packages.is_file():
-            raise FileNotFoundError(
-                f"Invalid path to requirements_file '{packages}'"
-            )
+            raise FileNotFoundError(f"Invalid path to requirements_file '{packages}'")
         return f"-U -r {packages}"
-    reqs = [req.replace("\"", "'") for req in packages]
-    return "-U " + " ".join([f"\"{req}\"" for req in reqs])
+    reqs = [req.replace('"', "'") for req in packages]
+    return "-U " + " ".join([f'"{req}"' for req in reqs])

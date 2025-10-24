@@ -7,11 +7,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict
-)
+from typing import TYPE_CHECKING, Any
+
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from .application import InternalTransport as ITransport
@@ -26,7 +23,7 @@ class ButtonManager:
         for section in prefix_sections:
             cfg = config[section]
             # Reserve the "type" option for future use
-            btn_type = cfg.get('type', "gpio")  # noqa: F841
+            btn_type = cfg.get("type", "gpio")  # noqa: F841
             try:
                 btn = GpioButton(cfg)
             except Exception as e:
@@ -40,6 +37,7 @@ class ButtonManager:
         for btn in self.buttons.values():
             btn.initialize()
 
+
 class GpioButton:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -49,40 +47,35 @@ class GpioButton:
         self.mutex = asyncio.Lock()
         self.gpio_event = config.getgpioevent("pin", self._on_gpio_event)
         self.min_event_time = config.getfloat("minimum_event_time", 0, minval=0.0)
-        debounce_period = config.getfloat("debounce_period", .05, minval=0.01)
+        debounce_period = config.getfloat("debounce_period", 0.05, minval=0.01)
         self.gpio_event.setup_debounce(debounce_period, self._on_gpio_error)
         self.press_template = config.gettemplate("on_press", None, is_async=True)
         self.release_template = config.gettemplate("on_release", None, is_async=True)
-        if (
-            self.press_template is None and
-            self.release_template is None
-        ):
-            raise config.error(
-                f"[{config.get_name()}]: No template option configured"
-            )
+        if self.press_template is None and self.release_template is None:
+            raise config.error(f"[{config.get_name()}]: No template option configured")
         self.notification_sent: bool = False
         self.user_data: dict[str, Any] = {}
         self.context: dict[str, Any] = {
-            'call_method': self.itransport.call_method,
-            'send_notification': self._send_notification,
-            'event': {
-                'elapsed_time': 0.,
-                'received_time': 0.,
-                'render_time': 0.,
-                'pressed': False,
+            "call_method": self.itransport.call_method,
+            "send_notification": self._send_notification,
+            "event": {
+                "elapsed_time": 0.0,
+                "received_time": 0.0,
+                "render_time": 0.0,
+                "pressed": False,
             },
-            'user_data': self.user_data
+            "user_data": self.user_data,
         }
 
     def initialize(self) -> None:
         self.gpio_event.start()
-        self.context['event']['pressed'] = bool(self.gpio_event.get_value())
+        self.context["event"]["pressed"] = bool(self.gpio_event.get_value())
 
     def get_status(self) -> dict[str, Any]:
         return {
-            'name': self.name,
-            'type': "gpio",
-            'event': self.context['event'],
+            "name": self.name,
+            "type": "gpio",
+            "event": self.context["event"],
         }
 
     def _send_notification(self, result: Any = None) -> None:
@@ -91,7 +84,7 @@ class GpioButton:
             return
         self.notification_sent = True
         data = self.get_status()
-        data['aux'] = result
+        data["aux"] = result
         self.server.send_event("button:button_event", data)
 
     async def _on_gpio_event(
@@ -105,21 +98,21 @@ class GpioButton:
         async with self.mutex:
             self.notification_sent = False
             event_info: dict[str, Any] = {
-                'elapsed_time': elapsed_time,
-                'received_time': eventtime,
-                'render_time': self.eventloop.get_loop_time(),
-                'pressed': bool(pressed)
+                "elapsed_time": elapsed_time,
+                "received_time": eventtime,
+                "render_time": self.eventloop.get_loop_time(),
+                "pressed": bool(pressed),
             }
-            self.context['event'] = event_info
+            self.context["event"] = event_info
             try:
                 await template.render_async(self.context)
             except Exception:
                 action = "on_press" if pressed else "on_release"
-                logging.exception(
-                    f"Button {self.name}: '{action}' template error")
+                logging.exception(f"Button {self.name}: '{action}' template error")
 
     def _on_gpio_error(self, message: str) -> None:
         self.server.add_warning(f"Button {self.name}: {message}")
+
 
 def load_component(config: ConfigHelper) -> ButtonManager:
     return ButtonManager(config)

@@ -20,18 +20,16 @@ from ..common import RequestType
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
-    Deque,
     Any,
-    List,
-    Tuple,
     Optional,
-    Dict,
 )
 from collections.abc import Awaitable, Callable
+
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .websockets import WebsocketManager
+
     STAT_CALLBACK = Callable[[int], Awaitable | None]
 
 VC_GEN_CMD_FILE = "/usr/bin/vcgencmd"
@@ -40,18 +38,14 @@ STATM_FILE_PATH = "/proc/self/smaps_rollup"
 NET_DEV_PATH = "/proc/net/dev"
 TEMPERATURE_PATH = "/sys/class/thermal/thermal_zone0/temp"
 HWMON_ROOT_PATH = "/sys/class/hwmon/"
-HWMON_PLATFORMS = {
-    "coretemp": "Intel",
-    "k10temp": "AMD",
-    "cpu_thermal": "Raspberry Pi"
-}
+HWMON_PLATFORMS = {"coretemp": "Intel", "k10temp": "AMD", "cpu_thermal": "Raspberry Pi"}
 CPU_STAT_PATH = "/proc/stat"
 MEM_AVAIL_PATH = "/proc/meminfo"
-STAT_UPDATE_TIME = 1.
+STAT_UPDATE_TIME = 1.0
 REPORT_QUEUE_SIZE = 30
 THROTTLE_CHECK_INTERVAL = 10
-WATCHDOG_REFRESH_TIME = 2.
-REPORT_BLOCKED_TIME = 4.
+WATCHDOG_REFRESH_TIME = 2.0
+REPORT_BLOCKED_TIME = 4.0
 
 THROTTLED_FLAGS = {
     1: "Under-Voltage Detected",
@@ -61,8 +55,9 @@ THROTTLED_FLAGS = {
     1 << 16: "Previously Under-Volted",
     1 << 17: "Previously Frequency Capped",
     1 << 18: "Previously Throttled",
-    1 << 19: "Previously Temperature Limited"
+    1 << 19: "Previously Temperature Limited",
 }
+
 
 class ProcStats:
     def __init__(self, config: ConfigHelper) -> None:
@@ -70,15 +65,15 @@ class ProcStats:
         self.event_loop = self.server.get_event_loop()
         self.watchdog = Watchdog(self)
         self.stat_update_timer = self.event_loop.register_timer(
-            self._handle_stat_update)
+            self._handle_stat_update
+        )
         self.vcgencmd: VCGenCmd | None = None
         if os.path.exists(VC_GEN_CMD_FILE) and os.path.exists(VCIO_PATH):
             logging.info("Detected 'vcgencmd', throttle checking enabled")
             self.vcgencmd = VCGenCmd()
             self.server.register_notification("proc_stats:cpu_throttled")
         else:
-            logging.info("Unable to find 'vcgencmd', throttle checking "
-                         "disabled")
+            logging.info("Unable to find 'vcgencmd', throttle checking disabled")
         self.temp_file = pathlib.Path(self._get_cpu_thermal_file())
         self.smaps = pathlib.Path(STATM_FILE_PATH)
         self.netdev_file = pathlib.Path(NET_DEV_PATH)
@@ -111,33 +106,29 @@ class ProcStats:
     def register_stat_callback(self, callback: STAT_CALLBACK) -> None:
         self.stat_callbacks.append(callback)
 
-    async def _handle_stat_request(self,
-                                   web_request: WebRequest
-                                   ) -> dict[str, Any]:
+    async def _handle_stat_request(self, web_request: WebRequest) -> dict[str, Any]:
         ts: dict[str, Any] | None = None
         if self.vcgencmd is not None:
             ts = await self._check_throttled_state()
-        cpu_temp = await self.event_loop.run_in_thread(
-            self._get_cpu_temperature)
+        cpu_temp = await self.event_loop.run_in_thread(self._get_cpu_temperature)
         wsm: WebsocketManager = self.server.lookup_component("websockets")
         websocket_count = wsm.get_count()
         return {
-            'moonraker_stats': list(self.proc_stat_queue),
-            'throttled_state': ts,
-            'cpu_temp': cpu_temp,
-            'network': self.last_net_stats,
-            'system_cpu_usage': self.cpu_usage,
-            'system_uptime': time.clock_gettime(time.CLOCK_BOOTTIME),
-            'system_memory': self.memory_usage,
-            'websocket_connections': websocket_count
+            "moonraker_stats": list(self.proc_stat_queue),
+            "throttled_state": ts,
+            "cpu_temp": cpu_temp,
+            "network": self.last_net_stats,
+            "system_cpu_usage": self.cpu_usage,
+            "system_uptime": time.clock_gettime(time.CLOCK_BOOTTIME),
+            "system_memory": self.memory_usage,
+            "websocket_connections": websocket_count,
         }
 
     async def _handle_shutdown(self) -> None:
         msg = "\nMoonraker System Usage Statistics:"
         for stats in self.proc_stat_queue:
             msg += f"\n{self._format_stats(stats)}"
-        cpu_temp = await self.event_loop.run_in_thread(
-            self._get_cpu_temperature)
+        cpu_temp = await self.event_loop.run_in_thread(self._get_cpu_temperature)
         msg += f"\nCPU Temperature: {cpu_temp}"
         logging.info(msg)
         if self.vcgencmd is not None:
@@ -149,45 +140,50 @@ class ProcStats:
         proc_time = time.process_time()
         time_diff = update_time - self.last_update_time
         usage = round((proc_time - self.last_proc_time) / time_diff * 100, 2)
-        cpu_temp, mem, mem_units, net = (
-            await self.event_loop.run_in_thread(self._read_system_files)
+        cpu_temp, mem, mem_units, net = await self.event_loop.run_in_thread(
+            self._read_system_files
         )
         for dev in net:
-            bytes_sec = 0.
+            bytes_sec = 0.0
             if dev in self.last_net_stats:
                 last_dev_stats = self.last_net_stats[dev]
-                cur_total: int = net[dev]['rx_bytes'] + net[dev]['tx_bytes']
-                last_total: int = last_dev_stats['rx_bytes'] + \
-                    last_dev_stats['tx_bytes']
+                cur_total: int = net[dev]["rx_bytes"] + net[dev]["tx_bytes"]
+                last_total: int = (
+                    last_dev_stats["rx_bytes"] + last_dev_stats["tx_bytes"]
+                )
                 bytes_sec = round((cur_total - last_total) / time_diff, 2)
-            net[dev]['bandwidth'] = bytes_sec
+            net[dev]["bandwidth"] = bytes_sec
         self.last_net_stats = net
         result = {
-            'time': time.time(),
-            'cpu_usage': usage,
-            'memory': mem,
-            'mem_units': mem_units
+            "time": time.time(),
+            "cpu_usage": usage,
+            "memory": mem,
+            "mem_units": mem_units,
         }
         self.proc_stat_queue.append(result)
         wsm: WebsocketManager = self.server.lookup_component("websockets")
         websocket_count = wsm.get_count()
-        self.server.send_event("proc_stats:proc_stat_update", {
-            'moonraker_stats': result,
-            'cpu_temp': cpu_temp,
-            'network': net,
-            'system_cpu_usage': self.cpu_usage,
-            'system_memory': self.memory_usage,
-            'websocket_connections': websocket_count
-        })
+        self.server.send_event(
+            "proc_stats:proc_stat_update",
+            {
+                "moonraker_stats": result,
+                "cpu_temp": cpu_temp,
+                "network": net,
+                "system_cpu_usage": self.cpu_usage,
+                "system_memory": self.memory_usage,
+                "websocket_connections": websocket_count,
+            },
+        )
         if (
             not self.update_sequence % THROTTLE_CHECK_INTERVAL
             and self.vcgencmd is not None
         ):
             ts = await self._check_throttled_state()
-            cur_throttled = ts['bits']
+            cur_throttled = ts["bits"]
             if cur_throttled & ~self.total_throttled:
                 self.server.add_log_rollover_item(
-                    'throttled', f"CPU Throttled Flags: {ts['flags']}")
+                    "throttled", f"CPU Throttled Flags: {ts['flags']}"
+                )
             if cur_throttled != self.last_throttled:
                 self.server.send_event("proc_stats:cpu_throttled", ts)
             self.last_throttled = cur_throttled
@@ -202,7 +198,7 @@ class ProcStats:
         return eventtime + STAT_UPDATE_TIME
 
     async def _check_throttled_state(self) -> dict[str, Any]:
-        ret = {'bits': 0, 'flags': ["?"]}
+        ret = {"bits": 0, "flags": ["?"]}
         if self.vcgencmd is not None:
             async with self.throttle_check_lock:
                 try:
@@ -238,7 +234,7 @@ class ProcStats:
     def _get_cpu_temperature(self) -> float | None:
         try:
             res = int(self.temp_file.read_text().strip())
-            temp = res / 1000.
+            temp = res / 1000.0
         except Exception:
             return None
         return temp
@@ -248,17 +244,17 @@ class ProcStats:
         try:
             ret = self.netdev_file.read_text()
             dev_info = re.findall(r"([\w]+):(.+)", ret)
-            for (dev_name, stats) in dev_info:
+            for dev_name, stats in dev_info:
                 parsed_stats = stats.strip().split()
                 net_stats[dev_name] = {
-                    'rx_bytes': int(parsed_stats[0]),
-                    'tx_bytes': int(parsed_stats[8]),
-                    'rx_packets': int(parsed_stats[1]),
-                    'tx_packets': int(parsed_stats[9]),
-                    'rx_errs': int(parsed_stats[2]),
-                    'tx_errs': int(parsed_stats[10]),
-                    'rx_drop': int(parsed_stats[3]),
-                    'tx_drop': int(parsed_stats[11])
+                    "rx_bytes": int(parsed_stats[0]),
+                    "tx_bytes": int(parsed_stats[8]),
+                    "rx_packets": int(parsed_stats[1]),
+                    "tx_packets": int(parsed_stats[9]),
+                    "rx_errs": int(parsed_stats[2]),
+                    "tx_errs": int(parsed_stats[10]),
+                    "rx_drop": int(parsed_stats[3]),
+                    "tx_drop": int(parsed_stats[11]),
                 }
             return net_stats
         except Exception:
@@ -293,8 +289,7 @@ class ProcStats:
                     cpu_delta = cpu_sum - last_sum
                     idle_delta = cpu_idle - last_idle
                     cpu_used = cpu_delta - idle_delta
-                    cpu_usage[name] = round(
-                        100 * (cpu_used / cpu_delta), 2)
+                    cpu_usage[name] = round(100 * (cpu_used / cpu_delta), 2)
                 self.cpu_usage = cpu_usage
                 self.last_cpu_stats[name] = (cpu_sum, cpu_idle)
         except Exception:
@@ -319,9 +314,11 @@ class ProcStats:
         return TEMPERATURE_PATH
 
     def _format_stats(self, stats: dict[str, Any]) -> str:
-        return f"System Time: {stats['time']:2f}, " \
-               f"Usage: {stats['cpu_usage']}%, " \
-               f"Memory: {stats['memory']} {stats['mem_units']}"
+        return (
+            f"System Time: {stats['time']:2f}, "
+            f"Usage: {stats['cpu_usage']}%, "
+            f"Memory: {stats['memory']} {stats['mem_units']}"
+        )
 
     def log_last_stats(self, count: int = 1):
         count = min(len(self.proc_stat_queue), count)
@@ -334,15 +331,14 @@ class ProcStats:
         self.stat_update_timer.stop()
         self.watchdog.stop()
 
+
 class Watchdog:
     def __init__(self, proc_stats: ProcStats) -> None:
         self.proc_stats = proc_stats
         self.event_loop = proc_stats.event_loop
         self.blocked_count: int = 0
-        self.last_watch_time: float = 0.
-        self.watchdog_timer = self.event_loop.register_timer(
-            self._watchdog_callback
-        )
+        self.last_watch_time: float = 0.0
+        self.watchdog_timer = self.event_loop.register_timer(self._watchdog_callback)
 
     def _watchdog_callback(self, eventtime: float) -> float:
         time_diff = eventtime - self.last_watch_time
@@ -350,11 +346,11 @@ class Watchdog:
             self.blocked_count += 1
             logging.info(
                 f"EVENT LOOP BLOCKED: {round(time_diff, 2)} seconds"
-                f", total blocked count: {self.blocked_count}")
+                f", total blocked count: {self.blocked_count}"
+            )
             # delay the stat logging so we capture the CPU percentage after
             # the next cycle
-            self.event_loop.delay_callback(
-                .2, self.proc_stats.log_last_stats, 5)
+            self.event_loop.delay_callback(0.2, self.proc_stats.log_last_stats, 5)
         self.last_watch_time = eventtime
         return eventtime + WATCHDOG_REFRESH_TIME
 
@@ -366,15 +362,18 @@ class Watchdog:
     def stop(self):
         self.watchdog_timer.stop()
 
+
 class VCGenCmd:
     """
     This class uses the BCM2835 Mailbox to directly query the throttled
     state.  This should be less resource intensive than calling "vcgencmd"
     in a subprocess.
     """
+
     MAX_STRING_SIZE = 1024
     GET_RESULT_CMD = 0x00030080
     UINT_SIZE = struct.calcsize("@I")
+
     def __init__(self) -> None:
         self.cmd_struct = struct.Struct(f"@6I{self.MAX_STRING_SIZE}sI")
         self.cmd_buf = bytearray(self.cmd_struct.size)
@@ -385,7 +384,8 @@ class VCGenCmd:
         try:
             fd = os.open(VCIO_PATH, os.O_RDWR)
             self.cmd_struct.pack_into(
-                self.cmd_buf, 0,
+                self.cmd_buf,
+                0,
                 self.cmd_struct.size,
                 0x00000000,
                 self.GET_RESULT_CMD,
@@ -393,7 +393,7 @@ class VCGenCmd:
                 0,
                 0,
                 cmd.encode("utf-8"),
-                0x00000000
+                0x00000000,
             )
             fcntl.ioctl(fd, self.mailbox_req, self.cmd_buf)
         except OSError:
@@ -408,10 +408,11 @@ class VCGenCmd:
         if ret:
             logging.info(f"vcgencmd returned {ret}")
         resp: bytes = result[6]
-        null_index = resp.find(b'\x00')
+        null_index = resp.find(b"\x00")
         if null_index <= 0:
             return ""
         return resp[:null_index].decode()
+
 
 def load_component(config: ConfigHelper) -> ProcStats:
     return ProcStats(config)

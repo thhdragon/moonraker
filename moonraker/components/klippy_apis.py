@@ -10,20 +10,14 @@ from ..utils import Sentinel
 from ..common import WebRequest, APITransport, RequestType
 
 # Annotation imports
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Union,
-    Optional,
-    Dict,
-    List,
-    TypeVar
-)
+from typing import TYPE_CHECKING, Any, Union, Optional, Dict, List, TypeVar
 from collections.abc import Mapping, Callable, Coroutine
+
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import UserInfo
     from .klippy_connection import KlippyConnection as Klippy
+
     Subscription = dict[str, list[Any] | None]
     SubCallback = Callable[[dict[str, dict[str, Any]], float], Coroutine | None]
     _T = TypeVar("_T")
@@ -38,13 +32,14 @@ STATUS_ENDPOINT = "objects/query"
 OBJ_LIST_ENDPOINT = "objects/list"
 REG_METHOD_ENDPOINT = "register_remote_method"
 
+
 class KlippyAPI(APITransport):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.klippy: Klippy = self.server.lookup_component("klippy_connection")
         self.eventloop = self.server.get_event_loop()
         app_args = self.server.get_app_args()
-        self.version = app_args.get('software_version')
+        self.version = app_args.get("software_version")
         # Maintain a subscription for all moonraker requests, as
         # we do not want to overwrite them
         self.host_subscription: Subscription = {}
@@ -87,7 +82,7 @@ class KlippyAPI(APITransport):
         return await self.cancel_print()
 
     async def _gcode_start_print(self, web_request: WebRequest) -> str:
-        filename: str = web_request.get_str('filename')
+        filename: str = web_request.get_str("filename")
         user = web_request.get_current_user()
         return await self.start_print(filename, user=user)
 
@@ -102,7 +97,7 @@ class KlippyAPI(APITransport):
         method: str,
         params: dict[str, Any],
         default: Any = Sentinel.MISSING,
-        transport: APITransport | None = None
+        transport: APITransport | None = None,
     ) -> Any:
         try:
             req = WebRequest(method, params, transport=transport or self)
@@ -113,20 +108,16 @@ class KlippyAPI(APITransport):
             result = default
         return result
 
-    async def run_gcode(self,
-                        script: str,
-                        default: Any = Sentinel.MISSING
-                        ) -> str:
-        params = {'script': script}
-        result = await self._send_klippy_request(
-            GCODE_ENDPOINT, params, default)
+    async def run_gcode(self, script: str, default: Any = Sentinel.MISSING) -> str:
+        params = {"script": script}
+        result = await self._send_klippy_request(GCODE_ENDPOINT, params, default)
         return result
 
     async def start_print(
         self,
         filename: str,
         wait_klippy_started: bool = False,
-        user: UserInfo | None = None
+        user: UserInfo | None = None,
     ) -> str:
         # WARNING: Do not call this method from within the following
         # event handlers when "wait_klippy_started" is set to True:
@@ -134,10 +125,10 @@ class KlippyAPI(APITransport):
         # Doing so will result in "wait_started" blocking for the specified
         # timeout (default 20s) and returning False.
         # XXX - validate that file is on disk
-        if filename[0] == '/':
+        if filename[0] == "/":
             filename = filename[1:]
         # Escape existing double quotes in the file name
-        filename = filename.replace("\"", "\\\"")
+        filename = filename.replace('"', '\\"')
         script = f'SDCARD_PRINT_FILE FILENAME="{filename}"'
         if wait_klippy_started:
             await self.klippy.wait_started()
@@ -146,33 +137,22 @@ class KlippyAPI(APITransport):
         self.server.send_event("klippy_apis:job_start_complete", user)
         return ret
 
-    async def pause_print(
-        self, default: Sentinel | _T = Sentinel.MISSING
-    ) -> _T | str:
+    async def pause_print(self, default: Sentinel | _T = Sentinel.MISSING) -> _T | str:
         self.server.send_event("klippy_apis:pause_requested")
         logging.info("Requesting job pause...")
-        return await self._send_klippy_request(
-            "pause_resume/pause", {}, default)
+        return await self._send_klippy_request("pause_resume/pause", {}, default)
 
-    async def resume_print(
-        self, default: Sentinel | _T = Sentinel.MISSING
-    ) -> _T | str:
+    async def resume_print(self, default: Sentinel | _T = Sentinel.MISSING) -> _T | str:
         self.server.send_event("klippy_apis:resume_requested")
         logging.info("Requesting job resume...")
-        return await self._send_klippy_request(
-            "pause_resume/resume", {}, default)
+        return await self._send_klippy_request("pause_resume/resume", {}, default)
 
-    async def cancel_print(
-        self, default: Sentinel | _T = Sentinel.MISSING
-    ) -> _T | str:
+    async def cancel_print(self, default: Sentinel | _T = Sentinel.MISSING) -> _T | str:
         self.server.send_event("klippy_apis:cancel_requested")
         logging.info("Requesting job cancel...")
-        return await self._send_klippy_request(
-            "pause_resume/cancel", {}, default)
+        return await self._send_klippy_request("pause_resume/cancel", {}, default)
 
-    async def do_restart(
-        self, gc: str, wait_klippy_started: bool = False
-    ) -> str:
+    async def do_restart(self, gc: str, wait_klippy_started: bool = False) -> str:
         # WARNING: Do not call this method from within the following
         # event handlers when "wait_klippy_started" is set to True:
         # klippy_identified, klippy_started, klippy_ready, klippy_disconnect
@@ -189,43 +169,40 @@ class KlippyAPI(APITransport):
                 raise
         return result
 
-    async def list_endpoints(self,
-                             default: Sentinel | _T = Sentinel.MISSING
-                             ) -> _T | dict[str, list[str]]:
-        return await self._send_klippy_request(
-            LIST_EPS_ENDPOINT, {}, default)
+    async def list_endpoints(
+        self, default: Sentinel | _T = Sentinel.MISSING
+    ) -> _T | dict[str, list[str]]:
+        return await self._send_klippy_request(LIST_EPS_ENDPOINT, {}, default)
 
     async def emergency_stop(self) -> str:
         return await self._send_klippy_request(ESTOP_ENDPOINT, {})
 
-    async def get_klippy_info(self,
-                              send_id: bool = False,
-                              default: Sentinel | _T = Sentinel.MISSING
-                              ) -> _T | dict[str, Any]:
+    async def get_klippy_info(
+        self, send_id: bool = False, default: Sentinel | _T = Sentinel.MISSING
+    ) -> _T | dict[str, Any]:
         params = {}
         if send_id:
             ver = self.version
-            params = {'client_info': {'program': "Moonraker", 'version': ver}}
+            params = {"client_info": {"program": "Moonraker", "version": ver}}
         return await self._send_klippy_request(INFO_ENDPOINT, params, default)
 
-    async def get_object_list(self,
-                              default: Sentinel | _T = Sentinel.MISSING
-                              ) -> _T | list[str]:
-        result = await self._send_klippy_request(
-            OBJ_LIST_ENDPOINT, {}, default)
-        if isinstance(result, dict) and 'objects' in result:
-            return result['objects']
+    async def get_object_list(
+        self, default: Sentinel | _T = Sentinel.MISSING
+    ) -> _T | list[str]:
+        result = await self._send_klippy_request(OBJ_LIST_ENDPOINT, {}, default)
+        if isinstance(result, dict) and "objects" in result:
+            return result["objects"]
         if default is not Sentinel.MISSING:
             return default
         raise self.server.error("Invalid response received from Klippy", 500)
 
-    async def query_objects(self,
-                            objects: Mapping[str, list[str] | None],
-                            default: Sentinel | _T = Sentinel.MISSING
-                            ) -> _T | dict[str, Any]:
-        params = {'objects': objects}
-        result = await self._send_klippy_request(
-            STATUS_ENDPOINT, params, default)
+    async def query_objects(
+        self,
+        objects: Mapping[str, list[str] | None],
+        default: Sentinel | _T = Sentinel.MISSING,
+    ) -> _T | dict[str, Any]:
+        params = {"objects": objects}
+        result = await self._send_klippy_request(STATUS_ENDPOINT, params, default)
         if isinstance(result, dict) and "status" in result:
             return result["status"]
         if default is not Sentinel.MISSING:
@@ -236,7 +213,7 @@ class KlippyAPI(APITransport):
         self,
         objects: Mapping[str, list[str] | None],
         callback: SubCallback | None = None,
-        default: Sentinel | _T = Sentinel.MISSING
+        default: Sentinel | _T = Sentinel.MISSING,
     ) -> _T | dict[str, Any]:
         # The host transport shares subscriptions amongst all components
         for obj, items in objects.items():
@@ -264,7 +241,7 @@ class KlippyAPI(APITransport):
         objects: Mapping[str, list[str] | None],
         transport: APITransport,
         default: Sentinel | _T = Sentinel.MISSING,
-        full_response: bool = False
+        full_response: bool = False,
     ) -> _T | dict[str, Any]:
         params = {"objects": dict(objects)}
         result = await self._send_klippy_request(
@@ -279,22 +256,23 @@ class KlippyAPI(APITransport):
         raise self.server.error("Invalid response received from Klippy", 500)
 
     async def subscribe_gcode_output(self) -> str:
-        template = {'response_template':
-                    {'method': "process_gcode_response"}}
+        template = {"response_template": {"method": "process_gcode_response"}}
         return await self._send_klippy_request(GC_OUTPUT_ENDPOINT, template)
 
     async def register_method(self, method_name: str) -> str:
         return await self._send_klippy_request(
             REG_METHOD_ENDPOINT,
-            {'response_template': {"method": method_name},
-             'remote_method': method_name})
+            {
+                "response_template": {"method": method_name},
+                "remote_method": method_name,
+            },
+        )
 
-    def send_status(
-        self, status: dict[str, Any], eventtime: float
-    ) -> None:
+    def send_status(self, status: dict[str, Any], eventtime: float) -> None:
         for cb in self.subscription_callbacks:
             self.eventloop.register_callback(cb, status, eventtime)
         self.server.send_event("server:status_update", status)
+
 
 def load_component(config: ConfigHelper) -> KlippyAPI:
     return KlippyAPI(config)

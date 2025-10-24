@@ -15,23 +15,22 @@ from ..utils import json_wrapper as jsonw
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
-    Deque,
     Any,
-    Tuple,
     Optional,
-    Dict,
-    List,
 )
 from collections.abc import Callable, Coroutine
+
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from .klippy_connection import KlippyConnection
     from .klippy_apis import KlippyAPI as APIComp
     from .file_manager.file_manager import FileManager as FMComp
+
     FlexCallback = Callable[..., Coroutine | None]
 
-MIN_EST_TIME = 10.
-INITIALIZE_TIMEOUT = 10.
+MIN_EST_TIME = 10.0
+INITIALIZE_TIMEOUT = 10.0
+
 
 class PanelDueError(ServerError):
     pass
@@ -44,16 +43,16 @@ class PanelDue:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.event_loop = self.server.get_event_loop()
-        self.file_manager: FMComp = self.server.lookup_component('file_manager')
-        self.klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
+        self.file_manager: FMComp = self.server.lookup_component("file_manager")
+        self.klippy_apis: APIComp = self.server.lookup_component("klippy_apis")
         self.kinematics: str = "none"
-        self.machine_name = config.get('machine_name', "Klipper")
+        self.machine_name = config.get("machine_name", "Klipper")
         self.firmware_name: str = "Repetier | Klipper"
         self.last_message: str | None = None
         self.last_gcode_response: str | None = None
         self.current_file: str = ""
         self.file_metadata: dict[str, Any] = {}
-        self.enable_checksum = config.getboolean('enable_checksum', True)
+        self.enable_checksum = config.getboolean("enable_checksum", True)
         self.debug_queue: deque[str] = deque(maxlen=100)
         self.enabled: bool = True
 
@@ -69,8 +68,8 @@ class PanelDue:
         self.gq_busy: bool = False
         self.command_queue: list[tuple[FlexCallback, Any, Any]] = []
         self.gc_queue: list[str] = []
-        self.last_printer_state: str = 'O'
-        self.last_update_time: float = 0.
+        self.last_printer_state: str = "O"
+        self.last_update_time: float = 0.0
 
         # Set up macros
         self.confirmed_gcode: str = ""
@@ -78,19 +77,20 @@ class PanelDue:
         self.available_macros: dict[str, str] = {}
         self.confirmed_macros = {
             "RESTART": "RESTART",
-            "FIRMWARE_RESTART": "FIRMWARE_RESTART"}
-        macros = config.getlist('macros', None)
+            "FIRMWARE_RESTART": "FIRMWARE_RESTART",
+        }
+        macros = config.getlist("macros", None)
         if macros is not None:
             # The macro's configuration name is the key, whereas the full
             # command is the value
             self.available_macros = {m.split()[0]: m for m in macros}
-        conf_macros = config.getlist('confirmed_macros', None)
+        conf_macros = config.getlist("confirmed_macros", None)
         if conf_macros is not None:
             # The macro's configuration name is the key, whereas the full
             # command is the value
             self.confirmed_macros = {m.split()[0]: m for m in conf_macros}
         self.available_macros.update(self.confirmed_macros)
-        self.non_trivial_keys = config.getlist('non_trivial_keys', ["Klipper state"])
+        self.non_trivial_keys = config.getlist("non_trivial_keys", ["Klipper state"])
         self.ser_conn = async_serial.AsyncSerialConnection.from_config(config)
         logging.info("PanelDue Configured")
 
@@ -112,26 +112,26 @@ class PanelDue:
         # These commands are directly executed on the server and do not to
         # make a request to Klippy
         self.direct_gcodes: dict[str, FlexCallback] = {
-            'M20': self._run_paneldue_M20,
-            'M30': self._run_paneldue_M30,
-            'M36': self._run_paneldue_M36,
-            'M408': self._run_paneldue_M408
+            "M20": self._run_paneldue_M20,
+            "M30": self._run_paneldue_M30,
+            "M36": self._run_paneldue_M36,
+            "M408": self._run_paneldue_M408,
         }
 
         # These gcodes require special parsing or handling prior to being
         # sent via Klippy's "gcode/script" api command.
         self.special_gcodes: dict[str, Callable[[list[str]], str]] = {
-            'M0': lambda args: "CANCEL_PRINT",
-            'M23': self._prepare_M23,
-            'M24': lambda args: "RESUME",
-            'M25': lambda args: "PAUSE",
-            'M32': self._prepare_M32,
-            'M98': self._prepare_M98,
-            'M120': lambda args: "SAVE_GCODE_STATE STATE=PANELDUE",
-            'M121': lambda args: "RESTORE_GCODE_STATE STATE=PANELDUE",
-            'M290': self._prepare_M290,
-            'M292': self._prepare_M292,
-            'M999': lambda args: "FIRMWARE_RESTART"
+            "M0": lambda args: "CANCEL_PRINT",
+            "M23": self._prepare_M23,
+            "M24": lambda args: "RESUME",
+            "M25": lambda args: "PAUSE",
+            "M32": self._prepare_M32,
+            "M98": self._prepare_M98,
+            "M120": lambda args: "SAVE_GCODE_STATE STATE=PANELDUE",
+            "M121": lambda args: "RESTORE_GCODE_STATE STATE=PANELDUE",
+            "M290": self._prepare_M290,
+            "M292": self._prepare_M292,
+            "M999": lambda args: "FIRMWARE_RESTART",
         }
 
     async def run_serial(self) -> None:
@@ -143,13 +143,13 @@ class PanelDue:
                 if type(last_exc) is not type(e) and last_exc.args != e.args:
                     logging.exception("PanelDue Serial Open Error")
                     last_exc = e
-                await asyncio.sleep(2.)
+                await asyncio.sleep(2.0)
                 continue
             reader = self.ser_conn.reader
             decoded_line: str = ""
             async for line in reader:
                 try:
-                    decoded_line = line.strip().decode('utf-8', 'ignore')
+                    decoded_line = line.strip().decode("utf-8", "ignore")
                     self.process_line(decoded_line)
                 except asyncio.CancelledError:
                     raise
@@ -160,7 +160,7 @@ class PanelDue:
                 except Exception:
                     logging.exception("Error during gcode processing")
             if self.enabled:
-                await asyncio.sleep(2.)
+                await asyncio.sleep(2.0)
             last_exc = Exception()
             self.initialized = False
 
@@ -175,26 +175,27 @@ class PanelDue:
         while retries:
             try:
                 printer_info = await self.klippy_apis.get_klippy_info()
-                cfg_status = await self.klippy_apis.query_objects({'configfile': None})
+                cfg_status = await self.klippy_apis.query_objects({"configfile": None})
             except self.server.error:
                 logging.exception("PanelDue initialization request failed")
                 retries -= 1
                 if not retries:
                     raise
-                await asyncio.sleep(1.)
+                await asyncio.sleep(1.0)
                 continue
             break
 
-        self.firmware_name = "Repetier | Klipper " + printer_info['software_version']
-        config: dict[str, Any] = cfg_status.get('configfile', {}).get('config', {})
-        printer_cfg: dict[str, Any] = config.get('printer', {})
-        self.kinematics = printer_cfg.get('kinematics', "none")
+        self.firmware_name = "Repetier | Klipper " + printer_info["software_version"]
+        config: dict[str, Any] = cfg_status.get("configfile", {}).get("config", {})
+        printer_cfg: dict[str, Any] = config.get("printer", {})
+        self.kinematics = printer_cfg.get("kinematics", "none")
 
         logging.info(
             f"PanelDue Config Received:\n"
             f"Firmware Name: {self.firmware_name}\n"
             f"Kinematics: {self.kinematics}\n"
-            f"Printer Config: {config}\n")
+            f"Printer Config: {config}\n"
+        )
 
         # Make subscription request
         sub_args: dict[str, list[str] | None] = {
@@ -206,7 +207,7 @@ class PanelDue:
             "display_status": None,
             "print_stats": None,
             "idle_timeout": None,
-            "gcode_macro PANELDUE_BEEP": None
+            "gcode_macro PANELDUE_BEEP": None,
         }
         self.extruder_count = 0
         self.heaters = []
@@ -233,15 +234,14 @@ class PanelDue:
 
     def _process_klippy_disconnect(self) -> None:
         # Tell the PD that the printer is "off"
-        self.write_response({'status': 'O'})
-        self.last_printer_state = 'O'
+        self.write_response({"status": "O"})
+        self.last_printer_state = "O"
         self.is_ready = False
         self.is_shutdown = self.is_shutdown = False
 
     def paneldue_beep(self, frequency: int, duration: float) -> None:
-        duration = int(duration * 1000.)
-        self.write_response(
-            {'beep_freq': frequency, 'beep_length': duration})
+        duration = int(duration * 1000.0)
+        self.write_response({"beep_freq": frequency, "beep_length": duration})
 
     def process_line(self, line: str) -> None:
         self.debug_queue.append(line)
@@ -252,7 +252,7 @@ class PanelDue:
 
         if self.enable_checksum:
             # Get line number
-            line_index = line.find(' ')
+            line_index = line.find(" ")
             try:
                 line_no: int | None = int(line[1:line_index])
             except Exception:
@@ -260,9 +260,9 @@ class PanelDue:
                 line_no = None
 
             # Verify checksum
-            cs_index = line.rfind('*')
+            cs_index = line.rfind("*")
             try:
-                checksum = int(line[cs_index+1:])
+                checksum = int(line[cs_index + 1 :])
             except Exception:
                 # Invalid checksum, do not process
                 msg = "!! Invalid Checksum"
@@ -283,7 +283,7 @@ class PanelDue:
                 logging.info("PanelDue: " + msg)
                 raise PanelDueError(msg)
 
-            script = line[line_index+1:cs_index]
+            script = line[line_index + 1 : cs_index]
         else:
             script = line
         # Execute the gcode.  Check for special RRF gcodes that
@@ -291,7 +291,7 @@ class PanelDue:
         parts = script.split()
         cmd = parts[0].strip()
         if cmd in ["M23", "M30", "M32", "M36", "M37", "M98"]:
-            arg = script[len(cmd):].strip()
+            arg = script[len(cmd) :].strip()
             parts = [cmd, arg]
 
         # Check for commands that query state and require immediate response
@@ -299,12 +299,11 @@ class PanelDue:
             params: dict[str, Any] = {}
             for p in parts[1:]:
                 if p[0] not in "PSR":
-                    params["arg_p"] = p.strip(" \"\t\n")
+                    params["arg_p"] = p.strip(' "\t\n')
                     continue
                 arg = p[0].lower()
                 try:
-                    val = int(p[1:].strip()) if arg in "sr" \
-                        else p[1:].strip(" \"\t\n")
+                    val = int(p[1:].strip()) if arg in "sr" else p[1:].strip(' "\t\n')
                 except Exception:
                     msg = f"paneldue: Error parsing direct gcode {script}"
                     self.handle_gcode_response("!! " + msg)
@@ -363,7 +362,7 @@ class PanelDue:
 
     def _clean_filename(self, filename: str) -> str:
         # Remove quotes and whitespace
-        filename.strip(" \"\t\n")
+        filename.strip(' "\t\n')
         # Remove drive number
         if filename.startswith("0:/"):
             filename = filename[3:]
@@ -386,12 +385,12 @@ class PanelDue:
     def _prepare_M32(self, args: list[str]) -> str:
         filename = self._clean_filename(args[0])
         # Escape existing double quotes in the file name
-        filename = filename.replace("\"", "\\\"")
-        return f"SDCARD_PRINT_FILE FILENAME=\"{filename}\""
+        filename = filename.replace('"', '\\"')
+        return f'SDCARD_PRINT_FILE FILENAME="{filename}"'
 
     def _prepare_M98(self, args: list[str]) -> str:
-        macro = args[0][1:].strip(" \"\t\n")
-        name_start = macro.rfind('/') + 1
+        macro = args[0][1:].strip(' "\t\n')
+        name_start = macro.rfind("/") + 1
         macro = macro[name_start:]
         cmd = self.available_macros.get(macro)
         if cmd is None:
@@ -418,23 +417,24 @@ class PanelDue:
         self.mbox_sequence += 1
         self.confirmed_gcode = gcode
         title = "Confirmation Dialog"
-        msg = f"Please confirm your intent to run {name}."  \
+        msg = (
+            f"Please confirm your intent to run {name}."
             " Press OK to continue, or CANCEL to abort."
+        )
         mbox: dict[str, Any] = {}
-        mbox['msgBox.mode'] = 3
-        mbox['msgBox.msg'] = msg
-        mbox['msgBox.seq'] = self.mbox_sequence
-        mbox['msgBox.title'] = title
-        mbox['msgBox.controls'] = 0
-        mbox['msgBox.timeout'] = 0
+        mbox["msgBox.mode"] = 3
+        mbox["msgBox.msg"] = msg
+        mbox["msgBox.seq"] = self.mbox_sequence
+        mbox["msgBox.title"] = title
+        mbox["msgBox.controls"] = 0
+        mbox["msgBox.timeout"] = 0
         logging.debug(f"Creating PanelDue Confirmation: {mbox}")
         self.write_response(mbox)
 
     def handle_gcode_response(self, response: str) -> None:
         # Only queue up "non-trivial" gcode responses.  At the
         # moment we'll handle state changes and errors
-        if "Klipper state" in response \
-                or response.startswith('!!'):
+        if "Klipper state" in response or response.startswith("!!"):
             self.last_gcode_response = response
         else:
             for key in self.non_trivial_keys:
@@ -452,34 +452,31 @@ class PanelDue:
         # C = starting up (not ready), A = paused, D = pausing,
         # B = busy
         if self.is_shutdown:
-            return 'S'
+            return "S"
 
         p_state = self.printer_state
         sd_state: str
         sd_state = p_state.get("print_stats", {}).get("state", "standby")
         if sd_state == "printing":
-            if self.last_printer_state == 'A':
+            if self.last_printer_state == "A":
                 # Resuming
-                return 'R'
+                return "R"
             # Printing
-            return 'P'
+            return "P"
         elif sd_state == "paused":
             p_active = (
-                p_state.get("idle_timeout", {}).get("state", 'Idle') == "Printing"
+                p_state.get("idle_timeout", {}).get("state", "Idle") == "Printing"
             )
-            if p_active and self.last_printer_state != 'A':
+            if p_active and self.last_printer_state != "A":
                 # Pausing
-                return 'D'
+                return "D"
             else:
                 # Paused
-                return 'A'
+                return "A"
 
-        return 'I'
+        return "I"
 
-    def _run_paneldue_M408(self,
-                           arg_r: int | None = None,
-                           arg_s: int = 1
-                           ) -> None:
+    def _run_paneldue_M408(self, arg_r: int | None = None, arg_s: int = 1) -> None:
         response: dict[str, Any] = {}
         sequence = arg_r
         response_type = arg_s
@@ -490,128 +487,129 @@ class PanelDue:
         self.last_update_time = curtime
 
         if not self.initialized:
-            response['dir'] = "/macros"
-            response['files'] = list(self.available_macros.keys())
+            response["dir"] = "/macros"
+            response["files"] = list(self.available_macros.keys())
             self.initialized = True
         if not self.is_ready:
-            self.last_printer_state = 'O'
-            response['status'] = self.last_printer_state
+            self.last_printer_state = "O"
+            response["status"] = self.last_printer_state
             self.write_response(response)
             return
         if sequence is not None and self.last_gcode_response:
             # Send gcode responses
-            response['seq'] = sequence + 1
-            response['resp'] = self.last_gcode_response
+            response["seq"] = sequence + 1
+            response["resp"] = self.last_gcode_response
             self.last_gcode_response = None
         if response_type == 1:
             # Extended response Request
-            response['myName'] = self.machine_name
-            response['firmwareName'] = self.firmware_name
-            response['numTools'] = self.extruder_count
-            response['geometry'] = self.kinematics
-            response['axes'] = 3
+            response["myName"] = self.machine_name
+            response["firmwareName"] = self.firmware_name
+            response["numTools"] = self.extruder_count
+            response["geometry"] = self.kinematics
+            response["axes"] = 3
 
         p_state = self.printer_state
         toolhead = p_state.get("toolhead", {})
         gcode_move = p_state.get("gcode_move", {})
         self.last_printer_state = self._get_printer_status()
-        response['status'] = self.last_printer_state
-        response['babystep'] = round(
-            gcode_move.get('homing_origin', [0., 0., 0., 0.])[2], 3
+        response["status"] = self.last_printer_state
+        response["babystep"] = round(
+            gcode_move.get("homing_origin", [0.0, 0.0, 0.0, 0.0])[2], 3
         )
 
         # Current position
         pos: list[float]
         homed_pos: str
         sfactor: float
-        pos = p_state.get("motion_report", {}).get('live_position', [0., 0., 0., 0.])
-        response['pos'] = [round(p, 2) for p in pos[:3]]
-        homed_pos = toolhead.get('homed_axes', "")
-        response['homed'] = [int(a in homed_pos) for a in "xyz"]
-        sfactor = round(gcode_move.get('speed_factor', 1.) * 100, 2)
-        response['sfactor'] = sfactor
+        pos = p_state.get("motion_report", {}).get(
+            "live_position", [0.0, 0.0, 0.0, 0.0]
+        )
+        response["pos"] = [round(p, 2) for p in pos[:3]]
+        homed_pos = toolhead.get("homed_axes", "")
+        response["homed"] = [int(a in homed_pos) for a in "xyz"]
+        sfactor = round(gcode_move.get("speed_factor", 1.0) * 100, 2)
+        response["sfactor"] = sfactor
 
         # Print Progress Tracking
-        sd_status = p_state.get('virtual_sdcard', {})
-        print_stats = p_state.get('print_stats', {})
-        fname: str = print_stats.get('filename', "")
-        sd_print_state: str | None = print_stats.get('state')
-        if sd_print_state in ['printing', 'paused']:
+        sd_status = p_state.get("virtual_sdcard", {})
+        print_stats = p_state.get("print_stats", {})
+        fname: str = print_stats.get("filename", "")
+        sd_print_state: str | None = print_stats.get("state")
+        if sd_print_state in ["printing", "paused"]:
             # We know a file has been loaded, initialize metadata
             if self.current_file != fname:
                 self.current_file = fname
                 self.file_metadata = self.file_manager.get_file_metadata(fname)
-            progress: float = sd_status.get('progress', 0)
+            progress: float = sd_status.get("progress", 0)
             # progress and print tracking
             if progress:
-                response['fraction_printed'] = round(progress, 3)
-                est_time: float = self.file_metadata.get('estimated_time', 0)
+                response["fraction_printed"] = round(progress, 3)
+                est_time: float = self.file_metadata.get("estimated_time", 0)
                 if est_time > MIN_EST_TIME:
                     # file read estimate
                     times_left = [int(est_time - est_time * progress)]
                     # filament estimate
                     est_total_fil: float | None
-                    est_total_fil = self.file_metadata.get('filament_total')
+                    est_total_fil = self.file_metadata.get("filament_total")
                     if est_total_fil:
-                        cur_filament: float = print_stats.get(
-                            'filament_used', 0.)
-                        fpct = min(1., cur_filament / est_total_fil)
+                        cur_filament: float = print_stats.get("filament_used", 0.0)
+                        fpct = min(1.0, cur_filament / est_total_fil)
                         times_left.append(int(est_time - est_time * fpct))
                     # object height estimate
                     obj_height: float | None
-                    obj_height = self.file_metadata.get('object_height')
+                    obj_height = self.file_metadata.get("object_height")
                     if obj_height:
                         cur_height: float = gcode_move.get(
-                            'gcode_position', [0., 0., 0., 0.]
+                            "gcode_position", [0.0, 0.0, 0.0, 0.0]
                         )[2]
-                        hpct = min(1., cur_height / obj_height)
+                        hpct = min(1.0, cur_height / obj_height)
                         times_left.append(int(est_time - est_time * hpct))
                 else:
                     # The estimated time is not in the metadata, however we
                     # can still provide an estimate based on file progress
-                    duration: float = print_stats.get('print_duration', 0.)
+                    duration: float = print_stats.get("print_duration", 0.0)
                     times_left = [int(duration / progress - duration)]
-                response['timesLeft'] = times_left
+                response["timesLeft"] = times_left
         else:
             # clear filename and metadata
             self.current_file = ""
             self.file_metadata = {}
 
-        fan_speed: float | None = p_state.get('fan', {}).get('speed')
+        fan_speed: float | None = p_state.get("fan", {}).get("speed")
         if fan_speed is not None:
-            response['fanPercent'] = [round(fan_speed * 100, 1)]
+            response["fanPercent"] = [round(fan_speed * 100, 1)]
 
         extruder_name: str = ""
         if self.extruder_count > 0:
-            extruder_name = toolhead.get('extruder', "")
+            extruder_name = toolhead.get("extruder", "")
             if extruder_name:
                 tool = 0
                 if extruder_name != "extruder":
                     tool = int(extruder_name[-1])
-                response['tool'] = tool
+                response["tool"] = tool
 
         # Report Heater Status
-        efactor: float = round(gcode_move.get('extrude_factor', 1.) * 100., 2)
+        efactor: float = round(gcode_move.get("extrude_factor", 1.0) * 100.0, 2)
 
         for name in self.heaters:
             htr_state = p_state.get(name, {})
-            temp: float = round(htr_state.get('temperature', 0.0), 1)
-            target: float = round(htr_state.get('target', 0.0), 1)
-            response.setdefault('heaters', []).append(temp)
-            response.setdefault('active', []).append(target)
-            response.setdefault('standby', []).append(target)
-            if name.startswith('extruder'):
+            temp: float = round(htr_state.get("temperature", 0.0), 1)
+            target: float = round(htr_state.get("target", 0.0), 1)
+            response.setdefault("heaters", []).append(temp)
+            response.setdefault("active", []).append(target)
+            response.setdefault("standby", []).append(target)
+            if name.startswith("extruder"):
                 a_stat = 2 if name == extruder_name else 1
-                response.setdefault('hstat', []).append(a_stat if target else 0)
-                response.setdefault('efactor', []).append(efactor)
-                response.setdefault('extr', []).append(round(pos[3], 2))
+                response.setdefault("hstat", []).append(a_stat if target else 0)
+                response.setdefault("efactor", []).append(efactor)
+                response.setdefault("extr", []).append(round(pos[3], 2))
             else:
-                response.setdefault('hstat', []).append(2 if target else 0)
+                response.setdefault("hstat", []).append(2 if target else 0)
 
         # Display message (via M117)
-        msg: str = p_state.get('display_status', {}).get('message', "")
+        msg: str = p_state.get("display_status", {}).get("message", "")
         if msg and msg != self.last_message:
-            response['message'] = msg
+            response["message"] = msg
             # reset the message so it only shows once.  The paneldue
             # is strange about this, and displays it as a full screen
             # notification
@@ -621,24 +619,23 @@ class PanelDue:
     def _run_paneldue_M20(self, arg_p: str, arg_s: int = 0) -> None:
         response_type = arg_s
         if response_type != 2:
-            logging.info(
-                f"Cannot process response type {response_type} in M20")
+            logging.info(f"Cannot process response type {response_type} in M20")
             return
         path = arg_p
 
         # Strip quotes if they exist
-        path = path.strip('\"')
+        path = path.strip('"')
 
         # Path should come in as "0:/macros, or 0:/<gcode_folder>".  With
         # repetier compatibility enabled, the default folder is root,
         # ie. "0:/"
         if path.startswith("0:/"):
             path = path[2:]
-        response: dict[str, Any] = {'dir': path}
-        response['files'] = []
+        response: dict[str, Any] = {"dir": path}
+        response["files"] = []
 
         if path == "/macros":
-            response['files'] = list(self.available_macros.keys())
+            response["files"] = list(self.available_macros.keys())
         else:
             # HACK: The PanelDue has a bug where it does not correctly detect
             # subdirectories if we return the root as "/".  Moonraker can
@@ -648,21 +645,21 @@ class PanelDue:
             # The workaround below converts both "/" and "/gcodes" paths to
             # "gcodes".
             if path == "/":
-                response['dir'] = "/gcodes"
+                response["dir"] = "/gcodes"
                 path = "gcodes"
             elif path.startswith("/gcodes"):
                 path = path[1:]
 
             flist = self.file_manager.list_dir(path, simple_format=True)
             if flist:
-                response['files'] = flist
+                response["files"] = flist
         self.write_response(response)
 
     async def _run_paneldue_M30(self, arg_p: str = "") -> None:
         # Delete a file.  Clean up the file name and make sure
         # it is relative to the "gcodes" root.
         path = arg_p
-        path = path.strip('\"')
+        path = path.strip('"')
         if path.startswith("0:/"):
             path = path[3:]
         elif path[0] == "/":
@@ -675,22 +672,22 @@ class PanelDue:
     def _run_paneldue_M36(self, arg_p: str | None = None) -> None:
         response: dict[str, Any] = {}
         filename: str | None = arg_p
-        sd_status = self.printer_state.get('virtual_sdcard', {})
-        print_stats = self.printer_state.get('print_stats', {})
+        sd_status = self.printer_state.get("virtual_sdcard", {})
+        print_stats = self.printer_state.get("print_stats", {})
         if filename is None:
             # PanelDue is requesting file information on a
             # currently printed file
             active = False
             if sd_status and print_stats:
-                filename = print_stats['filename']
-                active = sd_status['is_active']
+                filename = print_stats["filename"]
+                active = sd_status["is_active"]
             if not filename or not active:
                 # Either no file printing or no virtual_sdcard
-                response['err'] = 1
+                response["err"] = 1
                 self.write_response(response)
                 return
             else:
-                response['fileName'] = filename.split("/")[-1]
+                response["fileName"] = filename.split("/")[-1]
 
         # For consistency make sure that the filename begins with the
         # "gcodes/" root.  The M20 HACK should add this in some cases.
@@ -701,30 +698,29 @@ class PanelDue:
         if not filename.startswith("gcodes/"):
             filename = "gcodes/" + filename
 
-        metadata: dict[str, Any] = \
-            self.file_manager.get_file_metadata(filename)
+        metadata: dict[str, Any] = self.file_manager.get_file_metadata(filename)
         if metadata:
-            response['err'] = 0
-            response['size'] = metadata['size']
+            response["err"] = 0
+            response["size"] = metadata["size"]
             # workaround for PanelDue replacing the first "T" found
-            response['lastModified'] = "T" + time.ctime(metadata['modified'])
-            slicer: str | None = metadata.get('slicer')
+            response["lastModified"] = "T" + time.ctime(metadata["modified"])
+            slicer: str | None = metadata.get("slicer")
             if slicer is not None:
-                response['generatedBy'] = slicer
-            height: float | None = metadata.get('object_height')
+                response["generatedBy"] = slicer
+            height: float | None = metadata.get("object_height")
             if height is not None:
-                response['height'] = round(height, 2)
-            layer_height: float | None = metadata.get('layer_height')
+                response["height"] = round(height, 2)
+            layer_height: float | None = metadata.get("layer_height")
             if layer_height is not None:
-                response['layerHeight'] = round(layer_height, 2)
-            filament: float | None = metadata.get('filament_total')
+                response["layerHeight"] = round(layer_height, 2)
+            filament: float | None = metadata.get("filament_total")
             if filament is not None:
-                response['filament'] = [round(filament, 1)]
-            est_time: float | None = metadata.get('estimated_time')
+                response["filament"] = [round(filament, 1)]
+            est_time: float | None = metadata.get("estimated_time")
             if est_time is not None:
-                response['printTime'] = int(est_time + .5)
+                response["printTime"] = int(est_time + 0.5)
         else:
-            response['err'] = 1
+            response["err"] = 1
         self.write_response(response)
 
     async def close(self) -> None:
@@ -736,6 +732,7 @@ class PanelDue:
         for i, gc in enumerate(self.debug_queue):
             msg += f"\nSequence {i}: {gc}"
         logging.debug(msg)
+
 
 def load_component(config: ConfigHelper) -> PanelDue:
     return PanelDue(config)

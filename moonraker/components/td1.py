@@ -14,7 +14,7 @@ import datetime
 import contextlib
 from ..utils import async_serial
 from ..common import RequestType
-from typing import Optional, Dict, List, Tuple, Any, TYPE_CHECKING
+from typing import Optional, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
@@ -27,7 +27,7 @@ class TD1Connection:
         config: ConfigHelper,
         serial_number: str,
         port: str,
-        logger: logging.Logger
+        logger: logging.Logger,
     ) -> None:
         self.config = config
         self.server = config.get_server()
@@ -45,20 +45,18 @@ class TD1Connection:
         # Values to return back for td1_data endpoint
         self._td: float | None = None
         self._color: str | None = None
-        self._scan_time: str = datetime.datetime.now(
-            tz=datetime.UTC
-        ).isoformat() + "Z"
+        self._scan_time: str = datetime.datetime.now(tz=datetime.UTC).isoformat() + "Z"
         self._error: str | None = None
         self.done_initializing: bool = False
 
     async def initialize(self) -> None:
         self.serial_task = self.server.get_event_loop().create_task(self.run_serial())
         for _ in range(5):
-            await asyncio.sleep(.01)
+            await asyncio.sleep(0.01)
             if self.serial.connected:
                 break
 
-    async def readline_with_timeout(self, timeout: float = 5.) -> bytes | None:
+    async def readline_with_timeout(self, timeout: float = 5.0) -> bytes | None:
         with contextlib.suppress(asyncio.TimeoutError):
             return await asyncio.wait_for(self.serial.reader.readline(), timeout)
         return None
@@ -85,9 +83,9 @@ class TD1Connection:
             if len(parts) >= 6:
                 self._td = float(parts[4])
                 self._color = parts[5].strip()
-                self._scan_time = datetime.datetime.now(
-                    tz=datetime.UTC
-                ).isoformat() + "Z"
+                self._scan_time = (
+                    datetime.datetime.now(tz=datetime.UTC).isoformat() + "Z"
+                )
         except Exception as e:
             self.logger.error(f"Parse error from {self.serial_number}: {e}")
 
@@ -101,42 +99,40 @@ class TD1Connection:
         file_name = "errors.txt"
         # Wait for acknowledgment from the Raspberry Pi Pico
         ack = None
-        while ack != 'ready' and ack != 'No file named errors.txt' and self.enabled:
+        while ack != "ready" and ack != "No file named errors.txt" and self.enabled:
             # Send the file request command
             if ack is None:
                 self.logger.debug(f"{self.serial_number}: Sending retrieve file")
-                await self.serial.send(b'retrieve file\n')
+                await self.serial.send(b"retrieve file\n")
                 await self.serial.send(f"{file_name}\n".encode())
             line = await self.readline_with_timeout()
             if line is not None:
-                ack = line.decode('utf-8').strip()
+                ack = line.decode("utf-8").strip()
                 self.logger.debug(f"{self.serial_number}: {ack}")
             else:
                 self.logger.debug(f"{self.serial_number}: Timed out")
                 ack = None
         self.logger.debug(f"{self.serial_number}: Done checking for error file")
-        if ack == 'No file named errors.txt':
+        if ack == "No file named errors.txt":
             return
         # Receive file size and block count
         data = await self.serial.reader.readline()
-        file_size = int(data.decode('utf-8').strip())
+        file_size = int(data.decode("utf-8").strip())
         data = await self.serial.reader.readline()
-        blk_count = int(data.decode('utf-8').strip())
+        blk_count = int(data.decode("utf-8").strip())
         self.logger.debug(
             f"Receiving file: {file_name}, Size: {file_size} bytes, Blocks: {blk_count}"
         )
-        block_content = ''
+        block_content = ""
         for _ in range(blk_count):
             # Receive a block size
-            data = await self.serial.reader.readuntil(b'\n')
+            data = await self.serial.reader.readuntil(b"\n")
             # Receive the block content
-            data = await self.serial.reader.readuntil(b'\n')
+            data = await self.serial.reader.readuntil(b"\n")
             block_content += data.decode()
             # Send acknowledgment to the Raspberry Pi Pico
-            await self.serial.send(b'ready\n')
-        self.logger.info(
-            f"{self.serial_number}: Error file content: {block_content}"
-        )
+            await self.serial.send(b"ready\n")
+        self.logger.info(f"{self.serial_number}: Error file content: {block_content}")
         self.logger.info(
             f"{self.serial_number}: File '{file_name}' received successfully."
         )
@@ -155,14 +151,14 @@ class TD1Connection:
         self.enabled = False
         self.serial.set_read_callback(None, force=True)
         with contextlib.suppress(asyncio.TimeoutError):
-            await asyncio.wait_for(self.serial_task, 1.)
-        await self.serial.send(b'change settings\n')
-        ack = await self.serial.reader.readuntil(b'\n')
-        ack_str = ack.decode('utf-8').strip()
-        if ack_str == 'ready':
-            await self.serial.send(b'RGB_Enabled = True\ndone\n')
-        ack = await self.serial.reader.readuntil(b'\n')
-        ack_str = ack.decode('utf-8').strip()
+            await asyncio.wait_for(self.serial_task, 1.0)
+        await self.serial.send(b"change settings\n")
+        ack = await self.serial.reader.readuntil(b"\n")
+        ack_str = ack.decode("utf-8").strip()
+        if ack_str == "ready":
+            await self.serial.send(b"RGB_Enabled = True\ndone\n")
+        ack = await self.serial.reader.readuntil(b"\n")
+        ack_str = ack.decode("utf-8").strip()
 
     def get_data(self) -> dict[str, dict[str, Any]]:
         if not self.done_initializing:
@@ -173,9 +169,10 @@ class TD1Connection:
                 "td": self._td,
                 "color": self._color,
                 "scan_time": self._scan_time,
-                "error": self._error
+                "error": self._error,
             }
         }
+
 
 class TD1:
     def __init__(self, config: ConfigHelper) -> None:
@@ -205,11 +202,11 @@ class TD1:
         self._enabled = False
         if self._start_task is not None:
             with contextlib.suppress(asyncio.TimeoutError):
-                await asyncio.wait_for(self._start_task, 1.)
+                await asyncio.wait_for(self._start_task, 1.0)
         if self._watch_task is not None:
             self._watch_task.cancel()
             with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
-                await asyncio.wait_for(self._watch_task, 1.)
+                await asyncio.wait_for(self._watch_task, 1.0)
         for td1 in self.td1_conns.values():
             await td1.close()
 
@@ -229,7 +226,7 @@ class TD1:
 
     async def _watch_for_new_devices(self) -> None:
         while self._enabled:
-            await asyncio.sleep(5.)  # Scan every 5 seconds
+            await asyncio.sleep(5.0)  # Scan every 5 seconds
             # Find currently connected devices
             current_serials: set[str] = set()
             for port, serial_number in self._find_td1_devices():
@@ -270,7 +267,8 @@ class TD1:
                 self.logger.info(f"TD1 listening on {port} (Serial: {serial_number})")
             else:
                 self.logger.error(
-                    f"Failed to open port:{port} for TD1 serial {serial_number}")
+                    f"Failed to open port:{port} for TD1 serial {serial_number}"
+                )
         except serial.SerialException as e:
             self.logger.error(f"Failed to open serial port {port}: {e}")
             raise
@@ -282,10 +280,7 @@ class TD1:
         latest_data: dict[str, Any] = {}
         for task in self.td1_conns.values():
             latest_data.update(task.get_data())
-        return {
-            "status": "ok",
-            "devices": latest_data
-        }
+        return {"status": "ok", "devices": latest_data}
 
     async def _handle_reboot(self, web_request: WebRequest) -> dict[str, str]:
         """
@@ -294,16 +289,13 @@ class TD1:
         serial_number = web_request.get_str("serial")
         req_conn = self.td1_conns.get(serial_number, None)
         if req_conn is None:
-            return {
-                "status": "serial_error"
-            }
+            return {"status": "serial_error"}
         await req_conn.reboot()
         await req_conn.close()
         # Remove serial number from entries if they exist
         self.td1_conns.pop(serial_number, None)
-        return {
-            "status": "ok"
-        }
+        return {"status": "ok"}
+
 
 def load_component(config: ConfigHelper) -> TD1:
     return TD1(config)

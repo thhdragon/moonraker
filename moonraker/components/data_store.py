@@ -15,30 +15,32 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Optional,
-    Dict,
-    List,
-    Deque,
 )
+from collections import deque
+
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .klippy_connection import KlippyConnection
     from .klippy_apis import KlippyAPI as APIComp
+
     GCQueue = deque[dict[str, Any]]
     TempStore = dict[str, dict[str, deque[float | None]]]
 
-TEMP_UPDATE_TIME = 1.
+TEMP_UPDATE_TIME = 1.0
+
 
 def _round_null(val: float | None, ndigits: int) -> float | None:
     if val is None:
         return val
     return round(val, ndigits)
 
+
 class DataStore:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.temp_store_size = config.getint('temperature_store_size', 1200)
-        self.gcode_store_size = config.getint('gcode_store_size', 1000)
+        self.temp_store_size = config.getint("temperature_store_size", 1200)
+        self.gcode_store_size = config.getint("gcode_store_size", 1000)
 
         # Temperature Store Tracking
         kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
@@ -48,32 +50,33 @@ class DataStore:
         self.temp_monitors: list[str] = []
         eventloop = self.server.get_event_loop()
         self.temp_update_timer = eventloop.register_timer(
-            self._update_temperature_store)
+            self._update_temperature_store
+        )
 
         self.server.register_event_handler(
-            "server:gcode_response", self._update_gcode_store)
-        self.server.register_event_handler(
-            "server:klippy_ready", self._init_sensors)
+            "server:gcode_response", self._update_gcode_store
+        )
+        self.server.register_event_handler("server:klippy_ready", self._init_sensors)
         self.server.register_event_handler(
             "klippy_connection:gcode_received", self._store_gcode_command
         )
 
         # Register endpoints
         self.server.register_endpoint(
-            "/server/temperature_store", RequestType.GET,
-            self._handle_temp_store_request
+            "/server/temperature_store",
+            RequestType.GET,
+            self._handle_temp_store_request,
         )
         self.server.register_endpoint(
-            "/server/gcode_store", RequestType.GET,
-            self._handle_gcode_store_request
+            "/server/gcode_store", RequestType.GET, self._handle_gcode_store_request
         )
 
     async def _init_sensors(self) -> None:
-        klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
+        klippy_apis: APIComp = self.server.lookup_component("klippy_apis")
         # Fetch sensors
         try:
             result: dict[str, Any]
-            result = await klippy_apis.query_objects({'heaters': None})
+            result = await klippy_apis.query_objects({"heaters": None})
         except self.server.error as e:
             logging.info(f"Error Configuring Sensors: {e}")
             return
@@ -120,7 +123,7 @@ class DataStore:
                             [initial_val], maxlen=self.temp_store_size
                         )
             self.temperature_store = new_store
-            self.temp_update_timer.start(delay=1.)
+            self.temp_update_timer.start(delay=1.0)
         else:
             logging.info("No sensors found")
             self.temperature_store = {}
@@ -151,24 +154,26 @@ class DataStore:
     def _update_gcode_store(self, response: str) -> None:
         curtime = time.time()
         self.gcode_queue.append(
-            {'message': response, 'time': curtime, 'type': "response"})
+            {"message": response, "time": curtime, "type": "response"}
+        )
 
     def _store_gcode_command(self, script: str) -> None:
         curtime = time.time()
         if script.strip():
             self.gcode_queue.append(
-                {'message': script, 'time': curtime, 'type': "command"}
+                {"message": script, "time": curtime, "type": "command"}
             )
 
-    async def _handle_gcode_store_request(self,
-                                          web_request: WebRequest
-                                          ) -> dict[str, list[dict[str, Any]]]:
+    async def _handle_gcode_store_request(
+        self, web_request: WebRequest
+    ) -> dict[str, list[dict[str, Any]]]:
         count = web_request.get_int("count", None)
         if count is not None:
             gc_responses = list(self.gcode_queue)[-count:]
         else:
             gc_responses = list(self.gcode_queue)
-        return {'gcode_store': gc_responses}
+        return {"gcode_store": gc_responses}
+
 
 def load_component(config: ConfigHelper) -> DataStore:
     return DataStore(config)

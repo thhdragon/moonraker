@@ -13,12 +13,7 @@ import periphery
 from ..utils import KERNEL_VERSION
 
 # Annotation imports
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    Optional
-)
+from typing import TYPE_CHECKING, Any
 from collections.abc import Awaitable, Callable
 
 if TYPE_CHECKING:
@@ -37,8 +32,9 @@ GPIO_PATTERN = r"""
 BIAS_FLAG_TO_DESC: dict[str, str] = {
     "^": "pull_up",
     "~": "pull_down",
-    "*": "disable" if KERNEL_VERSION >= (5, 5) else "default"
+    "*": "disable" if KERNEL_VERSION >= (5, 5) else "default",
 }
+
 
 class GpioFactory:
     def __init__(self, config: ConfigHelper) -> None:
@@ -90,12 +86,13 @@ class GpioFactory:
                 edge=pin_params.get("edge", "none"),
                 bias=pin_params.get("bias", "default"),
                 inverted=pin_params["inverted"],
-                label="moonraker"
+                label="moonraker",
             )
         except Exception:
             logging.exception(
                 f"Unable to init {full_name}.  Make sure the gpio is not in "
-                "use by another program or exported by sysfs.")
+                "use by another program or exported by sysfs."
+            )
             raise
         return gpio
 
@@ -106,7 +103,7 @@ class GpioFactory:
             "orig": pin_desc,
             "inverted": False,
             "request_type": req_type,
-            "initial_value": initial_value
+            "initial_value": initial_value,
         }
         pin_match = re.match(GPIO_PATTERN, pin_desc, re.VERBOSE)
         if pin_match is None:
@@ -139,10 +136,9 @@ class GpioFactory:
         for gpio in self.reserved_gpios.values():
             gpio.close()
 
+
 class GpioBase:
-    def __init__(
-        self, gpio: periphery.GPIO, pin_params: dict[str, Any]
-    ) -> None:
+    def __init__(self, gpio: periphery.GPIO, pin_params: dict[str, Any]) -> None:
         self.orig: str = pin_params["orig"]
         self.name: str = pin_params["full_name"]
         self.inverted: bool = pin_params["inverted"]
@@ -164,6 +160,7 @@ class GpioBase:
     def __str__(self) -> str:
         return self.orig
 
+
 class GpioOutputPin(GpioBase):
     def write(self, value: int) -> None:
         self.value = int(not not value)
@@ -171,7 +168,8 @@ class GpioOutputPin(GpioBase):
 
 
 MAX_ERRORS = 50
-ERROR_RESET_TIME = 5.
+ERROR_RESET_TIME = 5.0
+
 
 class GpioEvent(GpioBase):
     def __init__(
@@ -179,16 +177,16 @@ class GpioEvent(GpioBase):
         event_loop: EventLoop,
         gpio: periphery.GPIO,
         pin_params: dict[str, Any],
-        callback: GpioEventCallback
+        callback: GpioEventCallback,
     ) -> None:
         super().__init__(gpio, pin_params)
         self.event_loop = event_loop
         self.callback = callback
         self.on_error: Callable[[str], None] | None = None
         self.debounce_period: float = 0
-        self.last_event_time: float = 0.
+        self.last_event_time: float = 0.0
         self.error_count = 0
-        self.last_error_reset = 0.
+        self.last_error_reset = 0.0
         self.started = False
         self.debounce_task: asyncio.Task | None = None
         os.set_blocking(self.gpio.fd, False)
@@ -208,8 +206,9 @@ class GpioEvent(GpioBase):
             self.last_event_time = self.event_loop.get_loop_time()
             self.event_loop.add_reader(self.gpio.fd, self._on_event_trigger)
             self.started = True
-            logging.debug(f"GPIO {self.name}: Listening for events, "
-                          f"current state: {self.value}")
+            logging.debug(
+                f"GPIO {self.name}: Listening for events, current state: {self.value}"
+            )
 
     def stop(self) -> None:
         if self.debounce_task is not None:
@@ -226,7 +225,7 @@ class GpioEvent(GpioBase):
     def _on_event_trigger(self) -> None:
         evt = self.gpio.read_event()
         last_value = self.value
-        if evt.edge == "rising":     # type: ignore
+        if evt.edge == "rising":  # type: ignore
             self.value = 1
         elif evt.edge == "falling":  # type: ignore
             self.value = 0

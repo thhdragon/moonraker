@@ -5,25 +5,29 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
+
 import logging
 import time
+from collections.abc import Coroutine
+from typing import TYPE_CHECKING, Any
+
 from ...utils import pretty_print_time
 
-from typing import TYPE_CHECKING, Dict, Any, Optional
-from collections.abc import Coroutine
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
     from ...utils import ServerError
     from .update_manager import CommandHelper
 
+
 class BaseDeploy:
     cmd_helper: CommandHelper
+
     def __init__(
         self,
         config: ConfigHelper,
         name: str | None = None,
         prefix: str = "",
-        cfg_hash: str | None = None
+        cfg_hash: str | None = None,
     ) -> None:
         if name is None:
             name = self.parse_name(config)
@@ -33,7 +37,7 @@ class BaseDeploy:
         self.prefix = prefix
         self.server = config.get_server()
         self.refresh_interval = self.cmd_helper.get_refresh_interval()
-        refresh_interval = config.getint('refresh_interval', None)
+        refresh_interval = config.getint("refresh_interval", None)
         if refresh_interval is not None:
             self.refresh_interval = refresh_interval * 60 * 60
         if cfg_hash is None:
@@ -55,13 +59,13 @@ class BaseDeploy:
     async def initialize(self) -> dict[str, Any]:
         umdb = self.cmd_helper.get_umdb()
         storage: dict[str, Any] = await umdb.get(self.name, {})
-        self.last_refresh_time: float = storage.get('last_refresh_time', 0.0)
-        self.last_cfg_hash: str = storage.get('last_config_hash', "")
+        self.last_refresh_time: float = storage.get("last_refresh_time", 0.0)
+        self.last_cfg_hash: str = storage.get("last_config_hash", "")
         return storage
 
     def needs_refresh(self, log_remaining_time: bool = False) -> bool:
         next_refresh_time = self.last_refresh_time + self.refresh_interval
-        remaining_time = int(next_refresh_time - time.time() + .5)
+        remaining_time = int(next_refresh_time - time.time() + 0.5)
         if self.cfg_hash != self.last_cfg_hash or remaining_time <= 0:
             return True
         if log_remaining_time:
@@ -85,8 +89,8 @@ class BaseDeploy:
 
     def get_persistent_data(self) -> dict[str, Any]:
         return {
-            'last_config_hash': self.cfg_hash,
-            'last_refresh_time': self.last_refresh_time
+            "last_config_hash": self.cfg_hash,
+            "last_refresh_time": self.last_refresh_time,
         }
 
     def _save_state(self) -> None:

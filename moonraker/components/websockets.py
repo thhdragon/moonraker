@@ -22,10 +22,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Optional,
-    Tuple,
-    Union,
-    Dict,
-    List,
 )
 from collections.abc import Callable, Coroutine
 
@@ -37,12 +33,14 @@ if TYPE_CHECKING:
     from .extensions import ExtensionManager
     from .authorization import Authorization
     from ..utils import IPAddress
-    ConvType = Union[str, bool, float, int]
-    ArgVal = Union[None, int, float, bool, str]
+
+    ConvType = str | bool | float | int
+    ArgVal = None | int | float | bool | str
     RPCCallback = Callable[..., Coroutine]
-    AuthComp = Optional[Authorization]
+    AuthComp = Authorization | None
 
 CLIENT_TYPES = ["web", "mobile", "desktop", "display", "bot", "agent", "other"]
+
 
 class WebsocketManager:
     def __init__(self, config: ConfigHelper) -> None:
@@ -54,50 +52,56 @@ class WebsocketManager:
         app.register_websocket_handler("/websocket", WebSocket)
         app.register_websocket_handler("/klippysocket", BridgeSocket)
         self.server.register_endpoint(
-            "/server/websocket/id", RequestType.GET, self._handle_id_request,
-            TransportType.WEBSOCKET
+            "/server/websocket/id",
+            RequestType.GET,
+            self._handle_id_request,
+            TransportType.WEBSOCKET,
         )
         self.server.register_endpoint(
-            "/server/connection/identify", RequestType.POST, self._handle_identify,
-            TransportType.WEBSOCKET, auth_required=False
+            "/server/connection/identify",
+            RequestType.POST,
+            self._handle_identify,
+            TransportType.WEBSOCKET,
+            auth_required=False,
         )
 
     def register_notification(
         self,
         event_name: str,
         notify_name: str | None = None,
-        event_type: str | None = None
+        event_type: str | None = None,
     ) -> None:
         if notify_name is None:
-            notify_name = event_name.split(':')[-1]
+            notify_name = event_name.split(":")[-1]
         if event_type == "logout":
+
             def notify_handler(*args):
                 self.notify_clients(notify_name, args)
                 self._process_logout(*args)
         else:
+
             def notify_handler(*args):
                 self.notify_clients(notify_name, args)
+
         self.server.register_event_handler(event_name, notify_handler)
 
     async def _handle_id_request(self, web_request: WebRequest) -> dict[str, int]:
         sc = web_request.get_client_connection()
         assert sc is not None
-        return {'websocket_id': sc.uid}
+        return {"websocket_id": sc.uid}
 
     async def _handle_identify(self, web_request: WebRequest) -> dict[str, int]:
         sc = web_request.get_client_connection()
         assert sc is not None
         if sc.identified:
-            raise self.server.error(
-                f"Connection already identified: {sc.client_data}"
-            )
+            raise self.server.error(f"Connection already identified: {sc.client_data}")
         name = web_request.get_str("client_name")
         version = web_request.get_str("version")
         client_type: str = web_request.get_str("type").lower()
         url = web_request.get_str("url")
         sc.authenticate(
             token=web_request.get_str("access_token", None),
-            api_key=web_request.get_str("api_key", None)
+            api_key=web_request.get_str("api_key", None),
         )
 
         if client_type not in CLIENT_TYPES:
@@ -106,7 +110,7 @@ class WebsocketManager:
             "name": name,
             "version": version,
             "type": client_type,
-            "url": url
+            "url": url,
         }
         if client_type == "agent":
             extensions: ExtensionManager
@@ -121,7 +125,7 @@ class WebsocketManager:
             f"Name: {name}, Version: {version}, Type: {client_type}"
         )
         self.server.send_event("websockets:client_identified", sc)
-        return {'connection_id': sc.uid}
+        return {"connection_id": sc.uid}
 
     def _process_logout(self, user: dict[str, Any]) -> None:
         if "username" not in user:
@@ -142,9 +146,7 @@ class WebsocketManager:
             return None
         return sc
 
-    def get_clients_by_type(
-        self, client_type: str
-    ) -> list[BaseRemoteConnection]:
+    def get_clients_by_type(self, client_type: str) -> list[BaseRemoteConnection]:
         if not client_type:
             return []
         ret: list[BaseRemoteConnection] = []
@@ -193,21 +195,18 @@ class WebsocketManager:
 
     def _check_closed_event(self) -> None:
         if (
-            self.closed_event is not None and
-            not self.clients and
-            not self.bridge_connections
+            self.closed_event is not None
+            and not self.clients
+            and not self.bridge_connections
         ):
             self.closed_event.set()
 
     def notify_clients(
-        self,
-        name: str,
-        data: list | tuple = [],
-        mask: list[int] = []
+        self, name: str, data: list | tuple = [], mask: list[int] = []
     ) -> None:
-        msg: dict[str, Any] = {'jsonrpc': "2.0", 'method': "notify_" + name}
+        msg: dict[str, Any] = {"jsonrpc": "2.0", "method": "notify_" + name}
         if data:
-            msg['params'] = data
+            msg["params"] = data
         for sc in list(self.clients.values()):
             if sc.uid in mask or sc.need_auth:
                 continue
@@ -225,16 +224,17 @@ class WebsocketManager:
         for sc in list(self.clients.values()):
             sc.close_socket(1001, "Server Shutdown")
         try:
-            await asyncio.wait_for(self.closed_event.wait(), 2.)
+            await asyncio.wait_for(self.closed_event.wait(), 2.0)
         except TimeoutError:
             pass
         self.closed_event = None
+
 
 class WebSocket(WebSocketHandler, BaseRemoteConnection):
     connection_count: int = 0
 
     def initialize(self) -> None:
-        self.on_create(self.settings['server'])
+        self.on_create(self.settings["server"])
         self._ip_addr = parse_ip_address(self.request.remote_ip or "")
         self.last_pong_time: float = self.eventloop.get_loop_time()
         self.cors_allowed: bool = False
@@ -257,14 +257,16 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
         agent = self.request.headers.get("User-Agent", "")
         is_proxy = False
         if (
-            "X-Forwarded-For" in self.request.headers or
-            "X-Real-Ip" in self.request.headers
+            "X-Forwarded-For" in self.request.headers
+            or "X-Real-Ip" in self.request.headers
         ):
             is_proxy = True
-        logging.info(f"Websocket Opened: ID: {self.uid}, "
-                     f"Proxied: {is_proxy}, "
-                     f"User Agent: {agent}, "
-                     f"Host Name: {self.hostname}")
+        logging.info(
+            f"Websocket Opened: ID: {self.uid}, "
+            f"Proxied: {is_proxy}, "
+            f"User Agent: {agent}, "
+            f"Host Name: {self.hostname}"
+        )
         self.wsm.add_client(self)
 
     def on_message(self, message: bytes | str) -> None:
@@ -284,10 +286,12 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
         for resp in self.pending_responses.values():
             resp.set_exception(ServerError("Client Socket Disconnected", 500))
         self.pending_responses = {}
-        logging.info(f"Websocket Closed: ID: {self.uid} "
-                     f"Close Code: {self.close_code}, "
-                     f"Close Reason: {self.close_reason}, "
-                     f"Pong Time Elapsed: {pong_elapsed:.2f}")
+        logging.info(
+            f"Websocket Closed: ID: {self.uid} "
+            f"Close Code: {self.close_code}, "
+            f"Close Reason: {self.close_reason}, "
+            f"Pong Time Elapsed: {pong_elapsed:.2f}"
+        )
         if self._client_data["type"] == "agent":
             extensions: ExtensionManager
             extensions = self.server.lookup_component("extensions")
@@ -300,14 +304,12 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
         except WebSocketClosedError:
             self.is_closed = True
             self.message_buf.clear()
-            logging.info(
-                f"Websocket closed while writing: {self.uid}")
+            logging.info(f"Websocket closed while writing: {self.uid}")
         except Exception:
-            logging.exception(
-                f"Error sending data over websocket: {self.uid}")
+            logging.exception(f"Error sending data over websocket: {self.uid}")
 
     def check_origin(self, origin: str) -> bool:
-        if not super(WebSocket, self).check_origin(origin):
+        if not super().check_origin(origin):
             return self.cors_allowed
         return True
 
@@ -321,10 +323,8 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
     async def prepare(self) -> None:
         max_conns = self.settings["max_websocket_connections"]
         if self.__class__.connection_count >= max_conns:
-            raise self.server.error(
-                "Maximum Number of Websocket Connections Reached"
-            )
-        auth: AuthComp = self.server.lookup_component('authorization', None)
+            raise self.server.error("Maximum Number of Websocket Connections Reached")
+        auth: AuthComp = self.server.lookup_component("authorization", None)
         if auth is not None:
             try:
                 self._user_info = await auth.authenticate_request(self.request)
@@ -341,9 +341,10 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
     def close_socket(self, code: int, reason: str) -> None:
         self.close(code, reason)
 
+
 class BridgeSocket(WebSocketHandler):
     def initialize(self) -> None:
-        self.server: Server = self.settings['server']
+        self.server: Server = self.settings["server"]
         self.wsm: WebsocketManager = self.server.lookup_component("websockets")
         self.eventloop = self.server.get_event_loop()
         self.uid = id(self)
@@ -370,14 +371,16 @@ class BridgeSocket(WebSocketHandler):
         agent = self.request.headers.get("User-Agent", "")
         is_proxy = False
         if (
-            "X-Forwarded-For" in self.request.headers or
-            "X-Real-Ip" in self.request.headers
+            "X-Forwarded-For" in self.request.headers
+            or "X-Real-Ip" in self.request.headers
         ):
             is_proxy = True
-        logging.info(f"Bridge Socket Opened: ID: {self.uid}, "
-                     f"Proxied: {is_proxy}, "
-                     f"User Agent: {agent}, "
-                     f"Host Name: {self.hostname}")
+        logging.info(
+            f"Bridge Socket Opened: ID: {self.uid}, "
+            f"Proxied: {is_proxy}, "
+            f"User Agent: {agent}, "
+            f"Host Name: {self.hostname}"
+        )
         self.wsm.add_bridge_connection(self)
 
     def on_message(self, message: bytes | str) -> None:
@@ -418,17 +421,19 @@ class BridgeSocket(WebSocketHandler):
             self.klippy_writer = None
         now = self.eventloop.get_loop_time()
         pong_elapsed = now - self.last_pong_time
-        logging.info(f"Bridge Socket Closed: ID: {self.uid} "
-                     f"Close Code: {self.close_code}, "
-                     f"Close Reason: {self.close_reason}, "
-                     f"Pong Time Elapsed: {pong_elapsed:.2f}")
+        logging.info(
+            f"Bridge Socket Closed: ID: {self.uid} "
+            f"Close Code: {self.close_code}, "
+            f"Close Reason: {self.close_reason}, "
+            f"Pong Time Elapsed: {pong_elapsed:.2f}"
+        )
         self.wsm.remove_bridge_connection(self)
 
     async def _read_unix_stream(self, reader: asyncio.StreamReader) -> None:
         errors_remaining: int = 10
         while not reader.at_eof():
             try:
-                data = memoryview(await reader.readuntil(b'\x03'))
+                data = memoryview(await reader.readuntil(b"\x03"))
             except (ConnectionError, asyncio.IncompleteReadError):
                 break
             except asyncio.CancelledError:
@@ -443,14 +448,12 @@ class BridgeSocket(WebSocketHandler):
             try:
                 await self.write_message(data[:-1].tobytes())
             except WebSocketClosedError:
-                logging.info(
-                    f"Bridge closed while writing: {self.uid}")
+                logging.info(f"Bridge closed while writing: {self.uid}")
                 break
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logging.exception(
-                    f"Error sending data over Bridge: {self.uid}")
+                logging.exception(f"Error sending data over Bridge: {self.uid}")
                 errors_remaining -= 1
                 if not errors_remaining or self.is_closed:
                     break
@@ -469,9 +472,7 @@ class BridgeSocket(WebSocketHandler):
     async def prepare(self) -> None:
         max_conns = self.settings["max_websocket_connections"]
         if WebSocket.connection_count >= max_conns:
-            raise self.server.error(
-                "Maximum Number of Bridge Connections Reached"
-            )
+            raise self.server.error("Maximum Number of Bridge Connections Reached")
         auth: AuthComp = self.server.lookup_component("authorization", None)
         if auth is not None:
             self.current_user = await auth.authenticate_request(self.request)
@@ -492,6 +493,7 @@ class BridgeSocket(WebSocketHandler):
 
     def close_socket(self, code: int, reason: str) -> None:
         self.close(code, reason)
+
 
 def load_component(config: ConfigHelper) -> WebsocketManager:
     return WebsocketManager(config)

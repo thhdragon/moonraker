@@ -17,15 +17,7 @@ from ..utils import json_wrapper as jsonw
 from ..common import RequestType
 
 # Annotation imports
-from typing import (
-    TYPE_CHECKING,
-    Type,
-    List,
-    Any,
-    Optional,
-    Dict,
-    cast
-)
+from typing import TYPE_CHECKING, Any, Optional, cast
 from collections.abc import Coroutine
 
 if TYPE_CHECKING:
@@ -33,9 +25,11 @@ if TYPE_CHECKING:
     from ..common import WebRequest
     from .http_client import HttpClient
 
+
 class OnOff:
     on: str = "on"
     off: str = "off"
+
 
 class Strip:
     _COLORSIZE: int = 4
@@ -65,7 +59,7 @@ class Strip:
             "brightness": self.brightness,
             "intensity": self.intensity,
             "speed": self.speed,
-            "error": self.error_state
+            "error": self.error_state,
         }
 
     async def initialize(self) -> None:
@@ -90,7 +84,7 @@ class Strip:
                 self.initial_green,
                 self.initial_blue,
                 self.initial_white,
-                None
+                None,
             )
             await self.wled_on(self.initial_preset)
         else:
@@ -100,27 +94,22 @@ class Strip:
                 self.initial_blue,
                 self.initial_white,
                 None,
-                True
+                True,
             )
 
     def _update_color_data(
-        self,
-        red: float,
-        green: float,
-        blue: float,
-        white: float,
-        index: int | None
+        self, red: float, green: float, blue: float, white: float, index: int | None
     ) -> None:
-        red = int(red * 255. + .5)
-        blue = int(blue * 255. + .5)
-        green = int(green * 255. + .5)
-        white = int(white * 255. + .5)
+        red = int(red * 255.0 + 0.5)
+        blue = int(blue * 255.0 + 0.5)
+        green = int(green * 255.0 + 0.5)
+        white = int(white * 255.0 + 0.5)
         led_data = [red, green, blue, white]
         if index is None:
             self._chain_data[:] = led_data * self.chain_count
         else:
             elem_size = len(led_data)
-            self._chain_data[(index-1)*elem_size:index*elem_size] = led_data
+            self._chain_data[(index - 1) * elem_size : index * elem_size] = led_data
 
     async def send_wled_command_impl(self, state: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError("Children must implement send_wled_command")
@@ -166,7 +155,8 @@ class Strip:
     async def wled_control(self, brightness: int, intensity: int, speed: int) -> None:
         logging.debug(
             f"WLED: {self.name} control {self.onoff} BRIGHTNESS={brightness} "
-            f"INTENSITY={intensity} SPEED={speed} CURRENTPRESET={self.preset}")
+            f"INTENSITY={intensity} SPEED={speed} CURRENTPRESET={self.preset}"
+        )
 
         if self.onoff == OnOff.off:
             logging.info("wled control only permitted when strip is on")
@@ -218,8 +208,9 @@ class Strip:
 
     def _wled_pixel(self, index: int) -> list[int]:
         led_color_data: list[int] = []
-        for p in self._chain_data[(index-1)*self._COLORSIZE:
-                                  (index)*self._COLORSIZE]:
+        for p in self._chain_data[
+            (index - 1) * self._COLORSIZE : (index) * self._COLORSIZE
+        ]:
             led_color_data.append(p)
         return led_color_data
 
@@ -230,11 +221,12 @@ class Strip:
         blue: float,
         white: float,
         index: int | None,
-        transmit: bool
+        transmit: bool,
     ) -> None:
         logging.debug(
             f"WLED: {self.name} R={red} G={green} B={blue} W={white} "
-            f"INDEX={index} TRANSMIT={transmit}")
+            f"INDEX={index} TRANSMIT={transmit}"
+        )
         self._update_color_data(red, green, blue, white, index)
         if transmit:
             # Clear preset (issues with sending seg{} will revert to preset)
@@ -248,10 +240,12 @@ class Strip:
 
             # Base command for setting an led (for all active segments)
             # See https://kno.wled.ge/interfaces/json-api/
-            state: dict[str, Any] = {"on": True,
-                                     "tt": 0,
-                                     "bri": self.brightness,
-                                     "seg": {"bri": self.brightness, "i": []}}
+            state: dict[str, Any] = {
+                "on": True,
+                "tt": 0,
+                "bri": self.brightness,
+                "seg": {"bri": self.brightness, "i": []},
+            }
             if index is None:
                 # All pixels same color only send range command of first color
                 self.send_full_chain_data = False
@@ -261,12 +255,12 @@ class Strip:
                 self.send_full_chain_data = False
                 cdata = []
                 for i in range(self.chain_count):
-                    cdata.append(self._wled_pixel(i+1))
+                    cdata.append(self._wled_pixel(i + 1))
                 state["seg"]["i"] = cdata
             else:
                 # Only one pixel has changed since last full data sent
                 # so send just that one
-                state["seg"]["i"] = [index-1, self._wled_pixel(index)]
+                state["seg"]["i"] = [index - 1, self._wled_pixel(index)]
 
             # Send wled control command
             await self._send_wled_command(state)
@@ -284,6 +278,7 @@ class Strip:
             # next transmitting
             self.send_full_chain_data = True
 
+
 class StripHttp(Strip):
     def __init__(self, name: str, config: ConfigHelper):
         super().__init__(name, config)
@@ -292,7 +287,7 @@ class StripHttp(Strip):
         port: int = config.getint("port", 80)
         protocol: str = config.get("protocol", "http")
         self.url = f"{protocol}://{addr}:{port}/json"
-        self.timeout: float = config.getfloat("timeout", 2.)
+        self.timeout: float = config.getfloat("timeout", 2.0)
         self.client: HttpClient = self.server.lookup_component("http_client")
 
     async def send_wled_command_impl(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -303,11 +298,12 @@ class StripHttp(Strip):
                 state,
                 attempts=3,
                 connect_timeout=self.timeout,
-                request_timeout=self.timeout
+                request_timeout=self.timeout,
             )
             if not state.get("v", False):
                 return {}
             return cast(dict, response.json())
+
 
 class StripSerial(Strip):
     def __init__(self, name: str, config: ConfigHelper) -> None:
@@ -327,7 +323,7 @@ class StripSerial(Strip):
                 if type(last_exc) is not type(e) and last_exc.args != e.args:
                     logging.exception("WLED Serial Open Error")
                     last_exc = e
-                await asyncio.sleep(2.)
+                await asyncio.sleep(2.0)
                 continue
             reader = self.serial.reader
             # flush reader
@@ -338,19 +334,19 @@ class StripSerial(Strip):
                     logging.debug(f"Received Serial Data: {line!r}")
                 else:
                     if (
-                        self.pending_response is not None and
-                        not self.pending_response.done()
+                        self.pending_response is not None
+                        and not self.pending_response.done()
                     ):
                         self.pending_response.set_result(data)
             if self.enabled:
-                await asyncio.sleep(2.)
+                await asyncio.sleep(2.0)
             last_exc = Exception()
 
     async def initialize(self) -> None:
         eventloop = self.server.get_event_loop()
         self.serial_task = eventloop.create_task(self.run_serial())
         for _ in range(5):
-            await asyncio.sleep(.01)
+            await asyncio.sleep(0.01)
             if self.serial.connected:
                 break
         await super().initialize()
@@ -374,11 +370,9 @@ class StripSerial(Strip):
         await self.serial.close()
         if self.serial_task is not None:
             await self.serial_task
-        if (
-            self.pending_response is not None and
-            not self.pending_response.done()
-        ):
+        if self.pending_response is not None and not self.pending_response.done():
             self.pending_response.set_exception(self.server.error("Server Shutdown"))
+
 
 class WLED:
     def __init__(self, config: ConfigHelper) -> None:
@@ -389,18 +383,14 @@ class WLED:
         prefix_sections = config.get_prefix_sections("wled")
         logging.info(f"WLED component loading strips: {prefix_sections}")
 
-        strip_types = {
-            "HTTP": StripHttp,
-            "SERIAL": StripSerial
-        }
+        strip_types = {"HTTP": StripHttp, "SERIAL": StripSerial}
         self.strips: dict[str, Strip] = {}
         for section in prefix_sections:
             cfg = config[section]
             try:
                 name_parts = cfg.get_name().split(maxsplit=1)
                 if len(name_parts) != 2:
-                    raise cfg.error(
-                        f"Invalid Section Name: {cfg.get_name()}")
+                    raise cfg.error(f"Invalid Section Name: {cfg.get_name()}")
                 name: str = name_parts[1]
 
                 logging.info(f"WLED strip: {name}")
@@ -442,8 +432,9 @@ class WLED:
             "/machine/wled/toggle", RequestType.POST, self._handle_batch_wled_request
         )
         self.server.register_endpoint(
-            "/machine/wled/strip", RequestType.GET | RequestType.POST,
-            self._handle_single_wled_request
+            "/machine/wled/strip",
+            RequestType.GET | RequestType.POST,
+            self._handle_single_wled_request,
         )
 
     async def component_init(self) -> None:
@@ -451,7 +442,7 @@ class WLED:
             logging.debug("Initializing wled")
             event_loop = self.server.get_event_loop()
             cur_time = event_loop.get_loop_time()
-            endtime = cur_time + 120.
+            endtime = cur_time + 120.0
             query_strips = list(self.strips.values())
             failed_strips: list[Strip] = []
             while cur_time < endtime:
@@ -466,13 +457,13 @@ class WLED:
                     return
                 query_strips = failed_strips
                 failed_strips = []
-                await asyncio.sleep(2.)
+                await asyncio.sleep(2.0)
                 cur_time = event_loop.get_loop_time()
             if failed_strips:
                 failed_names = [s.name for s in failed_strips]
                 self.server.add_warning(
-                    "The following wled strips failed init:"
-                    f" {failed_names}")
+                    f"The following wled strips failed init: {failed_names}"
+                )
         except Exception as e:
             logging.exception(e)
 
@@ -492,7 +483,7 @@ class WLED:
         preset: int = -1,
         brightness: int = -1,
         intensity: int = -1,
-        speed: int = -1
+        speed: int = -1,
     ) -> None:
         status = None
 
@@ -503,11 +494,14 @@ class WLED:
             if status in ["true", "false"]:
                 status = OnOff.on if status == "true" else OnOff.off
 
-        if status is None and preset == -1 and brightness == -1 and \
-           intensity == -1 and speed == -1:
-            logging.info(
-                "Invalid state received but no control or preset data passed"
-            )
+        if (
+            status is None
+            and preset == -1
+            and brightness == -1
+            and intensity == -1
+            and speed == -1
+        ):
+            logging.info("Invalid state received but no control or preset data passed")
             return
 
         if strip not in self.strips:
@@ -530,12 +524,12 @@ class WLED:
     async def set_wled(
         self,
         strip: str,
-        red: float = 0.,
-        green: float = 0.,
-        blue: float = 0.,
-        white: float = 0.,
+        red: float = 0.0,
+        green: float = 0.0,
+        blue: float = 0.0,
+        white: float = 0.0,
         index: int | None = None,
-        transmit: int = 1
+        transmit: int = 1,
     ) -> None:
         if strip not in self.strips:
             logging.info(f"Unknown WLED strip: {strip}")
@@ -547,19 +541,18 @@ class WLED:
         )
 
     async def _handle_list_strips(self, web_request: WebRequest) -> dict[str, Any]:
-        strips = {name: strip.get_strip_info()
-                  for name, strip in self.strips.items()}
+        strips = {name: strip.get_strip_info() for name, strip in self.strips.items()}
         output = {"strips": strips}
         return output
 
     async def _handle_single_wled_request(
         self, web_request: WebRequest
     ) -> dict[str, Any]:
-        strip_name: str = web_request.get_str('strip')
-        preset: int = web_request.get_int('preset', -1)
-        brightness: int = web_request.get_int('brightness', -1)
-        intensity: int = web_request.get_int('intensity', -1)
-        speed: int = web_request.get_int('speed', -1)
+        strip_name: str = web_request.get_str("strip")
+        preset: int = web_request.get_int("preset", -1)
+        brightness: int = web_request.get_int("brightness", -1)
+        intensity: int = web_request.get_int("intensity", -1)
+        speed: int = web_request.get_int("speed", -1)
         req_type = web_request.get_request_type()
         if strip_name not in self.strips:
             raise self.server.error(f"No valid strip named {strip_name}")
@@ -567,7 +560,7 @@ class WLED:
         if req_type == RequestType.GET:
             return {strip_name: strip.get_strip_info()}
         elif req_type == RequestType.POST:
-            action = web_request.get_str('action').lower()
+            action = web_request.get_str("action").lower()
             if action not in ["on", "off", "toggle", "control"]:
                 raise self.server.error(f"Invalid requested action '{action}'")
             result = await self._process_request(
@@ -589,8 +582,7 @@ class WLED:
         req = ep.split("/")[-1]
         for name, strip in requested_strips.items():
             if strip is not None:
-                result[name] = await self._process_request(strip, req, -1,
-                                                           -1, -1, -1)
+                result[name] = await self._process_request(strip, req, -1, -1, -1, -1)
             else:
                 result[name] = {"error": "strip_not_found"}
         return result
@@ -602,7 +594,7 @@ class WLED:
         preset: int,
         brightness: int,
         intensity: int,
-        speed: int
+        speed: int,
     ) -> dict[str, Any]:
         strip_onoff = strip.onoff
         if req == "status":
@@ -630,6 +622,7 @@ class WLED:
             ret = strip.close()
             if ret is not None:
                 await ret
+
 
 def load_component(config: ConfigHelper) -> WLED:
     return WLED(config)

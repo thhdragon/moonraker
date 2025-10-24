@@ -4,9 +4,10 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 from __future__ import annotations
+
 import re
 from enum import Flag, auto
-from typing import Tuple, Optional, Dict, List, Any
+from typing import Any
 
 # Python regex for parsing version strings from PEP 440
 # https://peps.python.org/pep-0440/#appendix-b-parsing-version-strings-with-regular-expressions
@@ -70,6 +71,7 @@ _git_version_regex = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
+
 class ReleaseType(Flag):
     FINAL = auto()
     ALPHA = auto()
@@ -77,6 +79,7 @@ class ReleaseType(Flag):
     RELEASE_CANDIDATE = auto()
     POST = auto()
     DEV = auto()
+
 
 class BaseVersion:
     def __init__(self, version: str) -> None:
@@ -150,12 +153,12 @@ class BaseVersion:
         if not self._valid_version:
             raise ValueError(
                 f"Version {self._orig} is not a valid version string "
-                f"for type {type(self).__name__}"
+                f"for type {type(self).__name__}",
             )
         if not other._valid_version:
             raise ValueError(
                 f"Version {other._orig} is not a valid version string "
-                f"for type {type(self).__name__}"
+                f"for type {type(self).__name__}",
             )
 
     def __eq__(self, __value: object) -> bool:
@@ -407,14 +410,13 @@ class GitVersion(BaseVersion):
                     type_count -= 1
                 pretype = type_choices.get(type_idx, "rc")
                 return f"{self._release}.{pretype}{type_count}"
-            else:
-                parts = [int(ver) for ver in self._release.split(".")]
-                new_ver: list[str] = []
-                need_decrement = True
-                for part in reversed(parts):
-                    if part > 0 and need_decrement:
-                        need_decrement = False
-                        part -= 1
-                    new_ver.insert(0, str(part))
-                return "v" + ".".join(new_ver)
+            parts = [int(ver) for ver in self._release.split(".")]
+            new_ver: list[str] = []
+            need_decrement = True
+            for part in reversed(parts):
+                if part > 0 and need_decrement:
+                    need_decrement = False
+                    part -= 1
+                new_ver.insert(0, str(part))
+            return "v" + ".".join(new_ver)
         return "v0.0.0"

@@ -5,17 +5,14 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
-import sys
+
 import copy
 import pathlib
+import sys
+from typing import TYPE_CHECKING
+
 from ...common import ExtendedEnum
 from ...utils import source_info
-from typing import (
-    TYPE_CHECKING,
-    Dict,
-    Union,
-    List
-)
 
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
@@ -30,7 +27,7 @@ BASE_CONFIG: dict[str, dict[str, str]] = {
         "virtualenv": sys.exec_prefix,
         "pip_environment_variables": "SKIP_CYTHON=Y",
         "path": str(source_info.source_path()),
-        "managed_services": "moonraker"
+        "managed_services": "moonraker",
     },
     "klipper": {
         "moved_origin": "https://github.com/kevinoconnor/klipper.git",
@@ -38,11 +35,12 @@ BASE_CONFIG: dict[str, dict[str, str]] = {
         "requirements": "scripts/klippy-requirements.txt",
         "venv_args": "-p python3",
         "install_script": "scripts/install-octopi.sh",
-        "managed_services": "klipper"
-    }
+        "managed_services": "klipper",
+    },
 }
 
 OPTION_OVERRIDES = ("channel", "pinned_commit", "refresh_interval", "report_anomalies")
+
 
 class AppType(ExtendedEnum):
     NONE = 1
@@ -59,10 +57,9 @@ class AppType(ExtendedEnum):
             app_path = pathlib.Path(app_path).expanduser()
         if source_info.is_git_repo(app_path):
             return AppType.GIT_REPO
-        elif app_path is None and source_info.is_vitualenv_project():
+        if app_path is None and source_info.is_vitualenv_project():
             return AppType.PYTHON
-        else:
-            return AppType.NONE
+        return AppType.NONE
 
     @classmethod
     def valid_types(cls) -> list[AppType]:
@@ -74,10 +71,9 @@ class AppType(ExtendedEnum):
     def supported_channels(self) -> list[Channel]:
         if self == AppType.NONE:
             return []
-        elif self in [AppType.WEB, AppType.ZIP, AppType.EXECUTABLE]:
+        if self in [AppType.WEB, AppType.ZIP, AppType.EXECUTABLE]:
             return [Channel.STABLE, Channel.BETA]  # type: ignore
-        else:
-            return list(Channel)
+        return list(Channel)
 
     @property
     def default_channel(self) -> Channel:
@@ -85,10 +81,12 @@ class AppType(ExtendedEnum):
             return Channel.DEV  # type: ignore
         return Channel.STABLE  # type: ignore
 
+
 class Channel(ExtendedEnum):
     STABLE = 1
     BETA = 2
     DEV = 3
+
 
 def get_base_configuration(config: ConfigHelper) -> ConfigHelper:
     server = config.get_server()

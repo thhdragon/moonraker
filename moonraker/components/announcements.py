@@ -12,14 +12,9 @@ import logging
 import email.utils
 import xml.etree.ElementTree as etree
 from ..common import RequestType
-from typing import (
-    TYPE_CHECKING,
-    List,
-    Dict,
-    Any,
-    Optional
-)
+from typing import TYPE_CHECKING, Any, Optional
 from collections.abc import Awaitable
+
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
@@ -28,22 +23,21 @@ if TYPE_CHECKING:
 
 
 MOONLIGHT_URL = "https://arksine.github.io/moonlight"
-UPDATE_CHECK_TIME = 1800.
+UPDATE_CHECK_TIME = 1800.0
 etree.register_namespace("moonlight", MOONLIGHT_URL)
+
 
 class Announcements:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.entry_mgr = EntryManager(config)
         self.eventloop = self.server.get_event_loop()
-        self.update_timer = self.eventloop.register_timer(
-            self._handle_update_timer
-        )
+        self.update_timer = self.eventloop.register_timer(self._handle_update_timer)
         self.request_lock = asyncio.Lock()
         self.dev_mode = config.getboolean("dev_mode", False)
         self.subscriptions: dict[str, RssFeed] = {
             "moonraker": RssFeed("moonraker", self.entry_mgr, self.dev_mode),
-            "klipper": RssFeed("klipper", self.entry_mgr, self.dev_mode)
+            "klipper": RssFeed("klipper", self.entry_mgr, self.dev_mode),
         }
         self.stored_feeds: list[str] = []
         sub_list: list[str] = config.getlist("subscriptions", [])
@@ -53,29 +47,28 @@ class Announcements:
             if sub in self.subscriptions:
                 continue
             self.configured_feeds.append(sub)
-            self.subscriptions[sub] = RssFeed(
-                sub, self.entry_mgr, self.dev_mode
-            )
+            self.subscriptions[sub] = RssFeed(sub, self.entry_mgr, self.dev_mode)
 
         self.server.register_endpoint(
-            "/server/announcements/list", RequestType.GET,
-            self._list_announcements
+            "/server/announcements/list", RequestType.GET, self._list_announcements
         )
         self.server.register_endpoint(
-            "/server/announcements/dismiss", RequestType.POST,
-            self._handle_dismiss_request
+            "/server/announcements/dismiss",
+            RequestType.POST,
+            self._handle_dismiss_request,
         )
         self.server.register_endpoint(
-            "/server/announcements/update", RequestType.POST,
-            self._handle_update_request
+            "/server/announcements/update",
+            RequestType.POST,
+            self._handle_update_request,
         )
         self.server.register_endpoint(
-            "/server/announcements/feed", RequestType.POST | RequestType.DELETE,
-            self._handle_feed_request
+            "/server/announcements/feed",
+            RequestType.POST | RequestType.DELETE,
+            self._handle_feed_request,
         )
         self.server.register_endpoint(
-            "/server/announcements/feeds", RequestType.GET,
-            self._handle_list_feeds
+            "/server/announcements/feeds", RequestType.GET, self._handle_list_feeds
         )
         self.server.register_notification(
             "announcements:dismissed", "announcement_dismissed"
@@ -118,31 +111,20 @@ class Announcements:
                 )
         return eventtime + UPDATE_CHECK_TIME
 
-    async def _handle_dismiss_request(
-        self, web_request: WebRequest
-    ) -> dict[str, Any]:
+    async def _handle_dismiss_request(self, web_request: WebRequest) -> dict[str, Any]:
         async with self.request_lock:
             entry_id: str = web_request.get_str("entry_id")
             wake_time: int | None = web_request.get_int("wake_time", None)
             await self.entry_mgr.dismiss_entry(entry_id, wake_time)
-            return {
-                "entry_id": entry_id
-            }
+            return {"entry_id": entry_id}
 
-    async def _list_announcements(
-        self, web_request: WebRequest
-    ) -> dict[str, Any]:
+    async def _list_announcements(self, web_request: WebRequest) -> dict[str, Any]:
         async with self.request_lock:
             incl_dsm = web_request.get_boolean("include_dismissed", True)
             entries = await self.entry_mgr.list_entries(incl_dsm)
-            return {
-                "entries": entries,
-                "feeds": list(self.subscriptions.keys())
-            }
+            return {"entries": entries, "feeds": list(self.subscriptions.keys())}
 
-    async def _handle_update_request(
-        self, web_request: WebRequest
-    ) -> dict[str, Any]:
+    async def _handle_update_request(self, web_request: WebRequest) -> dict[str, Any]:
         subs = web_request.get_list("subscriptions", list(self.subscriptions.keys()))
         for sub in subs:
             if sub not in self.subscriptions:
@@ -155,22 +137,17 @@ class Announcements:
             entries = await self.entry_mgr.list_entries()
             if changed:
                 self.eventloop.delay_callback(
-                    .05, self.server.send_event,
+                    0.05,
+                    self.server.send_event,
                     "announcements:entries_updated",
-                    {"entries": entries})
-            return {
-                "entries": entries,
-                "modified": changed
-            }
+                    {"entries": entries},
+                )
+            return {"entries": entries, "modified": changed}
 
-    async def _handle_list_feeds(
-        self, web_request: WebRequest
-    ) -> dict[str, Any]:
+    async def _handle_list_feeds(self, web_request: WebRequest) -> dict[str, Any]:
         return {"feeds": list(self.subscriptions.keys())}
 
-    async def _handle_feed_request(
-        self, web_request: WebRequest
-    ) -> dict[str, Any]:
+    async def _handle_feed_request(self, web_request: WebRequest) -> dict[str, Any]:
         req_type = web_request.get_request_type()
         name: str = web_request.get("name")
         name = name.lower()
@@ -196,9 +173,7 @@ class Announcements:
                     f"Feed '{name}' exists in the configuration, cannot remove"
                 )
             self.stored_feeds.remove(name)
-            db.insert_item(
-                "moonraker", "announcements.stored_feeds", self.stored_feeds
-            )
+            db.insert_item("moonraker", "announcements.stored_feeds", self.stored_feeds)
             if name in self.subscriptions:
                 del self.subscriptions[name]
                 changed = await self.entry_mgr.prune_by_feed(name)
@@ -209,13 +184,12 @@ class Announcements:
         if changed:
             entries = await self.entry_mgr.list_entries()
             self.eventloop.delay_callback(
-                .05, self.server.send_event, "announcements:entries_updated",
-                {"entries": entries}
+                0.05,
+                self.server.send_event,
+                "announcements:entries_updated",
+                {"entries": entries},
             )
-        return {
-            "feed": name,
-            "action": result
-        }
+        return {"feed": name, "action": result}
 
     def add_internal_announcement(
         self, title: str, desc: str, url: str, priority: str, feed: str
@@ -233,7 +207,7 @@ class Announcements:
             "date_dismissed": None,
             "dismiss_wake": None,
             "source": "internal",
-            "feed": feed
+            "feed": feed,
         }
         self.entry_mgr.add_entry(entry)
         self.eventloop.create_task(self._notify_internal())
@@ -241,9 +215,7 @@ class Announcements:
 
     async def _notify_internal(self) -> None:
         entries = await self.entry_mgr.list_entries()
-        self.server.send_event(
-            "announcements:entries_updated", {"entries": entries}
-        )
+        self.server.send_event("announcements:entries_updated", {"entries": entries})
 
     async def remove_announcement(self, entry_id: str) -> None:
         ret = await self.entry_mgr.remove_entry(entry_id)
@@ -252,6 +224,7 @@ class Announcements:
             self.server.send_event(
                 "announcements:entries_updated", {"entries": entries}
             )
+
     async def dismiss_announcement(
         self, entry_id, wake_time: int | None = None
     ) -> None:
@@ -273,6 +246,7 @@ class Announcements:
 
     def close(self):
         self.entry_mgr.close()
+
 
 class EntryManager:
     def __init__(self, config: ConfigHelper) -> None:
@@ -297,7 +271,7 @@ class EntryManager:
                 wake_time: float | None = entry.get("dismiss_wake")
                 if wake_time is not None:
                     time_diff = wake_time - curtime
-                    if time_diff - 10. < 0.:
+                    if time_diff - 10.0 < 0.0:
                         # announcement is near or past wake time
                         entry["dismissed"] = False
                         entry["date_dismissed"] = None
@@ -335,9 +309,7 @@ class EntryManager:
             raise self.server.error(f"No key matching entry id: {entry_id}")
         return self.announce_db.pop(key, None)
 
-    async def dismiss_entry(
-        self, entry_id: str, wake_time: int | None = None
-    ) -> None:
+    async def dismiss_entry(self, entry_id: str, wake_time: int | None = None) -> None:
         key = self.entry_id_map.get(entry_id)
         if key is None:
             raise self.server.error(f"No key matching entry id: {entry_id}")
@@ -356,8 +328,10 @@ class EntryManager:
             )
         self.announce_db[key] = entry
         eventloop.delay_callback(
-            .05, self.server.send_event, "announcements:dismissed",
-            {"entry_id": entry_id}
+            0.05,
+            self.server.send_event,
+            "announcements:dismissed",
+            {"entry_id": entry_id},
         )
 
     async def _wake_dismissed(self, key: str) -> None:
@@ -406,10 +380,9 @@ class EntryManager:
         for handle in self.dismiss_handles.values():
             handle.cancel()
 
+
 class RssFeed:
-    def __init__(
-        self, name: str, entry_mgr: EntryManager, dev_mode: bool
-    ) -> None:
+    def __init__(self, name: str, entry_mgr: EntryManager, dev_mode: bool) -> None:
         self.server = entry_mgr.server
         self.name = name
         self.entry_mgr = entry_mgr
@@ -449,13 +422,14 @@ class RssFeed:
         if self.etag is not None:
             headers["If-None-Match"] = self.etag
         resp = await self.client.get(
-            self.asset_url, headers, attempts=5,
-            retry_pause_time=.5, enable_cache=False,
+            self.asset_url,
+            headers,
+            attempts=5,
+            retry_pause_time=0.5,
+            enable_cache=False,
         )
         if resp.has_error():
-            logging.info(
-                f"Failed to update subscription '{self.name}': {resp.error}"
-            )
+            logging.info(f"Failed to update subscription '{self.name}': {resp.error}")
             return ""
         if resp.status_code == 304:
             logging.debug(f"Content at {self.xml_file} not modified")
@@ -469,7 +443,8 @@ class RssFeed:
                 )
             else:
                 self.database.delete_item(
-                    "moonraker", f"announcements.{self.name}.etag",
+                    "moonraker",
+                    f"announcements.{self.name}.etag",
                 )
         except self.server.error:
             pass
@@ -487,8 +462,7 @@ class RssFeed:
             return ""
         try:
             eventloop = self.server.get_event_loop()
-            xml_data = await eventloop.run_in_thread(
-                self.dev_xml_path.read_text)
+            xml_data = await eventloop.run_in_thread(self.dev_xml_path.read_text)
         except Exception:
             logging.exception(f"Unable read xml file {self.dev_xml_path}")
             return ""
@@ -520,8 +494,8 @@ class RssFeed:
                 prefix = "/".join(guid.split("/")[:2])
             elif not guid.startswith(prefix):
                 logging.debug(
-                    f"Feed {self.name}: Guid {guid} is not "
-                    f"prefixed with {prefix}")
+                    f"Feed {self.name}: Guid {guid} is not prefixed with {prefix}"
+                )
             valid_ids.append(guid)
             if self.entry_mgr.has_entry(guid):
                 continue
@@ -541,7 +515,7 @@ class RssFeed:
                 "date_dismissed": None,
                 "dismiss_wake": None,
                 "source": "moonlight",
-                "feed": self.name
+                "feed": self.name,
             }
             changed = True
             self.entry_mgr.add_entry(entry)

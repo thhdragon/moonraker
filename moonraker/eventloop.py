@@ -5,41 +5,39 @@
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 from __future__ import annotations
-import os
-import contextlib
+
 import asyncio
-import inspect
+import contextlib
 import functools
+import inspect
+import logging
+import os
 import socket
 import time
-import logging
-from typing import (
-    TYPE_CHECKING,
-    Optional,
-    Tuple,
-    TypeVar,
-    Union,
-    Set
-)
 from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, TypeVar
 
 _uvl_var = os.getenv("MOONRAKER_ENABLE_UVLOOP", "y").lower()
 _uvl_enabled = False
 if _uvl_var in ["y", "yes", "true"]:
     with contextlib.suppress(ImportError):
         import uvloop  # type: ignore
+
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         _uvl_enabled = True
 
 if TYPE_CHECKING:
     from asyncio import AbstractEventLoop
+
     _T = TypeVar("_T")
     FlexCallback = Callable[..., Awaitable | None]
     TimerCallback = Callable[[float], float | Awaitable[float]]
 
+
 class EventLoop:
     UVLOOP_ENABLED = _uvl_enabled
     TimeoutError = asyncio.TimeoutError
+
     def __init__(self) -> None:
         self.reset()
 
@@ -75,19 +73,19 @@ class EventLoop:
             new_loop = asyncio.new_event_loop()
             if not new_loop.is_closed():
                 break
-            logging.info("Failed to create open eventloop, "
-                         "retrying in .5 seconds...")
-            time.sleep(.5)
+            logging.info("Failed to create open eventloop, retrying in .5 seconds...")
+            time.sleep(0.5)
         else:
             raise RuntimeError("Unable to create new open eventloop")
         asyncio.set_event_loop(new_loop)
         return new_loop
 
-    def register_callback(self,
-                          callback: FlexCallback,
-                          *args,
-                          **kwargs
-                          ) -> None:
+    def register_callback(
+        self,
+        callback: FlexCallback,
+        *args,
+        **kwargs,
+    ) -> None:
         async def _wrapper():
             try:
                 ret = callback(*args, **kwargs)
@@ -97,30 +95,36 @@ class EventLoop:
                 raise
             except Exception:
                 logging.exception("Error Running Callback")
+
         self.create_task(_wrapper())
 
-    def delay_callback(self,
-                       delay: float,
-                       callback: FlexCallback,
-                       *args,
-                       **kwargs
-                       ) -> asyncio.TimerHandle:
+    def delay_callback(
+        self,
+        delay: float,
+        callback: FlexCallback,
+        *args,
+        **kwargs,
+    ) -> asyncio.TimerHandle:
         return self.aioloop.call_later(
-            delay, self.register_callback,
-            functools.partial(callback, *args, **kwargs)
+            delay,
+            self.register_callback,
+            functools.partial(callback, *args, **kwargs),
         )
 
     def register_timer(self, callback: TimerCallback):
         return FlexTimer(self, callback)
 
-    def run_in_thread(self,
-                      callback: Callable[..., _T],
-                      *args
-                      ) -> Awaitable[_T]:
+    def run_in_thread(
+        self,
+        callback: Callable[..., _T],
+        *args,
+    ) -> Awaitable[_T]:
         return self.aioloop.run_in_executor(None, callback, *args)
 
     async def create_socket_connection(
-        self, address: tuple[str, int], timeout: float | None = None
+        self,
+        address: tuple[str, int],
+        timeout: float | None = None,
     ) -> socket.socket:
         host, port = address
         """
@@ -129,7 +133,10 @@ class EventLoop:
         loop = self.aioloop
         err = None
         ainfo = await loop.getaddrinfo(
-            host, port, family=0, type=socket.SOCK_STREAM
+            host,
+            port,
+            family=0,
+            type=socket.SOCK_STREAM,
         )
         for res in ainfo:
             af, socktype, proto, _cannon_name, _sa = res
@@ -139,7 +146,8 @@ class EventLoop:
                 sock.settimeout(0)
                 sock.setblocking(False)
                 await asyncio.wait_for(
-                    loop.sock_connect(sock, (host, port)), timeout
+                    loop.sock_connect(sock, (host, port)),
+                    timeout,
                 )
                 # Break explicitly a reference cycle
                 err = None
@@ -161,11 +169,13 @@ class EventLoop:
     def close(self):
         self.aioloop.close()
 
+
 class FlexTimer:
-    def __init__(self,
-                 eventloop: EventLoop,
-                 callback: TimerCallback
-                 ) -> None:
+    def __init__(
+        self,
+        eventloop: EventLoop,
+        callback: TimerCallback,
+    ) -> None:
         self.eventloop = eventloop
         self.callback = callback
         self.timer_handle: asyncio.TimerHandle | None = None
@@ -175,15 +185,14 @@ class FlexTimer:
     def in_callback(self) -> bool:
         return self.timer_task is not None and not self.timer_task.done()
 
-    def start(self, delay: float = 0.):
+    def start(self, delay: float = 0.0):
         if self.running:
             return
         self.running = True
         if self.in_callback():
             return
         call_time = self.eventloop.get_loop_time() + delay
-        self.timer_handle = self.eventloop.call_at(
-            call_time, self._schedule_task)
+        self.timer_handle = self.eventloop.call_at(call_time, self._schedule_task)
 
     def stop(self):
         if not self.running:

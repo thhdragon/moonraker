@@ -5,30 +5,26 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
+
 import asyncio
-import re
 import logging
+import re
 from enum import Enum
-from ...utils.source_info import normalize_project_name, load_distribution_info
-from ...utils.versions import PyVersion, GitVersion
-from ...utils.sysdeps_parser import SysDepsParser
-from ...utils import pip_utils, json_wrapper
-from .app_deploy import AppDeploy, Channel
 
 # Annotation imports
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Optional,
-    Dict,
-    List,
-    cast
-)
+from typing import TYPE_CHECKING, Any, cast
+
+from ...utils import json_wrapper, pip_utils
+from ...utils.source_info import load_distribution_info, normalize_project_name
+from ...utils.sysdeps_parser import SysDepsParser
+from ...utils.versions import GitVersion, PyVersion
+from .app_deploy import AppDeploy, Channel
 
 if TYPE_CHECKING:
+    from ...components.file_manager.file_manager import FileManager
     from ...confighelper import ConfigHelper
     from ...utils.source_info import PackageInfo
-    from ...components.file_manager.file_manager import FileManager
+
 
 class PackageSource(Enum):
     PIP = 0
@@ -43,7 +39,7 @@ class PythonDeploy(AppDeploy):
         if self.virtualenv is None:
             raise config.error(
                 f"[{config.get_name()}]: Option 'virtualenv' must specify a valid "
-                "the path to a Python virtualenv"
+                "the path to a Python virtualenv",
             )
         fm: FileManager = self.server.lookup_component("file_manager")
         fm.add_reserved_path(f"update_manager {self.name}", self.virtualenv)
@@ -94,23 +90,25 @@ class PythonDeploy(AppDeploy):
 
     def get_update_status(self) -> dict[str, Any]:
         status = super().get_update_status()
-        status.update({
-            "detected_type": "python_package",
-            "name": self.name,
-            "branch": self.primary_branch,
-            "owner": self.repo_owner,
-            "repo_name": self.repo_name,
-            "version": self.current_version.short_version,
-            "remote_version": self.upstream_version.short_version,
-            "rollback_version": self.rollback_version.short_version,
-            "current_hash": self.current_sha,
-            "remote_hash": self.upstream_sha,
-            "is_dirty": self.git_version.dirty,
-            "changelog_url": self.changelog,
-            "full_version_string": self.current_version.full_version,
-            "pristine": not self.git_version.dirty,
-            "warnings": self.warnings
-        })
+        status.update(
+            {
+                "detected_type": "python_package",
+                "name": self.name,
+                "branch": self.primary_branch,
+                "owner": self.repo_owner,
+                "repo_name": self.repo_name,
+                "version": self.current_version.short_version,
+                "remote_version": self.upstream_version.short_version,
+                "rollback_version": self.rollback_version.short_version,
+                "current_hash": self.current_sha,
+                "remote_hash": self.upstream_sha,
+                "is_dirty": self.git_version.dirty,
+                "changelog_url": self.changelog,
+                "full_version_string": self.current_version.full_version,
+                "pristine": not self.git_version.dirty,
+                "warnings": self.warnings,
+            },
+        )
         return status
 
     def _add_warning(self, msg: str) -> None:
@@ -130,7 +128,7 @@ class PythonDeploy(AppDeploy):
         if vcs_info.get("vcs", "") != "git":
             self._add_warning(
                 "Package installed from source other than pypi or git: "
-                f"{direct_url_data}"
+                f"{direct_url_data}",
             )
             return
         try:
@@ -147,7 +145,8 @@ class PythonDeploy(AppDeploy):
     def _match_repo_url(self) -> bool:
         url_match = re.match(
             r"https://(?:www\.)?github\.com/(?P<owner>.+?)/(?P<proj>.+?)(?:\.git|$)",
-            self.repo_url, re.IGNORECASE
+            self.repo_url,
+            re.IGNORECASE,
         )
         if url_match is None:
             return False
@@ -218,7 +217,9 @@ class PythonDeploy(AppDeploy):
         try:
             assert self.virtualenv is not None
             package_info = await eventloop.run_in_thread(
-                load_distribution_info, self.virtualenv, self.project_name
+                load_distribution_info,
+                self.virtualenv,
+                self.project_name,
             )
         except self.server.error:
             self._add_warning("Failed to parse package info")
@@ -259,7 +260,7 @@ class PythonDeploy(AppDeploy):
         pip_args = f"install -U --quiet --dry-run --no-deps --report - {norm_name}"
         pip_exec = pip_utils.AsyncPipExecutor(self.pip_cmd, self.server)
         await self._update_pip(pip_exec)
-        resp = await pip_exec.call_pip_with_response(pip_args, timeout=1200.)
+        resp = await pip_exec.call_pip_with_response(pip_args, timeout=1200.0)
         data: dict[str, Any] = json_wrapper.loads(resp)
         install_data: list[dict[str, Any]] = data.get("install", [])
         if not install_data:
@@ -292,12 +293,14 @@ class PythonDeploy(AppDeploy):
             if self.primary_branch is not None:
                 resource += f"&sha={self.primary_branch}"
             resp = await client.github_api_request(
-                resource, attempts=3, retry_pause_time=.5
+                resource,
+                attempts=3,
+                retry_pause_time=0.5,
             )
             if resp.status_code != 304 and resp.has_error():
                 self.log_info(f"Github Request Error - {resp.error}")
                 return
-            commit_list: list[dict[str, Any]] = cast(list, resp.json())
+            commit_list: list[dict[str, Any]] = cast("list", resp.json())
             if not commit_list:
                 self.log_info("No commits found")
                 return
@@ -313,7 +316,9 @@ class PythonDeploy(AppDeploy):
         else:
             resource = f"repos/{repo}/releases?per_page=1"
         resp = await client.github_api_request(
-            resource, attempts=3, retry_pause_time=.5
+            resource,
+            attempts=3,
+            retry_pause_time=0.5,
         )
         if resp.status_code != 304 and resp.has_error():
             self.log_info(f"Github Request Error - {resp.error}")
@@ -342,14 +347,15 @@ class PythonDeploy(AppDeploy):
         current_version = self.current_version
         current_ref = self.current_version.tag
         install_ver = self.rollback_version if rollback else self.upstream_version
-        if (
-            not install_ver.is_valid_version() or
-            (current_version.is_valid_version() and current_version == install_ver)
+        if not install_ver.is_valid_version() or (
+            current_version.is_valid_version() and current_version == install_ver
         ):
             # Invalid install version or requested version already installed
             return False
         pip_exec = pip_utils.AsyncPipExecutor(
-            self.pip_cmd, self.server, self.cmd_helper.notify_update_response
+            self.pip_cmd,
+            self.server,
+            self.cmd_helper.notify_update_response,
         )
         pip_args = "install -U --upgrade-strategy eager"
         if self.source == PackageSource.PIP:
@@ -389,9 +395,7 @@ class PythonDeploy(AppDeploy):
         self.notify_status("Update Finished...", is_complete=True)
         return True
 
-    async def recover(
-        self, hard: bool = False, force_dep_update: bool = False
-    ) -> None:
+    async def recover(self, hard: bool = False, force_dep_update: bool = False) -> None:
         pass
 
     async def rollback(self) -> bool:
@@ -407,7 +411,7 @@ class PythonDeploy(AppDeploy):
             self.log_debug(
                 f"Pre-update system dependencies: {prev_deps}\n"
                 f"Post-update system dependencies: {new_deps}\n"
-                f"Difference to be installed: {deps_diff}"
+                f"Difference to be installed: {deps_diff}",
             )
         if deps_diff:
             await self._install_packages(deps_diff)
@@ -428,5 +432,5 @@ class PythonDeploy(AppDeploy):
             f"Upstream Commit SHA: {self.upstream_sha}\n"
             f"Converted Git Version: {self.git_version}\n"
             f"Rollback Version: {self.rollback_version}\n"
-            f"Rollback Ref: {self.rollback_ref}\n"
+            f"Rollback Ref: {self.rollback_ref}\n",
         )

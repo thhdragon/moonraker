@@ -4,20 +4,16 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license
 from __future__ import annotations
-import os
-import fcntl
+
 import ctypes
-import pathlib
 import enum
+import fcntl
+import os
+import pathlib
+from typing import Any
+
 from ..common import ExtendedFlag
 from . import ioctl_macros
-from typing import (
-    Dict,
-    List,
-    Any,
-    Union,
-    Optional
-)
 
 DEFAULT_USB_IDS_PATH = "/usr/share/misc/usb.ids"
 USB_DEVICE_PATH = "/sys/bus/usb/devices"
@@ -30,11 +26,18 @@ V4L_BYID_PATH = "/dev/v4l/by-id"
 
 OPTIONAL_USB_INFO = ["manufacturer", "product", "serial"]
 NULL_DESCRIPTIONS = [
-    "?", "none", "undefined", "reserved/undefined", "unused", "no subclass"
+    "?",
+    "none",
+    "undefined",
+    "reserved/undefined",
+    "unused",
+    "no subclass",
 ]
+
 
 def read_item(parent: pathlib.Path, filename: str) -> str:
     return parent.joinpath(filename).read_text().strip()
+
 
 def find_usb_folder(usb_path: pathlib.Path) -> str | None:
     # Find the sysfs usb folder from a child folder
@@ -49,11 +52,12 @@ def find_usb_folder(usb_path: pathlib.Path) -> str | None:
         return f"{busnum}:{devnum}"
     return None
 
+
 class UsbIdData:
     _usb_info_cache: dict[str, str] = {
         "DI:1d50": "OpenMoko, Inc",
         "DI:1d50:614e": "Klipper 3d-Printer Firmware",
-        "DI:1d50:6177": "Katapult Bootloader (CDC_ACM)"
+        "DI:1d50:6177": "Katapult Bootloader (CDC_ACM)",
     }
 
     def __init__(self, usb_id_path: str | pathlib.Path) -> None:
@@ -139,20 +143,20 @@ class UsbIdData:
         }
 
     def get_class_info(
-        self, cls_id: str, subcls_id: str, proto_id: str
+        self,
+        cls_id: str,
+        subcls_id: str,
+        proto_id: str,
     ) -> dict[str, Any]:
         cls_desc = self.get_item(f"C:{cls_id}")
         if cls_desc is None or cls_id == "00":
-            return {
-                "class": None,
-                "subclass": None,
-                "protocol": None
-            }
+            return {"class": None, "subclass": None, "protocol": None}
         return {
             "class": cls_desc,
             "subclass": self.get_item(f"C:{cls_id}:{subcls_id}", True),
-            "protocol": self.get_item(f"C:{cls_id}:{subcls_id}:{proto_id}", True)
+            "protocol": self.get_item(f"C:{cls_id}:{subcls_id}:{proto_id}", True),
         }
+
 
 def find_usb_devices() -> list[dict[str, Any]]:
     dev_folder = pathlib.Path(USB_DEVICE_PATH)
@@ -184,6 +188,7 @@ def find_usb_devices() -> list[dict[str, Any]]:
         usb_devs.append(device_info)
     return usb_devs
 
+
 def find_serial_devices() -> list[dict[str, Any]]:
     serial_devs: list[dict[str, Any]] = []
     devs_by_path: dict[str, str] = {}
@@ -192,13 +197,9 @@ def find_serial_devices() -> list[dict[str, Any]]:
     by_id_dir = pathlib.Path(SER_BYID_PATH)
     dev_root_folder = pathlib.Path("/dev")
     if by_path_dir.is_dir():
-        devs_by_path = {
-            dev.resolve().name: str(dev) for dev in by_path_dir.iterdir()
-        }
+        devs_by_path = {dev.resolve().name: str(dev) for dev in by_path_dir.iterdir()}
     if by_id_dir.is_dir():
-        devs_by_id = {
-            dev.resolve().name: str(dev) for dev in by_id_dir.iterdir()
-        }
+        devs_by_id = {dev.resolve().name: str(dev) for dev in by_id_dir.iterdir()}
     tty_dir = pathlib.Path(TTY_PATH)
     for tty_path in tty_dir.iterdir():
         device_folder = tty_path.joinpath("device")
@@ -215,7 +216,7 @@ def find_serial_devices() -> list[dict[str, Any]]:
             "driver_name": driver_name,
             "path_by_hardware": devs_by_path.get(device_name),
             "path_by_id": devs_by_id.get(device_name),
-            "usb_location": None
+            "usb_location": None,
         }
         if uartclk_file.is_file() and port_file.is_file():
             # This is a potential hardware uart.  Need to
@@ -236,6 +237,7 @@ def find_serial_devices() -> list[dict[str, Any]]:
         serial_devs.append(device_info)
     return serial_devs
 
+
 class struct_v4l2_capability(ctypes.Structure):
     _fields_ = [
         ("driver", ctypes.c_char * 16),
@@ -247,6 +249,7 @@ class struct_v4l2_capability(ctypes.Structure):
         ("reserved", ctypes.c_uint32 * 3),
     ]
 
+
 class struct_v4l2_fmtdesc(ctypes.Structure):
     _fields_ = [
         ("index", ctypes.c_uint32),
@@ -254,8 +257,9 @@ class struct_v4l2_fmtdesc(ctypes.Structure):
         ("flags", ctypes.c_uint32),
         ("description", ctypes.c_char * 32),
         ("pixelformat", ctypes.c_uint32),
-        ("reserved", ctypes.c_uint32 * 4)
+        ("reserved", ctypes.c_uint32 * 4),
     ]
+
 
 class struct_v4l2_frmsize_discrete(ctypes.Structure):
     _fields_ = [
@@ -274,11 +278,13 @@ class struct_v4l2_frmsize_stepwise(ctypes.Structure):
         ("step_height", ctypes.c_uint32),
     ]
 
+
 class struct_v4l2_frmsize_union(ctypes.Union):
     _fields_ = [
         ("discrete", struct_v4l2_frmsize_discrete),
-        ("stepwise", struct_v4l2_frmsize_stepwise)
+        ("stepwise", struct_v4l2_frmsize_stepwise),
     ]
+
 
 class struct_v4l2_frmsizeenum(ctypes.Structure):
     _anonymous_ = ("size",)
@@ -287,44 +293,47 @@ class struct_v4l2_frmsizeenum(ctypes.Structure):
         ("pixel_format", ctypes.c_uint32),
         ("type", ctypes.c_uint32),
         ("size", struct_v4l2_frmsize_union),
-        ("reserved", ctypes.c_uint32 * 2)
+        ("reserved", ctypes.c_uint32 * 2),
     ]
 
+
 class V4L2Capability(ExtendedFlag):
-    VIDEO_CAPTURE        = 0x00000001  # noqa: E221
-    VIDEO_OUTPUT         = 0x00000002  # noqa: E221
-    VIDEO_OVERLAY        = 0x00000004  # noqa: E221
-    VBI_CAPTURE          = 0x00000010  # noqa: E221
-    VBI_OUTPUT           = 0x00000020  # noqa: E221
-    SLICED_VBI_CAPTURE   = 0x00000040  # noqa: E221
-    SLICED_VBI_OUTPUT    = 0x00000080  # noqa: E221
-    RDS_CAPTURE          = 0x00000100  # noqa: E221
+    VIDEO_CAPTURE = 0x00000001
+    VIDEO_OUTPUT = 0x00000002
+    VIDEO_OVERLAY = 0x00000004
+    VBI_CAPTURE = 0x00000010
+    VBI_OUTPUT = 0x00000020
+    SLICED_VBI_CAPTURE = 0x00000040
+    SLICED_VBI_OUTPUT = 0x00000080
+    RDS_CAPTURE = 0x00000100
     VIDEO_OUTPUT_OVERLAY = 0x00000200
-    HW_FREQ_SEEK         = 0x00000400  # noqa: E221
-    RDS_OUTPUT           = 0x00000800  # noqa: E221
+    HW_FREQ_SEEK = 0x00000400
+    RDS_OUTPUT = 0x00000800
     VIDEO_CAPTURE_MPLANE = 0x00001000
-    VIDEO_OUTPUT_MPLANE  = 0x00002000  # noqa: E221
-    VIDEO_M2M_MPLANE     = 0x00004000  # noqa: E221
-    VIDEO_M2M            = 0x00008000  # noqa: E221
-    TUNER                = 0x00010000  # noqa: E221
-    AUDIO                = 0x00020000  # noqa: E221
-    RADIO                = 0x00040000  # noqa: E221
-    MODULATOR            = 0x00080000  # noqa: E221
-    SDR_CAPTURE          = 0x00100000  # noqa: E221
-    EXT_PIX_FORMAT       = 0x00200000  # noqa: E221
-    SDR_OUTPUT           = 0x00400000  # noqa: E221
-    META_CAPTURE         = 0x00800000  # noqa: E221
-    READWRITE            = 0x01000000  # noqa: E221
-    STREAMING            = 0x04000000  # noqa: E221
-    META_OUTPUT          = 0x08000000  # noqa: E221
-    TOUCH                = 0x10000000  # noqa: E221
-    IO_MC                = 0x20000000  # noqa: E221
-    SET_DEVICE_CAPS      = 0x80000000  # noqa: E221
+    VIDEO_OUTPUT_MPLANE = 0x00002000
+    VIDEO_M2M_MPLANE = 0x00004000
+    VIDEO_M2M = 0x00008000
+    TUNER = 0x00010000
+    AUDIO = 0x00020000
+    RADIO = 0x00040000
+    MODULATOR = 0x00080000
+    SDR_CAPTURE = 0x00100000
+    EXT_PIX_FORMAT = 0x00200000
+    SDR_OUTPUT = 0x00400000
+    META_CAPTURE = 0x00800000
+    READWRITE = 0x01000000
+    STREAMING = 0x04000000
+    META_OUTPUT = 0x08000000
+    TOUCH = 0x10000000
+    IO_MC = 0x20000000
+    SET_DEVICE_CAPS = 0x80000000
+
 
 class V4L2FrameSizeTypes(enum.IntEnum):
     DISCRETE = 1
     CONTINUOUS = 2
     STEPWISE = 3
+
 
 class V4L2FormatFlags(ExtendedFlag):
     COMPRESSED = 0x0001
@@ -336,9 +345,11 @@ V4L2_QUERYCAP = ioctl_macros.IOR(ord("V"), 0, struct_v4l2_capability)
 V4L2_ENUM_FMT = ioctl_macros.IOWR(ord("V"), 2, struct_v4l2_fmtdesc)
 V4L2_ENUM_FRAMESIZES = ioctl_macros.IOWR(ord("V"), 74, struct_v4l2_frmsizeenum)
 
+
 def v4l2_fourcc_from_fmt(pixelformat: int) -> str:
     fmt = bytes([((pixelformat >> (8 * i)) & 0xFF) for i in range(4)])
     return fmt.decode(encoding="ascii", errors="ignore")
+
 
 def v4l2_fourcc(format: str) -> int:
     assert len(format) == 4
@@ -346,6 +357,7 @@ def v4l2_fourcc(format: str) -> int:
     for idx, val in enumerate(format.encode()):
         result |= (val << (8 * idx)) & 0xFF
     return result
+
 
 def _get_resolutions(fd: int, pixel_format: int) -> list[str]:
     res_info = struct_v4l2_frmsizeenum()
@@ -363,6 +375,7 @@ def _get_resolutions(fd: int, pixel_format: int) -> list[str]:
         height = res_info.discrete.height
         result.append(f"{width}x{height}")
     return result
+
 
 def _get_modes(fd: int) -> list[dict[str, Any]]:
     pix_info = struct_v4l2_fmtdesc()
@@ -385,10 +398,11 @@ def _get_modes(fd: int) -> list[dict[str, Any]]:
                 "format": v4l2_fourcc_from_fmt(pixel_format),
                 "description": desc,
                 "flags": [f.name for f in flags],
-                "resolutions": resolutions
-            }
+                "resolutions": resolutions,
+            },
         )
     return result
+
 
 def find_video_devices() -> list[dict[str, Any]]:
     v4lpath = pathlib.Path(V4L_DEVICE_PATH)
@@ -430,7 +444,7 @@ def find_video_devices() -> list[dict[str, Any]]:
             if fd != -1:
                 os.close(fd)
         ver_tuple = tuple(
-            [str((cap_info.version >> (i)) & 0xFF) for i in range(16, -1, -8)]
+            [str((cap_info.version >> (i)) & 0xFF) for i in range(16, -1, -8)],
         )
         video_device: dict[str, Any] = {
             "device_name": devfs_name,
@@ -444,7 +458,7 @@ def find_video_devices() -> list[dict[str, Any]]:
             "path_by_id": v4l_devs_by_id.get(devfs_name),
             "alt_name": None,
             "usb_location": None,
-            "modes": modes
+            "modes": modes,
         }
         name_file = v4ldev_path.joinpath("name")
         if name_file.is_file():
@@ -461,6 +475,7 @@ def find_video_devices() -> list[dict[str, Any]]:
             return int(item["device_name"][5:])
         except ValueError:
             return -1
+
     # Sort by string first, then index
     v4l_devices.sort(key=lambda item: item["device_name"])
     v4l_devices.sort(key=idx_sorter)

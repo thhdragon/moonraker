@@ -5,8 +5,9 @@
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 from __future__ import annotations
+
 import ctypes
-from typing import Union, Type, TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 """
 This module contains a Python port of the macros available in
@@ -38,19 +39,22 @@ IOC_NONE = 0
 IOC_WRITE = 1
 IOC_READ = 2
 
+
 def _check_value(val: int, name: str, maximum: int):
     if val > maximum:
         raise ValueError(f"Value '{val}' for '{name}' exceeds max of {maximum}")
 
+
 def _IOC_TYPECHECK(param_size: IOCParamSize) -> int:
     if isinstance(param_size, int):
         return param_size
-    elif isinstance(param_size, bytearray):
+    if isinstance(param_size, bytearray):
         return len(param_size)
-    elif isinstance(param_size, str):
+    if isinstance(param_size, str):
         ctcls = getattr(ctypes, param_size)
         return ctypes.sizeof(ctcls)
     return ctypes.sizeof(param_size)
+
 
 def IOC(direction: int, cmd_type: int, cmd_number: int, param_size: int) -> int:
     _check_value(direction, "direction", _IOC_DIRMASK)
@@ -58,20 +62,24 @@ def IOC(direction: int, cmd_type: int, cmd_number: int, param_size: int) -> int:
     _check_value(cmd_number, "cmd_number", _IOC_NRMASK)
     _check_value(param_size, "ioc_size", _IOC_SIZEMASK)
     return (
-        (direction << _IOC_DIRSHIFT) |
-        (param_size << _IOC_SIZESHIFT) |
-        (cmd_type << _IOC_TYPESHIFT) |
-        (cmd_number << _IOC_NRSHIFT)
+        (direction << _IOC_DIRSHIFT)
+        | (param_size << _IOC_SIZESHIFT)
+        | (cmd_type << _IOC_TYPESHIFT)
+        | (cmd_number << _IOC_NRSHIFT)
     )
+
 
 def IO(cmd_type: int, cmd_number: int) -> int:
     return IOC(IOC_NONE, cmd_type, cmd_number, 0)
 
+
 def IOR(cmd_type: int, cmd_number: int, param_size: IOCParamSize) -> int:
     return IOC(IOC_READ, cmd_type, cmd_number, _IOC_TYPECHECK(param_size))
 
+
 def IOW(cmd_type: int, cmd_number: int, param_size: IOCParamSize) -> int:
     return IOC(IOC_WRITE, cmd_type, cmd_number, _IOC_TYPECHECK(param_size))
+
 
 def IOWR(cmd_type: int, cmd_number: int, param_size: IOCParamSize) -> int:
     return IOC(IOC_READ | IOC_WRITE, cmd_type, cmd_number, _IOC_TYPECHECK(param_size))

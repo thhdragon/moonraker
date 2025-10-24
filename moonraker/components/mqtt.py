@@ -13,13 +13,7 @@ import ssl
 from collections import deque
 import paho.mqtt.client as paho_mqtt
 import paho.mqtt
-from ..common import (
-    TransportType,
-    RequestType,
-    WebRequest,
-    APITransport,
-    KlippyState
-)
+from ..common import TransportType, RequestType, WebRequest, APITransport, KlippyState
 from ..utils import json_wrapper as jsonw
 
 # Annotation imports
@@ -34,21 +28,24 @@ from typing import (
     Deque,
 )
 from collections.abc import Callable, Coroutine, Awaitable
+
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import JsonRPC, APIDefinition
     from ..eventloop import FlexTimer
     from .klippy_apis import KlippyAPI
+
     FlexCallback = Callable[[bytes], Coroutine | None]
     RPCCallback = Callable[..., Coroutine]
 
 PAHO_MQTT_VERSION = tuple([int(p) for p in paho.mqtt.__version__.split(".")])
 DUP_API_REQ_CODE = -10000
 MQTT_PROTOCOLS = {
-    'v3.1': paho_mqtt.MQTTv31,
-    'v3.1.1': paho_mqtt.MQTTv311,
-    'v5': paho_mqtt.MQTTv5
+    "v3.1": paho_mqtt.MQTTv31,
+    "v3.1.1": paho_mqtt.MQTTv311,
+    "v5": paho_mqtt.MQTTv5,
 }
+
 
 class ExtPahoClient(paho_mqtt.Client):
     # Override reconnection to take a connected socket.  This allows Moonraker
@@ -57,9 +54,9 @@ class ExtPahoClient(paho_mqtt.Client):
         """Reconnect the client after a disconnect. Can only be called after
         connect()/connect_async()."""
         if len(self._host) == 0:
-            raise ValueError('Invalid host.')
+            raise ValueError("Invalid host.")
         if self._port <= 0:
-            raise ValueError('Invalid port number.')
+            raise ValueError("Invalid port number.")
 
         if PAHO_MQTT_VERSION >= (2, 0):
             return self._v2_reconnect(sock)
@@ -73,9 +70,9 @@ class ExtPahoClient(paho_mqtt.Client):
                 "remaining_length": 0,
                 "packet": b"",
                 "to_process": 0,
-                "pos": 0
+                "pos": 0,
             }
-            with self._out_packet_mutex:    # type: ignore
+            with self._out_packet_mutex:  # type: ignore
                 self._out_packet = deque()  # type: ignore
 
             with self._current_out_packet_mutex:  # type: ignore
@@ -89,7 +86,7 @@ class ExtPahoClient(paho_mqtt.Client):
                 "remaining_length": 0,
                 "packet": bytearray(b""),
                 "to_process": 0,
-                "pos": 0
+                "pos": 0,
             }
             self._out_packet = deque()  # type: ignore
 
@@ -134,8 +131,10 @@ class ExtPahoClient(paho_mqtt.Client):
             else:
                 # If SSL context has already checked hostname, then don't need
                 #  to do it again
-                if (hasattr(self._ssl_context, 'check_hostname') and
-                        self._ssl_context.check_hostname):  # type: ignore
+                if (
+                    hasattr(self._ssl_context, "check_hostname")
+                    and self._ssl_context.check_hostname
+                ):  # type: ignore
                     verify_host = False
 
             assert isinstance(sock, ssl.SSLSocket)
@@ -148,8 +147,12 @@ class ExtPahoClient(paho_mqtt.Client):
         if self._transport == "websockets":
             sock.settimeout(self._keepalive)
             sock = paho_mqtt.WebsocketWrapper(
-                sock, self._host, self._port, self._ssl,
-                self._websocket_path, self._websocket_extra_headers
+                sock,
+                self._host,
+                self._port,
+                self._ssl,
+                self._websocket_path,
+                self._websocket_extra_headers,
             )  # type: ignore
 
         self._sock = sock
@@ -181,8 +184,9 @@ class ExtPahoClient(paho_mqtt.Client):
         # or `wait_for_publish()` could hang forever
         for pkt in self._out_packet:
             if (
-                pkt["command"] & 0xF0 == paho_mqtt.PUBLISH and
-                pkt["qos"] == 0 and pkt["info"] is not None
+                pkt["command"] & 0xF0 == paho_mqtt.PUBLISH
+                and pkt["qos"] == 0
+                and pkt["info"] is not None
             ):
                 pkt["info"].rc = paho_mqtt.MQTT_ERR_CONN_LOST
                 pkt["info"]._set_as_published()
@@ -205,7 +209,8 @@ class ExtPahoClient(paho_mqtt.Client):
             except Exception as err:
                 self._easy_log(
                     paho_mqtt.MQTT_LOG_ERR,
-                    'Caught exception in on_pre_connect: %s', err
+                    "Caught exception in on_pre_connect: %s",
+                    err,
                 )
                 if not self.suppress_exceptions:
                     raise
@@ -224,6 +229,7 @@ class SubscriptionHandle:
         self.callback = callback
         self.topic = topic
 
+
 class BrokerAckLogger:
     def __init__(self, topics: list[str], action: str) -> None:
         self.topics = topics
@@ -235,9 +241,11 @@ class BrokerAckLogger:
             res = fut.result()
             log_msg = "MQTT Subscriptions Acknowledged"
             if len(res) != len(self.topics):
-                log_msg += "\nTopic / QOS count mismatch, " \
-                    f"\nTopics: {self.topics} " \
+                log_msg += (
+                    "\nTopic / QOS count mismatch, "
+                    f"\nTopics: {self.topics} "
                     f"\nQoS responses: {res}"
+                )
             else:
                 for topic, qos in zip(self.topics, res):
                     log_msg += f"\n Topic: {topic} | "
@@ -256,6 +264,7 @@ class BrokerAckLogger:
 
 SubscribedDict = dict[str, tuple[int, list[SubscriptionHandle]]]
 
+
 class AIOHelper:
     def __init__(self, client: paho_mqtt.Client) -> None:
         self.loop = asyncio.get_running_loop()
@@ -263,41 +272,32 @@ class AIOHelper:
         self.client.on_socket_open = self._on_socket_open
         self.client.on_socket_close = self._on_socket_close
         self.client._on_socket_register_write = self._on_socket_register_write
-        self.client._on_socket_unregister_write = \
-            self._on_socket_unregister_write
+        self.client._on_socket_unregister_write = self._on_socket_unregister_write
         self.misc_task: asyncio.Task | None = None
 
-    def _on_socket_open(self,
-                        client: paho_mqtt.Client,
-                        userdata: Any,
-                        sock: socket.socket
-                        ) -> None:
+    def _on_socket_open(
+        self, client: paho_mqtt.Client, userdata: Any, sock: socket.socket
+    ) -> None:
         logging.info("MQTT Socket Opened")
         self.loop.add_reader(sock, client.loop_read)
         self.misc_task = self.loop.create_task(self.misc_loop())
 
-    def _on_socket_close(self,
-                         client: paho_mqtt.Client,
-                         userdata: Any,
-                         sock: socket.socket
-                         ) -> None:
+    def _on_socket_close(
+        self, client: paho_mqtt.Client, userdata: Any, sock: socket.socket
+    ) -> None:
         logging.info("MQTT Socket Closed")
         self.loop.remove_reader(sock)
         if self.misc_task is not None:
             self.misc_task.cancel()
 
-    def _on_socket_register_write(self,
-                                  client: paho_mqtt.Client,
-                                  userdata: Any,
-                                  sock: socket.socket
-                                  ) -> None:
+    def _on_socket_register_write(
+        self, client: paho_mqtt.Client, userdata: Any, sock: socket.socket
+    ) -> None:
         self.loop.add_writer(sock, client.loop_write)
 
-    def _on_socket_unregister_write(self,
-                                    client: paho_mqtt.Client,
-                                    userdata: Any,
-                                    sock: socket.socket
-                                    ) -> None:
+    def _on_socket_unregister_write(
+        self, client: paho_mqtt.Client, userdata: Any, sock: socket.socket
+    ) -> None:
         self.loop.remove_writer(sock)
 
     async def misc_loop(self) -> None:
@@ -313,50 +313,50 @@ class MQTTClient(APITransport):
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.eventloop = self.server.get_event_loop()
-        self.address: str = config.get('address')
-        self.port: int = config.getint('port', 1883)
+        self.address: str = config.get("address")
+        self.port: int = config.getint("port", 1883)
         self.tls_enabled: bool = config.getboolean("enable_tls", False)
-        user = config.gettemplate('username', None)
+        user = config.gettemplate("username", None)
         self.user_name: str | None = None
         if user:
             self.user_name = user.render()
-        pw_file_path = config.get('password_file', None, deprecate=True)
-        pw_template = config.gettemplate('password', None)
+        pw_file_path = config.get("password_file", None, deprecate=True)
+        pw_template = config.gettemplate("password", None)
         self.password: str | None = None
         if pw_file_path is not None:
             pw_file = pathlib.Path(pw_file_path).expanduser().absolute()
             if not pw_file.exists():
-                raise config.error(
-                    f"Password file '{pw_file}' does not exist")
+                raise config.error(f"Password file '{pw_file}' does not exist")
             self.password = pw_file.read_text().strip()
         if pw_template is not None:
             self.password = pw_template.render()
-        protocol = config.get('mqtt_protocol', "v3.1.1")
+        protocol = config.get("mqtt_protocol", "v3.1.1")
         self.protocol = MQTT_PROTOCOLS.get(protocol, None)
         if self.protocol is None:
             raise config.error(
                 f"Invalid value '{protocol}' for option 'mqtt_protocol' "
                 "in section [mqtt]. Must be one of "
-                f"{MQTT_PROTOCOLS.values()}")
-        self.instance_name = config.get('instance_name', socket.gethostname())
-        if '+' in self.instance_name or '#' in self.instance_name:
+                f"{MQTT_PROTOCOLS.values()}"
+            )
+        self.instance_name = config.get("instance_name", socket.gethostname())
+        if "+" in self.instance_name or "#" in self.instance_name:
             raise config.error(
-                "Option 'instance_name' in section [mqtt] cannot "
-                "contain a wildcard.")
+                "Option 'instance_name' in section [mqtt] cannot contain a wildcard."
+            )
         self.qos = config.getint("default_qos", 0)
         if self.qos > 2 or self.qos < 0:
             raise config.error(
-                "Option 'default_qos' in section [mqtt] must be "
-                "between 0 and 2")
-        self.publish_split_status = \
-            config.getboolean("publish_split_status", False)
+                "Option 'default_qos' in section [mqtt] must be between 0 and 2"
+            )
+        self.publish_split_status = config.getboolean("publish_split_status", False)
         client_id: str = config.get("client_id", "")
         if PAHO_MQTT_VERSION < (2, 0):
             self.client = ExtPahoClient(client_id, protocol=self.protocol)
         else:
             self.client = ExtPahoClient(
-                paho_mqtt.CallbackAPIVersion.VERSION1, client_id,  # type: ignore
-                protocol=self.protocol
+                paho_mqtt.CallbackAPIVersion.VERSION1,
+                client_id,  # type: ignore
+                protocol=self.protocol,
             )
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
@@ -375,13 +375,16 @@ class MQTTClient(APITransport):
         # are redundant.  MQTT clients can already publish and subscribe.
         ep_transports = TransportType.all() & ~TransportType.MQTT
         self.server.register_endpoint(
-            "/server/mqtt/publish", RequestType.POST, self._handle_publish_request,
-            transports=ep_transports
+            "/server/mqtt/publish",
+            RequestType.POST,
+            self._handle_publish_request,
+            transports=ep_transports,
         )
         self.server.register_endpoint(
-            "/server/mqtt/subscribe", RequestType.POST,
+            "/server/mqtt/subscribe",
+            RequestType.POST,
             self._handle_subscription_request,
-            transports=ep_transports
+            transports=ep_transports,
         )
 
         # Subscribe to API requests
@@ -393,14 +396,14 @@ class MQTTClient(APITransport):
         status_cfg: dict[str, str] = config.getdict(
             "status_objects", {}, allow_empty_fields=True
         )
-        self.status_interval = config.getfloat("status_interval", 0, above=.25)
+        self.status_interval = config.getfloat("status_interval", 0, above=0.25)
         self.status_cache: dict[str, dict[str, Any]] = {}
         self.status_update_timer: FlexTimer | None = None
-        self.last_status_time = 0.
+        self.last_status_time = 0.0
         self.status_objs: dict[str, list[str] | None] = {}
         for key, val in status_cfg.items():
             if val is not None:
-                self.status_objs[key] = [v.strip() for v in val.split(',') if v.strip()]
+                self.status_objs[key] = [v.strip() for v in val.split(",") if v.strip()]
             else:
                 self.status_objs[key] = None
         if status_cfg:
@@ -417,20 +420,22 @@ class MQTTClient(APITransport):
                 )
 
         self.timestamp_deque: deque = deque(maxlen=20)
-        self.api_qos = config.getint('api_qos', self.qos)
+        self.api_qos = config.getint("api_qos", self.qos)
         if config.getboolean("enable_moonraker_api", True):
-            self.subscribe_topic(self.api_request_topic,
-                                 self._process_api_request,
-                                 self.api_qos)
+            self.subscribe_topic(
+                self.api_request_topic, self._process_api_request, self.api_qos
+            )
 
-        self.server.register_remote_method("publish_mqtt_topic",
-                                           self._publish_from_klipper)
+        self.server.register_remote_method(
+            "publish_mqtt_topic", self._publish_from_klipper
+        )
         logging.info(
             f"\nReserved MQTT topics:\n"
             f"API Request: {self.api_request_topic}\n"
             f"API Response: {self.api_resp_topic}\n"
             f"Moonraker Status: {self.moonraker_status_topic}\n"
-            f"Klipper Status: {self.klipper_status_topic}")
+            f"Klipper Status: {self.klipper_status_topic}"
+        )
 
     async def component_init(self) -> None:
         # We must wait for the IOLoop (asyncio event loop) to start
@@ -438,15 +443,16 @@ class MQTTClient(APITransport):
         self.helper = AIOHelper(self.client)
         if self.user_name is not None:
             self.client.username_pw_set(self.user_name, self.password)
-        self.client.will_set(self.moonraker_status_topic,
-                             payload=jsonw.dumps({'server': 'offline'}),
-                             qos=self.qos, retain=True)
+        self.client.will_set(
+            self.moonraker_status_topic,
+            payload=jsonw.dumps({"server": "offline"}),
+            qos=self.qos,
+            retain=True,
+        )
         if self.tls_enabled:
             self.client.tls_set()
         self.client.connect_async(self.address, self.port)
-        self.connect_task = self.eventloop.create_task(
-            self._do_reconnect(first=True)
-        )
+        self.connect_task = self.eventloop.create_task(self._do_reconnect(first=True))
 
     async def _handle_klippy_started(self, state: KlippyState) -> None:
         if self.status_objs:
@@ -469,41 +475,40 @@ class MQTTClient(APITransport):
             self.status_cache = {}
             self._publish_status_update(payload, self.last_status_time)
 
-    def _on_message(self,
-                    client: str,
-                    user_data: Any,
-                    message: paho_mqtt.MQTTMessage
-                    ) -> None:
+    def _on_message(
+        self, client: str, user_data: Any, message: paho_mqtt.MQTTMessage
+    ) -> None:
         topic = message.topic
         if topic in self.subscribed_topics:
             cb_hdls = self.subscribed_topics[topic][1]
             for hdl in cb_hdls:
-                self.eventloop.register_callback(
-                    hdl.callback, message.payload)
+                self.eventloop.register_callback(hdl.callback, message.payload)
         else:
             logging.debug(
                 f"Unregistered MQTT Topic Received: {topic}, "
-                f"payload: {message.payload.decode()}")
+                f"payload: {message.payload.decode()}"
+            )
 
-    def _on_connect(self,
-                    client: paho_mqtt.Client,
-                    user_data: Any,
-                    flags: dict[str, Any],
-                    reason_code: int | paho_mqtt.ReasonCodes,
-                    properties: paho_mqtt.Properties | None = None
-                    ) -> None:
+    def _on_connect(
+        self,
+        client: paho_mqtt.Client,
+        user_data: Any,
+        flags: dict[str, Any],
+        reason_code: int | paho_mqtt.ReasonCodes,
+        properties: paho_mqtt.Properties | None = None,
+    ) -> None:
         logging.info("MQTT Client Connected")
         if reason_code == 0:
-            self.publish_topic(self.moonraker_status_topic,
-                               {'server': 'online'}, retain=True)
+            self.publish_topic(
+                self.moonraker_status_topic, {"server": "online"}, retain=True
+            )
             subs = [(k, v[0]) for k, v in self.subscribed_topics.items()]
             if subs:
                 _, msg_id = client.subscribe(subs)
                 if msg_id is not None:
                     sub_fut: asyncio.Future = self.eventloop.create_future()
                     topics = list(self.subscribed_topics.keys())
-                    sub_fut.add_done_callback(
-                        BrokerAckLogger(topics, "subscribe"))
+                    sub_fut.add_done_callback(BrokerAckLogger(topics, "subscribe"))
                     self.pending_acks[msg_id] = sub_fut
             self.connect_evt.set()
             self.server.send_event("mqtt:connected")
@@ -515,50 +520,53 @@ class MQTTClient(APITransport):
             self.server.set_failed_component("mqtt")
             self.server.add_warning(f"MQTT Connection Failed: {err_str}")
 
-    def _on_disconnect(self,
-                       client: paho_mqtt.Client,
-                       user_data: Any,
-                       reason_code: int,
-                       properties: paho_mqtt.Properties | None = None
-                       ) -> None:
+    def _on_disconnect(
+        self,
+        client: paho_mqtt.Client,
+        user_data: Any,
+        reason_code: int,
+        properties: paho_mqtt.Properties | None = None,
+    ) -> None:
         if self.disconnect_evt is not None:
             self.disconnect_evt.set()
         elif self.is_connected():
             # The server connection was dropped, attempt to reconnect
-            logging.info("MQTT Server Disconnected, reason: "
-                         f"{paho_mqtt.error_string(reason_code)}")
+            logging.info(
+                "MQTT Server Disconnected, reason: "
+                f"{paho_mqtt.error_string(reason_code)}"
+            )
             if self.connect_task is None:
                 self.connect_task = self.eventloop.create_task(self._do_reconnect())
             self.server.send_event("mqtt:disconnected")
         self.connect_evt.clear()
 
-    def _on_publish(self,
-                    client: paho_mqtt.Client,
-                    user_data: Any,
-                    msg_id: int
-                    ) -> None:
+    def _on_publish(
+        self, client: paho_mqtt.Client, user_data: Any, msg_id: int
+    ) -> None:
         pub_fut = self.pending_acks.pop(msg_id, None)
         if pub_fut is not None and not pub_fut.done():
             pub_fut.set_result(None)
 
-    def _on_subscribe(self,
-                      client: paho_mqtt.Client,
-                      user_data: Any,
-                      msg_id: int,
-                      flex: list[int] | list[paho_mqtt.ReasonCodes],
-                      properties: paho_mqtt.Properties | None = None
-                      ) -> None:
+    def _on_subscribe(
+        self,
+        client: paho_mqtt.Client,
+        user_data: Any,
+        msg_id: int,
+        flex: list[int] | list[paho_mqtt.ReasonCodes],
+        properties: paho_mqtt.Properties | None = None,
+    ) -> None:
         sub_fut = self.pending_acks.pop(msg_id, None)
         if sub_fut is not None and not sub_fut.done():
             sub_fut.set_result(flex)
 
-    def _on_unsubscribe(self,
-                        client: paho_mqtt.Client,
-                        user_data: Any,
-                        msg_id: int,
-                        properties: paho_mqtt.Properties | None = None,
-                        reasoncodes: paho_mqtt.ReasonCodes | None = None
-                        ) -> None:
+    def _on_unsubscribe(
+        self,
+        client: paho_mqtt.Client,
+        user_data: Any,
+        msg_id: int,
+        properties: paho_mqtt.Properties | None = None,
+        reasoncodes: paho_mqtt.ReasonCodes | None = None,
+    ) -> None:
         unsub_fut = self.pending_acks.pop(msg_id, None)
         if unsub_fut is not None and not unsub_fut.done():
             unsub_fut.set_result(None)
@@ -569,7 +577,7 @@ class MQTTClient(APITransport):
         while True:
             if not first:
                 try:
-                    await asyncio.sleep(2.)
+                    await asyncio.sleep(2.0)
                 except asyncio.CancelledError:
                     raise
             first = False
@@ -599,12 +607,10 @@ class MQTTClient(APITransport):
     def is_connected(self) -> bool:
         return self.connect_evt.is_set()
 
-    def subscribe_topic(self,
-                        topic: str,
-                        callback: FlexCallback,
-                        qos: int | None = None
-                        ) -> SubscriptionHandle:
-        if '#' in topic or '+' in topic:
+    def subscribe_topic(
+        self, topic: str, callback: FlexCallback, qos: int | None = None
+    ) -> SubscriptionHandle:
+        if "#" in topic or "+" in topic:
             raise self.server.error("Wildcards may not be used")
         qos = qos or self.qos
         if qos > 2 or qos < 0:
@@ -622,8 +628,7 @@ class MQTTClient(APITransport):
             _, msg_id = self.client.subscribe(topic, qos)
             if msg_id is not None:
                 sub_fut: asyncio.Future = self.eventloop.create_future()
-                sub_fut.add_done_callback(
-                    BrokerAckLogger([topic], "subscribe"))
+                sub_fut.add_done_callback(BrokerAckLogger([topic], "subscribe"))
                 self.pending_acks[msg_id] = sub_fut
         return hdl
 
@@ -640,16 +645,16 @@ class MQTTClient(APITransport):
                 _, msg_id = self.client.unsubscribe(topic)
                 if msg_id is not None:
                     unsub_fut: asyncio.Future = self.eventloop.create_future()
-                    unsub_fut.add_done_callback(
-                        BrokerAckLogger([topic], "unsubscribe"))
+                    unsub_fut.add_done_callback(BrokerAckLogger([topic], "unsubscribe"))
                     self.pending_acks[msg_id] = unsub_fut
 
-    def publish_topic(self,
-                      topic: str,
-                      payload: Any = None,
-                      qos: int | None = None,
-                      retain: bool = False
-                      ) -> Awaitable[None]:
+    def publish_topic(
+        self,
+        topic: str,
+        payload: Any = None,
+        qos: int | None = None,
+        retain: bool = False,
+    ) -> Awaitable[None]:
         qos = qos or self.qos
         if qos > 2 or qos < 0:
             raise self.server.error("QOS must be between 0 and 2")
@@ -658,8 +663,7 @@ class MQTTClient(APITransport):
             try:
                 payload = jsonw.dumps(payload)
             except jsonw.JSONDecodeError:
-                raise self.server.error(
-                    "Dict or List is not json encodable") from None
+                raise self.server.error("Dict or List is not json encodable") from None
         elif isinstance(payload, bool):
             payload = str(payload).lower()
         try:
@@ -675,38 +679,38 @@ class MQTTClient(APITransport):
                     # a workaround.
                     if msg_info.rc != paho_mqtt.MQTT_ERR_SUCCESS:
                         err_str = paho_mqtt.error_string(msg_info.rc)
-                        pub_fut.set_exception(self.server.error(
-                            f"MQTT Publish Error: {err_str}", 503))
+                        pub_fut.set_exception(
+                            self.server.error(f"MQTT Publish Error: {err_str}", 503)
+                        )
                     else:
                         pub_fut.set_result(None)
                     return pub_fut
                 self.pending_acks[msg_info.mid] = pub_fut
         except ValueError:
-            pub_fut.set_exception(self.server.error(
-                "MQTT Message Queue Full", 529))
+            pub_fut.set_exception(self.server.error("MQTT Message Queue Full", 529))
         except Exception as e:
-            pub_fut.set_exception(self.server.error(
-                f"MQTT Publish Error: {e}", 503))
+            pub_fut.set_exception(self.server.error(f"MQTT Publish Error: {e}", 503))
         return pub_fut
 
-    async def publish_topic_with_response(self,
-                                          topic: str,
-                                          response_topic: str,
-                                          payload: Any = None,
-                                          qos: int | None = None,
-                                          retain: bool = False,
-                                          timeout: float | None = None
-                                          ) -> bytes:
+    async def publish_topic_with_response(
+        self,
+        topic: str,
+        response_topic: str,
+        payload: Any = None,
+        qos: int | None = None,
+        retain: bool = False,
+        timeout: float | None = None,
+    ) -> bytes:
         qos = qos or self.qos
         if qos > 2 or qos < 0:
             raise self.server.error("QOS must be between 0 and 2")
         resp_fut: asyncio.Future = self.eventloop.create_future()
-        resp_hdl = self.subscribe_topic(
-            response_topic, resp_fut.set_result, qos)
+        resp_hdl = self.subscribe_topic(response_topic, resp_fut.set_result, qos)
         self.pending_responses.append(resp_fut)
         try:
-            await asyncio.wait_for(self.publish_topic(
-                topic, payload, qos, retain), timeout)
+            await asyncio.wait_for(
+                self.publish_topic(topic, payload, qos, retain), timeout
+            )
             await asyncio.wait_for(resp_fut, timeout)
         except TimeoutError:
             logging.info(f"Response to request {topic} timed out")
@@ -719,29 +723,26 @@ class MQTTClient(APITransport):
             self.unsubscribe(resp_hdl)
         return resp_fut.result()
 
-    async def _handle_publish_request(self,
-                                      web_request: WebRequest
-                                      ) -> dict[str, Any]:
+    async def _handle_publish_request(self, web_request: WebRequest) -> dict[str, Any]:
         topic: str = web_request.get_str("topic")
         payload: Any = web_request.get("payload", None)
         qos: int = web_request.get_int("qos", self.qos)
         retain: bool = web_request.get_boolean("retain", False)
-        timeout: float | None = web_request.get_float('timeout', None)
+        timeout: float | None = web_request.get_float("timeout", None)
         try:
-            await asyncio.wait_for(self.publish_topic(
-                topic, payload, qos, retain), timeout)
+            await asyncio.wait_for(
+                self.publish_topic(topic, payload, qos, retain), timeout
+            )
         except TimeoutError:
             raise self.server.error("MQTT Publish Timed Out", 504)
-        return {
-            "topic": topic
-        }
+        return {"topic": topic}
 
-    async def _handle_subscription_request(self,
-                                           web_request: WebRequest
-                                           ) -> dict[str, Any]:
+    async def _handle_subscription_request(
+        self, web_request: WebRequest
+    ) -> dict[str, Any]:
         topic: str = web_request.get_str("topic")
         qos: int = web_request.get_int("qos", self.qos)
-        timeout: float | None = web_request.get_float('timeout', None)
+        timeout: float | None = web_request.get_float("timeout", None)
         resp: asyncio.Future = self.eventloop.create_future()
         hdl: SubscriptionHandle | None = None
         try:
@@ -762,17 +763,13 @@ class MQTTClient(APITransport):
             payload = jsonw.loads(ret)
         except jsonw.JSONDecodeError:
             payload = ret.decode()
-        return {
-            'topic': topic,
-            'payload': payload
-        }
+        return {"topic": topic, "payload": payload}
 
     async def _process_api_request(self, payload: bytes) -> None:
         rpc: JsonRPC = self.server.lookup_component("jsonrpc")
         response = await rpc.dispatch(payload, self)
         if response is not None:
-            await self.publish_topic(self.api_resp_topic, response,
-                                     self.api_qos)
+            await self.publish_topic(self.api_resp_topic, response, self.api_qos)
 
     @property
     def transport_type(self) -> TransportType:
@@ -785,8 +782,7 @@ class MQTTClient(APITransport):
         if ts is not None:
             if ts in self.timestamp_deque:
                 logging.debug("Duplicate MQTT API request received")
-                raise self.server.error(
-                    "Duplicate MQTT Request", DUP_API_REQ_CODE)
+                raise self.server.error("Duplicate MQTT Request", DUP_API_REQ_CODE)
             else:
                 self.timestamp_deque.append(ts)
 
@@ -812,15 +808,15 @@ class MQTTClient(APITransport):
             for objkey in status:
                 objval = status[objkey]
                 for statekey in objval:
-                    payload = {'eventtime': eventtime, 'value': objval[statekey]}
+                    payload = {"eventtime": eventtime, "value": objval[statekey]}
                     self.publish_topic(
                         f"{self.klipper_state_prefix}/{objkey}/{statekey}",
-                        payload, retain=True
+                        payload,
+                        retain=True,
                     )
         else:
-            payload = {'eventtime': eventtime, 'status': status}
+            payload = {"eventtime": eventtime, "status": status}
             self.publish_topic(self.klipper_status_topic, payload)
-
 
     def get_instance_name(self) -> str:
         return self.instance_name
@@ -833,13 +829,13 @@ class MQTTClient(APITransport):
             self.connect_task = None
         if not self.is_connected():
             return
-        await self.publish_topic(self.moonraker_status_topic,
-                                 {'server': 'offline'},
-                                 retain=True)
+        await self.publish_topic(
+            self.moonraker_status_topic, {"server": "offline"}, retain=True
+        )
         self.disconnect_evt = asyncio.Event()
         self.client.disconnect()
         try:
-            await asyncio.wait_for(self.disconnect_evt.wait(), 2.)
+            await asyncio.wait_for(self.disconnect_evt.wait(), 2.0)
         except TimeoutError:
             logging.info("MQTT Disconnect Timeout")
         futs = list(self.pending_acks.values())
@@ -847,16 +843,16 @@ class MQTTClient(APITransport):
         for fut in futs:
             if fut.done():
                 continue
-            fut.set_exception(
-                self.server.error("Moonraker Shutdown", 503))
+            fut.set_exception(self.server.error("Moonraker Shutdown", 503))
 
-    async def _publish_from_klipper(self,
-                                    topic: str,
-                                    payload: Any = None,
-                                    qos: int | None = None,
-                                    retain: bool = False,
-                                    use_prefix: bool = False
-                                    ) -> None:
+    async def _publish_from_klipper(
+        self,
+        topic: str,
+        payload: Any = None,
+        qos: int | None = None,
+        retain: bool = False,
+        use_prefix: bool = False,
+    ) -> None:
         if use_prefix:
             topic = f"{self.instance_name}/{topic.lstrip('/')}"
         await self.publish_topic(topic, payload, qos, retain)

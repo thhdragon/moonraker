@@ -5,23 +5,28 @@
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 from __future__ import annotations
-import os
-import fcntl
-import errno
-import logging
-import pathlib
-import contextlib
+
 import asyncio
-from . import ServerError
-from typing import Optional, Type, Union
+import contextlib
+import errno
+import fcntl
+import logging
+import os
+import pathlib
 from types import TracebackType
+
+from . import ServerError
+
 
 class LockTimeout(ServerError):
     pass
 
+
 class AsyncExclusiveFileLock(contextlib.AbstractAsyncContextManager):
     def __init__(
-        self, file_path: pathlib.Path, timeout: int | float = 0
+        self,
+        file_path: pathlib.Path,
+        timeout: float = 0,
     ) -> None:
         self.lock_path = file_path.parent.joinpath(f".{file_path.name}.lock")
         self.timeout = timeout
@@ -37,7 +42,7 @@ class AsyncExclusiveFileLock(contextlib.AbstractAsyncContextManager):
         self,
         __exc_type: type[BaseException] | None,
         __exc_value: BaseException | None,
-        __traceback: TracebackType | None
+        __traceback: TracebackType | None,
     ) -> None:
         await self.release()
 
@@ -75,23 +80,23 @@ class AsyncExclusiveFileLock(contextlib.AbstractAsyncContextManager):
             except OSError as err:
                 logging.info(
                     "Failed to acquire advisory lock, allowing unlocked entry."
-                    f"Error: {err}"
+                    f"Error: {err}",
                 )
                 self.locked = False
                 return
             if self.locked:
                 return
             self.required_wait = True
-            await asyncio.sleep(.25)
+            await asyncio.sleep(0.25)
             if not logged:
                 logged = True
                 logging.info(
                     f"File lock {self.lock_path} is currently acquired by another "
-                    "process, waiting for release."
+                    "process, waiting for release.",
                 )
             if self.timeout > 0 and endtime >= loop.time():
                 raise LockTimeout(
-                    f"Attempt to acquire lock '{self.lock_path}' timed out"
+                    f"Attempt to acquire lock '{self.lock_path}' timed out",
                 )
 
     def _release_file(self) -> None:

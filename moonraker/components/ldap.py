@@ -12,32 +12,30 @@ import ldap3
 from ldap3.core.exceptions import LDAPExceptionError
 
 # Annotation imports
-from typing import (
-    TYPE_CHECKING,
-    Optional
-)
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ldap3.abstract.entry import Entry
 
+
 class MoonrakerLDAP:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.ldap_host = config.get('ldap_host')
+        self.ldap_host = config.get("ldap_host")
         self.ldap_port = config.getint("ldap_port", None)
         self.ldap_secure = config.getboolean("ldap_secure", False)
-        base_dn_template = config.gettemplate('base_dn')
+        base_dn_template = config.gettemplate("base_dn")
         self.base_dn = base_dn_template.render()
         self.group_dn: str | None = None
         group_dn_template = config.gettemplate("group_dn", None)
         if group_dn_template is not None:
             self.group_dn = group_dn_template.render()
-        self.active_directory = config.getboolean('is_active_directory', False)
+        self.active_directory = config.getboolean("is_active_directory", False)
         self.bind_dn: str | None = None
         self.bind_password: str | None = None
-        bind_dn_template = config.gettemplate('bind_dn', None)
-        bind_pass_template = config.gettemplate('bind_password', None)
+        bind_dn_template = config.gettemplate("bind_dn", None)
+        bind_pass_template = config.gettemplate("bind_password", None)
         if bind_dn_template is not None:
             self.bind_dn = bind_dn_template.render()
             if bind_pass_template is None:
@@ -47,7 +45,7 @@ class MoonrakerLDAP:
                 )
             self.bind_password = bind_pass_template.render()
         self.user_filter: str | None = None
-        user_filter_template = config.gettemplate('user_filter', None)
+        user_filter_template = config.gettemplate("user_filter", None)
         if user_filter_template is not None:
             self.user_filter = user_filter_template.render()
             if "USERNAME" not in self.user_filter:
@@ -60,14 +58,14 @@ class MoonrakerLDAP:
     async def authenticate_ldap_user(self, username, password) -> None:
         eventloop = self.server.get_event_loop()
         async with self.lock:
-            await eventloop.run_in_thread(
-                self._perform_ldap_auth, username, password
-            )
+            await eventloop.run_in_thread(self._perform_ldap_auth, username, password)
 
     def _perform_ldap_auth(self, username, password) -> None:
         server = ldap3.Server(
-            self.ldap_host, self.ldap_port, use_ssl=self.ldap_secure,
-            connect_timeout=10.
+            self.ldap_host,
+            self.ldap_port,
+            use_ssl=self.ldap_secure,
+            connect_timeout=10.0,
         )
         conn_args = {
             "user": self.bind_dn,
@@ -80,13 +78,9 @@ class MoonrakerLDAP:
             ldfilt = self.user_filter.replace("USERNAME", username)
         try:
             with ldap3.Connection(server, **conn_args) as conn:
-                ret = conn.search(
-                    self.base_dn, ldfilt, attributes=["memberOf"]
-                )
+                ret = conn.search(self.base_dn, ldfilt, attributes=["memberOf"])
                 if not ret:
-                    raise self.server.error(
-                        f"LDAP User '{username}' Not Found", 401
-                    )
+                    raise self.server.error(f"LDAP User '{username}' Not Found", 401)
                 user: Entry = conn.entries[0]
                 rebind_success = conn.rebind(user.entry_dn, password)
             if not rebind_success:
@@ -118,8 +112,7 @@ class MoonrakerLDAP:
         for group in user.memberOf.values:
             if group == self.group_dn:
                 logging.debug(
-                    f"LDAP User {username} group match success, "
-                    "login successful"
+                    f"LDAP User {username} group match success, login successful"
                 )
                 return True
         return False

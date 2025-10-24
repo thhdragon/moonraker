@@ -13,15 +13,7 @@ import tornado.websocket as tornado_ws
 from tornado import version_info as tornado_version
 from ..common import RequestType, HistoryFieldData
 from ..utils import json_wrapper as jsonw
-from typing import (
-    TYPE_CHECKING,
-    List,
-    Dict,
-    Any,
-    Optional,
-    Union,
-    cast
-)
+from typing import TYPE_CHECKING, Any, Optional, Union, cast
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
@@ -36,6 +28,7 @@ if TYPE_CHECKING:
 DB_NAMESPACE = "moonraker"
 ACTIVE_SPOOL_KEY = "spoolman.spool_id"
 
+
 class SpoolManager:
     def __init__(self, config: ConfigHelper):
         self.server = config.get_server()
@@ -48,15 +41,18 @@ class SpoolManager:
         self.connection_task: asyncio.Task | None = None
         self.spool_check_task: asyncio.Task | None = None
         self.ws_connected: bool = False
-        self.reconnect_delay: float = 2.
+        self.reconnect_delay: float = 2.0
         self.is_closing: bool = False
         self.spool_id: int | None = None
         self._error_logged: bool = False
         self._highest_epos: float = 0
         self._current_extruder: str = "extruder"
         self.spool_history = HistoryFieldData(
-            "spool_ids", "spoolman", "Spool IDs used", "collect",
-            reset_callback=self._on_history_reset
+            "spool_ids",
+            "spoolman",
+            "Spool IDs used",
+            "collect",
+            reset_callback=self._on_history_reset,
         )
         history: History = self.server.lookup_component("history")
         history.register_auxiliary_field(self.spool_history)
@@ -73,7 +69,7 @@ class SpoolManager:
         )
 
     def _get_spoolman_urls(self, config: ConfigHelper) -> None:
-        orig_url = config.get('server')
+        orig_url = config.get("server")
         url_match = re.match(r"(?i:(?P<scheme>https?)://)?(?P<host>.+)", orig_url)
         if url_match is None:
             raise config.error(
@@ -132,8 +128,8 @@ class SpoolManager:
             try:
                 self.spoolman_ws = await tornado_ws.websocket_connect(
                     self.ws_url,
-                    connect_timeout=5.,
-                    ping_interval=None if tornado_version < (6, 5) else 20.
+                    connect_timeout=5.0,
+                    ping_interval=None if tornado_version < (6, 5) else 20.0,
                 )
                 setattr(self.spoolman_ws, "on_ping", self._on_ws_ping)
                 cur_time = self.eventloop.get_loop_time()
@@ -152,8 +148,9 @@ class SpoolManager:
                         if verbose:
                             logging.exception("Failed to connect to Spoolman")
                         self.server.add_log_rollover_item(
-                            "spoolman_connect", f"Failed to Connect to spoolman: {e}",
-                            not verbose
+                            "spoolman_connect",
+                            f"Failed to Connect to spoolman: {e}",
+                            not verbose,
                         )
             else:
                 err_list = []
@@ -216,7 +213,8 @@ class SpoolManager:
         if self.spool_id is not None:
             response = await self.http_client.get(
                 f"{self.spoolman_url}/v1/spool/{self.spool_id}",
-                connect_timeout=1., request_timeout=2.
+                connect_timeout=1.0,
+                request_timeout=2.0,
             )
             if response.status_code == 404:
                 logging.info(f"Spool ID {self.spool_id} not found, setting to None")
@@ -242,7 +240,7 @@ class SpoolManager:
         )
         toolhead = result.get("toolhead", {})
         self._current_extruder = toolhead.get("extruder", "extruder")
-        initial_e_pos = toolhead.get("position", [None]*4)[3]
+        initial_e_pos = toolhead.get("position", [None] * 4)[3]
         logging.debug(f"Initial epos: {initial_e_pos}")
         if initial_e_pos is not None:
             self._highest_epos = initial_e_pos
@@ -285,9 +283,7 @@ class SpoolManager:
         self.spool_history.tracker.update(spool_id)
         self.spool_id = spool_id
         self.database.insert_item(DB_NAMESPACE, ACTIVE_SPOOL_KEY, spool_id)
-        self.server.send_event(
-            "spoolman:active_spool_set", {"spool_id": spool_id}
-        )
+        self.server.send_event("spoolman:active_spool_set", {"spool_id": spool_id})
         logging.info(f"Setting active spool to: {spool_id}")
 
     async def report_extrusion(self, eventtime: float) -> float:
@@ -305,7 +301,7 @@ class SpoolManager:
             response = await self.http_client.request(
                 method="PUT",
                 url=f"{self.spoolman_url}/v1/spool/{spool_id}/use",
-                body={"use_length": used_length}
+                body={"use_length": used_length},
             )
             if response.has_error():
                 if response.status_code == 404:
@@ -359,8 +355,8 @@ class SpoolManager:
                 "response": None,
                 "error": {
                     "status_code": 503,
-                    "message": "Spoolman server not available"
-                }
+                    "message": "Spoolman server not available",
+                },
             }
         logging.debug(f"Proxying {method} request to {full_url}")
         response = await self.http_client.request(
@@ -378,33 +374,30 @@ class SpoolManager:
                 msg = spoolman_msg
             return {
                 "response": None,
-                "error": {
-                    "status_code": response.status_code,
-                    "message": msg
-                }
+                "error": {"status_code": response.status_code, "message": msg},
             }
         else:
             return {
                 "response": response.json(),
                 "response_headers": dict(response.headers.items()),
-                "error": None
+                "error": None,
             }
 
     async def _handle_status_request(self, web_request: WebRequest) -> dict[str, Any]:
         pending: list[dict[str, Any]] = [
-            {"spool_id": sid, "filament_used": used} for sid, used in
-            self.pending_reports.items()
+            {"spool_id": sid, "filament_used": used}
+            for sid, used in self.pending_reports.items()
         ]
         return {
             "spoolman_connected": self.ws_connected,
             "pending_reports": pending,
-            "spool_id": self.spool_id
+            "spool_id": self.spool_id,
         }
 
     def _send_status_notification(self) -> None:
         self.server.send_event(
             "spoolman:spoolman_status_changed",
-            {"spoolman_connected": self.ws_connected}
+            {"spoolman_connected": self.ws_connected},
         )
 
     async def close(self):
@@ -416,9 +409,10 @@ class SpoolManager:
         if self.connection_task is None or self.connection_task.done():
             return
         try:
-            await asyncio.wait_for(self.connection_task, 2.)
+            await asyncio.wait_for(self.connection_task, 2.0)
         except TimeoutError:
             pass
+
 
 def load_component(config: ConfigHelper) -> SpoolManager:
     return SpoolManager(config)

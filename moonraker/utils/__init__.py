@@ -5,40 +5,33 @@
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 from __future__ import annotations
+
+import asyncio
+import enum
+import glob
+import hashlib
+import importlib
+import ipaddress
 import logging
 import os
-import glob
-import importlib
 import pathlib
-import sys
-import subprocess
-import asyncio
-import hashlib
-import shlex
-import re
-import struct
-import socket
-import enum
-import ipaddress
 import platform
-from .exceptions import ServerError
-from . import source_info
-from . import json_wrapper
+import re
+import shlex
+import socket
+import struct
+import subprocess
+import sys
 
 # Annotation imports
-from typing import (
-    TYPE_CHECKING,
-    List,
-    Optional,
-    Any,
-    Tuple,
-    Dict,
-    Union
-)
+from typing import TYPE_CHECKING, Any, Optional, Union
+
+from . import json_wrapper, source_info
+from .exceptions import ServerError
 
 if TYPE_CHECKING:
-    from types import ModuleType
     from asyncio.trsock import TransportSocket
+    from types import ModuleType
 
 SYS_MOD_PATHS = glob.glob("/usr/lib/python3*/dist-packages")
 SYS_MOD_PATHS += glob.glob("/usr/lib/python3*/site-packages")
@@ -54,17 +47,18 @@ except Exception:
 class Sentinel(enum.Enum):
     MISSING = object()
 
+
 def _run_git_command(cmd: str) -> str:
     prog = shlex.split(cmd)
-    process = subprocess.Popen(prog, stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE)
+    process = subprocess.Popen(prog, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     ret, err = process.communicate()
     retcode = process.wait()
     if retcode == 0:
         return ret.strip().decode()
     raise Exception(
-        f"Failed to run git command '{cmd}': {err.decode(errors='ignore')}"
+        f"Failed to run git command '{cmd}': {err.decode(errors='ignore')}",
     )
+
 
 def _retrieve_git_tag(source_path: str) -> str:
     cmd = f"git -C {source_path} rev-list --tags --max-count=1"
@@ -74,6 +68,7 @@ def _retrieve_git_tag(source_path: str) -> str:
     cmd = f"git -C {source_path} rev-list {tag}..HEAD --count"
     count = _run_git_command(cmd)
     return f"{tag}-{count}"
+
 
 # Parse the git version from the command line.  This code
 # is borrowed from Klipper.
@@ -89,6 +84,7 @@ def retrieve_git_version(source_path: str) -> str:
     tag = _retrieve_git_tag(source_path)
     return f"t{tag}-g{ver}-shallow"
 
+
 def get_repo_info(source_path: str) -> dict[str, Any]:
     repo_info: dict[str, Any] = {
         "software_version": "?",
@@ -96,7 +92,7 @@ def get_repo_info(source_path: str) -> dict[str, Any]:
         "git_remote": "?",
         "git_repo_url": "?",
         "modified_files": [],
-        "unofficial_components": []
+        "unofficial_components": [],
     }
     try:
         repo_info["software_version"] = retrieve_git_version(source_path)
@@ -109,7 +105,7 @@ def get_repo_info(source_path: str) -> dict[str, Any]:
         else:
             return repo_info
         if repo_info["git_branch"].startswith("(HEAD detached"):
-            parts = repo_info["git_branch"] .strip("()").split()[-1]
+            parts = repo_info["git_branch"].strip("()").split()[-1]
             remote, _, _ = parts.partition("/")
             if not remote:
                 return repo_info
@@ -139,6 +135,7 @@ def get_repo_info(source_path: str) -> dict[str, Any]:
         logging.exception("Error Retrieving Git Repo Info")
     return repo_info
 
+
 def get_software_info() -> dict[str, Any]:
     src_path = source_info.source_path()
     if source_info.is_git_repo():
@@ -156,10 +153,11 @@ def get_software_info() -> dict[str, Any]:
             version = "?"
     return {"software_version": version}
 
+
 def hash_directory(
     dir_path: str | pathlib.Path,
     ignore_exts: list[str],
-    ignore_dirs: list[str]
+    ignore_dirs: list[str],
 ) -> str:
     if isinstance(dir_path, str):
         dir_path = pathlib.Path(dir_path)
@@ -169,13 +167,13 @@ def hash_directory(
     for dpath, dnames, fnames in os.walk(dir_path):
         valid_dirs: list[str] = []
         for dname in sorted(dnames):
-            if dname[0] == '.' or dname in ignore_dirs:
+            if dname[0] == "." or dname in ignore_dirs:
                 continue
             valid_dirs.append(dname)
         dnames[:] = valid_dirs
         for fname in sorted(fnames):
             ext = os.path.splitext(fname)[-1].lower()
-            if fname[0] == '.' or ext in ignore_exts:
+            if fname[0] == "." or ext in ignore_exts:
                 continue
             fpath = pathlib.Path(os.path.join(dpath, fname))
             try:
@@ -184,8 +182,9 @@ def hash_directory(
                 pass
     return checksum.hexdigest()
 
+
 def verify_source(
-    path: str | pathlib.Path | None = None
+    path: str | pathlib.Path | None = None,
 ) -> tuple[str, bool] | None:
     if path is None:
         path = source_info.source_path()
@@ -198,11 +197,12 @@ def verify_source(
         rinfo = json_wrapper.loads(rfile.read_text())
     except Exception:
         return None
-    orig_chksum = rinfo['source_checksum']
-    ign_dirs = rinfo['ignored_dirs']
-    ign_exts = rinfo['ignored_exts']
+    orig_chksum = rinfo["source_checksum"]
+    ign_dirs = rinfo["ignored_dirs"]
+    ign_exts = rinfo["ignored_exts"]
     checksum = hash_directory(path, ign_exts, ign_dirs)
     return checksum, checksum == orig_chksum
+
 
 def load_system_module(name: str) -> ModuleType:
     if not SYS_MOD_PATHS:
@@ -226,15 +226,17 @@ def load_system_module(name: str) -> ModuleType:
         raise ServerError(f"Unable to import module {name}")
     return module
 
+
 def get_unix_peer_credentials(
-    writer: asyncio.StreamWriter, name: str
+    writer: asyncio.StreamWriter,
+    name: str,
 ) -> dict[str, int]:
     sock: TransportSocket
     sock = writer.get_extra_info("socket", None)
     if sock is None:
         logging.debug(
             f"Unable to get underlying Unix Socket for {name}, "
-            "cant fetch peer credentials"
+            "cant fetch peer credentials",
         )
         return {}
     data: bytes = b""
@@ -247,14 +249,15 @@ def get_unix_peer_credentials(
     except Exception:
         logging.exception(
             f"Failed to get Unix Socket Peer Credentials for {name}"
-            f", raw: 0x{data.hex()}"
+            f", raw: 0x{data.hex()}",
         )
         return {}
     return {
         "process_id": pid,
         "user_id": uid,
-        "group_id": gid
+        "group_id": gid,
     }
+
 
 def pretty_print_time(seconds: int) -> str:
     if seconds == 0:
@@ -269,6 +272,7 @@ def pretty_print_time(seconds: int) -> str:
             continue
         fmt_list.append(f"{val} {ident}" if val == 1 else f"{val} {ident}s")
     return ", ".join(fmt_list)
+
 
 def parse_ip_address(address: str) -> IPAddress | None:
     try:

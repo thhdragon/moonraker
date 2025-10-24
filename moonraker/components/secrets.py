@@ -8,14 +8,11 @@ import pathlib
 import logging
 import configparser
 from ..utils import json_wrapper as jsonw
-from typing import (
-    TYPE_CHECKING,
-    Dict,
-    Optional,
-    Any
-)
+from typing import TYPE_CHECKING, Optional, Any
+
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
+
 
 class Secrets:
     def __init__(self, config: ConfigHelper) -> None:
@@ -36,7 +33,8 @@ class Secrets:
                 if not isinstance(vals, dict):
                     server.add_warning(
                         f"[secrets]: option 'secrets_path', top level item in"
-                        f" json file '{self.secrets_file}' must be an Object.")
+                        f" json file '{self.secrets_file}' must be an Object."
+                    )
                     return
                 self.values = vals
                 self.type = "json"
@@ -45,19 +43,19 @@ class Secrets:
                 if vals is None:
                     server.add_warning(
                         "[secrets]: option 'secrets_path', invalid file "
-                        f"format, must be json or ini: '{self.secrets_file}'")
+                        f"format, must be json or ini: '{self.secrets_file}'"
+                    )
                     return
                 self.values = vals
                 self.type = "ini"
-            logging.debug(f"[secrets]: Loaded {self.type} file: "
-                          f"{self.secrets_file}")
+            logging.debug(f"[secrets]: Loaded {self.type} file: {self.secrets_file}")
         elif path is not None:
             server.add_warning(
                 "[secrets]: option 'secrets_path', file does not exist: "
-                f"'{self.secrets_file}'")
+                f"'{self.secrets_file}'"
+            )
         else:
-            logging.debug(
-                "[secrets]: Option `secrets_path` not supplied")
+            logging.debug("[secrets]: Option `secrets_path` not supplied")
 
     def get_secrets_file(self) -> pathlib.Path:
         return self.secrets_file

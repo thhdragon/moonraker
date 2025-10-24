@@ -13,19 +13,11 @@ from ..common import (
     RequestType,
     HistoryFieldData,
     FieldTracker,
-    SqlTableDefinition
+    SqlTableDefinition,
 )
 
 # Annotation imports
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Union,
-    Optional,
-    Dict,
-    List,
-    Tuple
-)
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
@@ -34,24 +26,26 @@ if TYPE_CHECKING:
     from .job_state import JobState
     from .file_manager.file_manager import FileManager
     from .database import DBProviderWrapper
+
     Totals = dict[str, float | int]
     AuxTotals = list[dict[str, Any]]
 
 BASE_TOTALS = {
     "total_jobs": 0,
-    "total_time": 0.,
-    "total_print_time": 0.,
-    "total_filament_used": 0.,
-    "longest_job": 0.,
-    "longest_print": 0.
+    "total_time": 0.0,
+    "total_print_time": 0.0,
+    "total_filament_used": 0.0,
+    "longest_job": 0.0,
+    "longest_print": 0.0,
 }
 HIST_TABLE = "job_history"
 TOTALS_TABLE = "job_totals"
 
+
 def _create_totals_list(
     job_totals: dict[str, Any],
     aux_totals: list[dict[str, Any]],
-    instance: str = "default"
+    instance: str = "default",
 ) -> list[tuple[str, str, Any, Any, str]]:
     """
     Returns a list of Tuples formatted for SQL Database insertion.
@@ -68,20 +62,14 @@ def _create_totals_list(
         if not isinstance(item, dict):
             continue
         totals_list.append(
-            (
-                item["provider"],
-                item["field"],
-                item["maximum"],
-                item["total"],
-                instance
-            )
+            (item["provider"], item["field"], item["maximum"], item["total"], instance)
         )
     return totals_list
 
+
 class TotalsSqlDefinition(SqlTableDefinition):
     name = TOTALS_TABLE
-    prototype = (
-        f"""
+    prototype = f"""
         {TOTALS_TABLE} (
             provider TEXT NOT NULL,
             field TEXT NOT NULL,
@@ -91,7 +79,6 @@ class TotalsSqlDefinition(SqlTableDefinition):
             PRIMARY KEY (provider, field, instance_id)
         )
         """
-    )
     version = 1
 
     def migrate(self, last_version: int, db_provider: DBProviderWrapper) -> None:
@@ -110,17 +97,17 @@ class TotalsSqlDefinition(SqlTableDefinition):
             with sql_conn:
                 sql_conn.executemany(
                     f"INSERT OR IGNORE INTO {TOTALS_TABLE} VALUES(?, ?, ?, ?, ?)",
-                    totals_list
+                    totals_list,
                 )
             try:
                 db_provider.delete_item("moonraker", "history")
             except Exception:
                 pass
 
+
 class HistorySqlDefinition(SqlTableDefinition):
     name = HIST_TABLE
-    prototype = (
-        f"""
+    prototype = f"""
         {HIST_TABLE} (
             job_id INTEGER PRIMARY KEY ASC,
             user TEXT NOT NULL,
@@ -136,11 +123,10 @@ class HistorySqlDefinition(SqlTableDefinition):
             instance_id TEXT NOT NULL
         )
         """
-    )
     version = 1
 
     def _get_entry_item(
-        self, entry: dict[str, Any], name: str, default: Any = 0.
+        self, entry: dict[str, Any], name: str, default: Any = 0.0
     ) -> Any:
         val = entry.get(name)
         if val is None:
@@ -173,7 +159,7 @@ class HistorySqlDefinition(SqlTableDefinition):
                                 self._get_entry_item(entry, "filament_used"),
                                 self._get_entry_item(entry, "metadata", {}),
                                 self._get_entry_item(entry, "auxiliary_data", []),
-                                "default"
+                                "default",
                             )
                         )
                     except KeyError:
@@ -183,15 +169,15 @@ class HistorySqlDefinition(SqlTableDefinition):
                 placeholders = ",".join("?" * len(conv_vals[0]))
                 with conn:
                     conn.executemany(
-                        f"INSERT INTO {HIST_TABLE} VALUES({placeholders})",
-                        conv_vals
+                        f"INSERT INTO {HIST_TABLE} VALUES({placeholders})", conv_vals
                     )
             db_provider.wipe_local_namespace("history")
+
 
 class History:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.file_manager: FileManager = self.server.lookup_component('file_manager')
+        self.file_manager: FileManager = self.server.lookup_component("file_manager")
         self.request_lock = Lock()
         FieldTracker.class_init(self)
         self.auxiliary_fields: list[HistoryFieldData] = []
@@ -202,18 +188,23 @@ class History:
         self.aux_totals: AuxTotals = []
 
         self.server.register_event_handler(
-            "server:klippy_disconnect", self._handle_disconnect)
+            "server:klippy_disconnect", self._handle_disconnect
+        )
         self.server.register_event_handler(
-            "server:klippy_shutdown", self._handle_shutdown)
+            "server:klippy_shutdown", self._handle_shutdown
+        )
         self.server.register_event_handler(
-            "job_state:state_changed", self._on_job_state_changed)
+            "job_state:state_changed", self._on_job_state_changed
+        )
         self.server.register_event_handler(
-            "klippy_apis:job_start_complete", self._on_job_requested)
+            "klippy_apis:job_start_complete", self._on_job_requested
+        )
         self.server.register_notification("history:history_changed")
 
         self.server.register_endpoint(
-            "/server/history/job", RequestType.GET | RequestType.DELETE,
-            self._handle_job_request
+            "/server/history/job",
+            RequestType.GET | RequestType.DELETE,
+            self._handle_job_request,
         )
         self.server.register_endpoint(
             "/server/history/list", RequestType.GET, self._handle_jobs_list
@@ -222,8 +213,9 @@ class History:
             "/server/history/totals", RequestType.GET, self._handle_job_totals
         )
         self.server.register_endpoint(
-            "/server/history/reset_totals", RequestType.POST,
-            self._handle_job_total_reset
+            "/server/history/reset_totals",
+            RequestType.POST,
+            self._handle_job_total_reset,
         )
 
         self.current_job: PrinterJob | None = None
@@ -234,7 +226,8 @@ class History:
     async def component_init(self) -> None:
         # Popluate totals
         valid_aux_totals = [
-            (item.provider, item.name) for item in self.auxiliary_fields
+            (item.provider, item.name)
+            for item in self.auxiliary_fields
             if item.has_totals()
         ]
         cursor = await self.totals_table.execute(f"SELECT * from {TOTALS_TABLE}")
@@ -260,13 +253,10 @@ class History:
                 )
             self.server.add_log_rollover_item(
                 "interrupted_history",
-                "The following jobs were detected as interrupted: "
-                f"{interrupted_jobs}"
+                f"The following jobs were detected as interrupted: {interrupted_jobs}",
             )
 
-    async def _handle_job_request(self,
-                                  web_request: WebRequest
-                                  ) -> dict[str, Any]:
+    async def _handle_job_request(self, web_request: WebRequest) -> dict[str, Any]:
         async with self.request_lock:
             req_type = web_request.get_request_type()
             if req_type == RequestType.GET:
@@ -284,16 +274,16 @@ class History:
                 if all:
                     cursor = await self.history_table.execute(
                         f"SELECT job_id FROM {HIST_TABLE} WHERE instance_id = ?",
-                        ("default",)
+                        ("default",),
                     )
                     await cursor.set_arraysize(1000)
                     deljobs = [f"{row[0]:06X}" for row in await cursor.fetchall()]
                     async with self.history_table as tx:
                         await tx.execute(
                             f"DELETE FROM {HIST_TABLE} WHERE instance_id = ?",
-                            ("default",)
+                            ("default",),
                         )
-                    return {'deleted_jobs': deljobs}
+                    return {"deleted_jobs": deljobs}
 
                 job_id = web_request.get_str("uid")
                 async with self.history_table as tx:
@@ -302,12 +292,10 @@ class History:
                     )
                 if cursor.rowcount < 1:
                     raise self.server.error(f"Invalid job uid: {job_id}", 404)
-                return {'deleted_jobs': [job_id]}
+                return {"deleted_jobs": [job_id]}
             raise self.server.error("Invalid Request Method")
 
-    async def _handle_jobs_list(self,
-                                web_request: WebRequest
-                                ) -> dict[str, Any]:
+    async def _handle_jobs_list(self, web_request: WebRequest) -> dict[str, Any]:
         async with self.request_lock:
             before = web_request.get_float("before", -1)
             since = web_request.get_float("since", -1)
@@ -343,10 +331,7 @@ class History:
     async def _handle_job_totals(
         self, web_request: WebRequest
     ) -> dict[str, Totals | AuxTotals]:
-        return {
-            "job_totals": self.job_totals,
-            "auxiliary_totals": self.aux_totals
-        }
+        return {"job_totals": self.job_totals, "auxiliary_totals": self.aux_totals}
 
     async def _handle_job_total_reset(
         self, web_request: WebRequest
@@ -365,16 +350,10 @@ class History:
             await tx.executemany(
                 f"INSERT INTO {TOTALS_TABLE} VALUES(?, ?, ?, ?, ?)", totals_list
             )
-        return {
-            "last_totals": last_totals,
-            "last_auxiliary_totals": last_aux_totals
-        }
+        return {"last_totals": last_totals, "last_auxiliary_totals": last_aux_totals}
 
     async def _on_job_state_changed(
-        self,
-        job_event: JobEvent,
-        prev_stats: dict[str, Any],
-        new_stats: dict[str, Any]
+        self, job_event: JobEvent, prev_stats: dict[str, Any], new_stats: dict[str, Any]
     ) -> None:
         self.job_paused = job_event == JobEvent.PAUSED
         if job_event == JobEvent.STARTED:
@@ -423,9 +402,7 @@ class History:
             self.current_job_id = new_id
             job_id = f"{new_id:06X}"
             self.update_metadata(job_id)
-            logging.debug(
-                f"History Job Added - Id: {job_id}, File: {job.filename}"
-            )
+            logging.debug(f"History Job Added - Id: {job_id}, File: {job.filename}")
             self.send_history_event("added")
 
     async def save_job(self, job: PrinterJob, job_id: int | None) -> int | None:
@@ -441,7 +418,7 @@ class History:
             job.filament_used,
             job.metadata,
             job.auxiliary_data,
-            "default"
+            "default",
         ]
         placeholders = ",".join("?" * len(values))
         async with self.history_table as tx:
@@ -454,9 +431,7 @@ class History:
         if isinstance(job_id, str):
             job_id = int(job_id, 16)
         async with self.history_table as tx:
-            tx.execute(
-                f"DELETE FROM {HIST_TABLE} WHERE job_id = ?", (job_id,)
-            )
+            tx.execute(f"DELETE FROM {HIST_TABLE} WHERE job_id = ?", (job_id,))
 
     async def finish_job(self, status: str, pstats: dict[str, Any]) -> None:
         async with self.request_lock:
@@ -464,8 +439,8 @@ class History:
                 self._reset_current_job()
                 return
             if (
-                pstats.get('filename') != self.current_job.filename or
-                pstats.get('total_duration', 0.) < self.current_job.total_duration
+                pstats.get("filename") != self.current_job.filename
+                or pstats.get("total_duration", 0.0) < self.current_job.total_duration
             ):
                 # Print stats have been reset, do not update this job with them
                 pstats = {}
@@ -491,9 +466,7 @@ class History:
         self.current_job_id = None
         self.job_user = "No User"
 
-    async def get_job(
-        self, job_id: int | str
-    ) -> dict[str, Any] | None:
+    async def get_job(self, job_id: int | str) -> dict[str, Any] | None:
         if isinstance(job_id, str):
             job_id = int(job_id, 16)
         cursor = await self.history_table.execute(
@@ -510,12 +483,12 @@ class History:
         metadata: dict[str, Any] = mdst.get(filename, {})
         # We don't need to store these fields in the
         # job metadata, as they are redundant
-        metadata.pop('print_start_time', None)
-        metadata.pop('job_id', None)
+        metadata.pop("print_start_time", None)
+        metadata.pop("job_id", None)
         if "thumbnails" in metadata:
             thumb: dict[str, Any]
-            for thumb in metadata['thumbnails']:
-                thumb.pop('data', None)
+            for thumb in metadata["thumbnails"]:
+                thumb.pop("data", None)
         self.current_job.metadata = metadata
 
     def update_metadata(self, job_id: str) -> None:
@@ -527,10 +500,12 @@ class History:
         if metadata:
             # Add the start time and job id to the
             # persistent metadata storage
-            metadata.update({
-                'print_start_time': self.current_job.get('start_time'),
-                'job_id': job_id
-            })
+            metadata.update(
+                {
+                    "print_start_time": self.current_job.get("start_time"),
+                    "job_id": job_id,
+                }
+            )
             mdst.insert(filename, metadata)
 
     async def _update_job_totals(self) -> None:
@@ -570,15 +545,13 @@ class History:
         job_id = f"{self.current_job_id:06X}"
         job = self._prep_requested_job(self.current_job.get_stats(), job_id)
         self.server.send_event(
-            "history:history_changed", {'action': evt_action, 'job': job}
+            "history:history_changed", {"action": evt_action, "job": job}
         )
 
-    def _prep_requested_job(
-        self, job: dict[str, Any], job_id: str
-    ) -> dict[str, Any]:
+    def _prep_requested_job(self, job: dict[str, Any], job_id: str) -> dict[str, Any]:
         fm = self.file_manager
         mtime = job.get("metadata", {}).get("modified", None)
-        job["exists"] = fm.check_file_exists("gcodes", job['filename'], mtime)
+        job["exists"] = fm.check_file_exists("gcodes", job["filename"], mtime)
         job["job_id"] = job_id
         job.pop("instance_id", None)
         return job
@@ -606,24 +579,22 @@ class History:
         last_ps = jstate.get_last_stats()
         await self.finish_job("server_exit", last_ps)
 
+
 class PrinterJob:
     def __init__(self, data: dict[str, Any] = {}) -> None:
         self.end_time: float | None = None
         self.filament_used: float = 0
         self.filename: str = ""
         self.metadata: dict[str, Any] = {}
-        self.print_duration: float = 0.
+        self.print_duration: float = 0.0
         self.status: str = "in_progress"
         self.start_time = time.time()
-        self.total_duration: float = 0.
+        self.total_duration: float = 0.0
         self.auxiliary_data: list[dict[str, Any]] = []
         self.user: str = "No User"
         self.update_from_ps(data)
 
-    def finish(self,
-               status: str,
-               print_stats: dict[str, Any] = {}
-               ) -> None:
+    def finish(self, status: str, print_stats: dict[str, Any] = {}) -> None:
         self.end_time = time.time()
         self.status = status if status is not None else "error"
         self.update_from_ps(print_stats)

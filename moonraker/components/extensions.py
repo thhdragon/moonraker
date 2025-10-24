@@ -14,10 +14,6 @@ from ..utils import get_unix_peer_credentials
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
-    List,
-    Optional,
-    Union,
 )
 
 if TYPE_CHECKING:
@@ -28,6 +24,7 @@ if TYPE_CHECKING:
 
 UNIX_BUFFER_LIMIT = 20 * 1024 * 1024
 
+
 class ExtensionManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -35,13 +32,16 @@ class ExtensionManager:
         self.agent_methods: dict[int, list[str]] = {}
         self.uds_server: asyncio.AbstractServer | None = None
         self.server.register_endpoint(
-            "/connection/register_remote_method", RequestType.POST,
+            "/connection/register_remote_method",
+            RequestType.POST,
             self._register_agent_method,
-            transports=TransportType.WEBSOCKET
+            transports=TransportType.WEBSOCKET,
         )
         self.server.register_endpoint(
-            "/connection/send_event", RequestType.POST, self._handle_agent_event,
-            transports=TransportType.WEBSOCKET
+            "/connection/send_event",
+            RequestType.POST,
+            self._handle_agent_event,
+            transports=TransportType.WEBSOCKET,
         )
         self.server.register_endpoint(
             "/server/extensions/list", RequestType.GET, self._handle_list_extensions
@@ -59,14 +59,10 @@ class ExtensionManager:
                 f"Cannot register client type '{client_type}' as an agent"
             )
         if name in self.agents:
-            raise self.server.error(
-                f"Agent '{name}' already registered and connected'"
-            )
+            raise self.server.error(f"Agent '{name}' already registered and connected'")
         self.agents[name] = connection
         data = connection.client_data
-        evt: dict[str, Any] = {
-            "agent": name, "event": "connected", "data": data
-        }
+        evt: dict[str, Any] = {"agent": name, "event": "connected", "data": data}
         connection.send_notification("agent_event", [evt])
 
     def remove_agent(self, connection: BaseRemoteConnection) -> None:
@@ -157,13 +153,14 @@ class ExtensionManager:
             await self.uds_server.wait_closed()
             self.uds_server = None
 
+
 class UnixSocketClient(BaseRemoteConnection):
     def __init__(
         self,
         server: Server,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
-        peercred: dict[str, int]
+        peercred: dict[str, int],
     ) -> None:
         self.on_create(server)
         self.writer = writer
@@ -183,7 +180,7 @@ class UnixSocketClient(BaseRemoteConnection):
         errors_remaining: int = 10
         while not reader.at_eof():
             try:
-                data = await reader.readuntil(b'\x03')
+                data = await reader.readuntil(b"\x03")
                 decoded = data[:-1].decode(encoding="utf-8")
             except (ConnectionError, asyncio.IncompleteReadError):
                 break
@@ -216,9 +213,7 @@ class UnixSocketClient(BaseRemoteConnection):
             await self._on_close(reason="Write Exception")
 
     async def _on_close(
-        self,
-        code: int | None = None,
-        reason: str | None = None
+        self, code: int | None = None, reason: str | None = None
     ) -> None:
         if self.is_closed:
             return
@@ -233,9 +228,7 @@ class UnixSocketClient(BaseRemoteConnection):
                 pass
         self.message_buf = []
         for resp in self.pending_responses.values():
-            resp.set_exception(
-                self.server.error("Client Socket Disconnected", 500)
-            )
+            resp.set_exception(self.server.error("Client Socket Disconnected", 500))
         self.pending_responses = {}
         logging.info(
             f"Unix Socket Closed: ID: {self.uid}, "

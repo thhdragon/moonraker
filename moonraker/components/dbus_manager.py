@@ -15,7 +15,6 @@ from dbus_fast.constants import BusType
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
-    List,
     Optional,
     Any,
 )
@@ -25,13 +24,14 @@ if TYPE_CHECKING:
 
 STAT_PATH = "/proc/self/stat"
 DOC_URL = (
-    "https://moonraker.readthedocs.io/en/latest/"
-    "installation/#policykit-permissions"
+    "https://moonraker.readthedocs.io/en/latest/installation/#policykit-permissions"
 )
+
 
 class DbusManager:
     Variant = dbus_fast.Variant
     DbusError = dbus_fast.errors.DBusError
+
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.bus: MessageBus | None = None
@@ -47,8 +47,8 @@ class DbusManager:
             "unix-process",
             {
                 "pid": dbus_fast.Variant("u", os.getpid()),
-                "start-time": dbus_fast.Variant("t", start_clk_ticks)
-            }
+                "start-time": dbus_fast.Variant("t", start_clk_ticks),
+            },
         ]
 
     def is_connected(self) -> bool:
@@ -68,7 +68,8 @@ class DbusManager:
             self.polkit = await self.get_interface(
                 "org.freedesktop.PolicyKit1",
                 "/org/freedesktop/PolicyKit1/Authority",
-                "org.freedesktop.PolicyKit1.Authority")
+                "org.freedesktop.PolicyKit1.Authority",
+            )
         except asyncio.CancelledError:
             raise
         except Exception as e:
@@ -78,20 +79,18 @@ class DbusManager:
                 logging.info(f"Failed to get PolKit interface: {e}")
             self.polkit = None
 
-    async def check_permission(self,
-                               action: str,
-                               err_msg: str = ""
-                               ) -> bool:
+    async def check_permission(self, action: str, err_msg: str = "") -> bool:
         if self.polkit is None:
             self.server.add_warning(
                 "Unable to find DBus PolKit Interface, this suggests PolKit "
                 "is not installed on your OS.",
-                "dbus_polkit"
+                "dbus_polkit",
             )
             return False
         try:
             ret = await self.polkit.call_check_authorization(  # type: ignore
-                self.polkit_subject, action, {}, 0, "")
+                self.polkit_subject, action, {}, 0, ""
+            )
         except asyncio.CancelledError:
             raise
         except Exception as e:
@@ -99,42 +98,38 @@ class DbusManager:
             self.server.add_warning(
                 f"Error checking authorization for action [{action}]: {e}. "
                 "This suggests that a dependency is not installed or "
-                f"up to date. {err_msg}.")
+                f"up to date. {err_msg}."
+            )
             return False
         if not ret[0]:
             self._check_warned()
             self.server.add_warning(
-                "Moonraker not authorized for PolicyKit action: "
-                f"[{action}], {err_msg}")
+                f"Moonraker not authorized for PolicyKit action: [{action}], {err_msg}"
+            )
         return ret[0]
 
     def _check_warned(self):
         if not self.warned:
             self.server.add_warning(
                 f"PolKit warnings detected. See {DOC_URL} for instructions "
-                "on how to resolve.")
+                "on how to resolve."
+            )
             self.warned = True
 
-    async def get_interface(self,
-                            bus_name: str,
-                            bus_path: str,
-                            interface_name: str
-                            ) -> ProxyInterface:
-        ret = await self.get_interfaces(bus_name, bus_path,
-                                        [interface_name])
+    async def get_interface(
+        self, bus_name: str, bus_path: str, interface_name: str
+    ) -> ProxyInterface:
+        ret = await self.get_interfaces(bus_name, bus_path, [interface_name])
         return ret[0]
 
-    async def get_interfaces(self,
-                             bus_name: str,
-                             bus_path: str,
-                             interface_names: list[str]
-                             ) -> list[ProxyInterface]:
+    async def get_interfaces(
+        self, bus_name: str, bus_path: str, interface_names: list[str]
+    ) -> list[ProxyInterface]:
         if self.bus is None:
             raise self.server.error("Bus not available")
         interfaces: list[ProxyInterface] = []
         introspection = await self.bus.introspect(bus_name, bus_path)
-        proxy_obj = self.bus.get_proxy_object(bus_name, bus_path,
-                                              introspection)
+        proxy_obj = self.bus.get_proxy_object(bus_name, bus_path, introspection)
         for ifname in interface_names:
             intf = proxy_obj.get_interface(ifname)
             interfaces.append(intf)

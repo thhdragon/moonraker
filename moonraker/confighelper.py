@@ -5,48 +5,47 @@
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 from __future__ import annotations
+
 import configparser
-import os
+import copy
 import hashlib
+import logging
+import os
 import pathlib
 import re
 import threading
-import copy
-import logging
+from collections.abc import Awaitable, Callable
 from io import StringIO
-from .utils import Sentinel
-from .common import RenderableTemplate
 
 # Annotation imports
 from typing import (
+    IO,
     TYPE_CHECKING,
     Any,
-    IO,
-    Optional,
-    Set,
-    Tuple,
+    TextIO,
     TypeVar,
     Union,
-    Dict,
-    List,
-    Type,
-    TextIO
 )
-from collections.abc import Awaitable, Callable
+
+from .common import RenderableTemplate
+from .utils import Sentinel
+
 if TYPE_CHECKING:
-    from .server import Server
     from .components.gpio import (
+        GpioEvent,
+        GpioEventCallback,
         GpioFactory,
         GpioOutputPin,
-        GpioEvent,
-        GpioEventCallback
     )
     from .components.template import TemplateFactory
+    from .server import Server
+
     _T = TypeVar("_T")
-    ConfigVal = Union[None, int, float, bool, str, dict, list]
+    ConfigVal = None | int | float | bool | str | dict | list
 
 DOCS_URL = "https://moonraker.readthedocs.io/en/latest"
 CFG_ERROR_KEY = "__CONFIG_ERROR__"
+
 
 class ConfigError(Exception):
     pass
@@ -54,13 +53,15 @@ class ConfigError(Exception):
 
 class ConfigHelper:
     error = ConfigError
-    def __init__(self,
-                 server: Server,
-                 config_source: ConfigSourceWrapper,
-                 section: str,
-                 parsed: dict[str, dict[str, ConfigVal]],
-                 fallback_section: str | None = None
-                 ) -> None:
+
+    def __init__(
+        self,
+        server: Server,
+        config_source: ConfigSourceWrapper,
+        section: str,
+        parsed: dict[str, dict[str, ConfigVal]],
+        fallback_section: str | None = None,
+    ) -> None:
         self.server = server
         self.source = config_source
         self.config = config_source.get_parser()
@@ -115,28 +116,32 @@ class ConfigHelper:
         return [s for s in self.sections() if s.startswith(prefix)]
 
     def getsection(
-        self, section: str, fallback: str | None = None
+        self,
+        section: str,
+        fallback: str | None = None,
     ) -> ConfigHelper:
         return ConfigHelper(
-            self.server, self.source, section, self.parsed, fallback
+            self.server,
+            self.source,
+            section,
+            self.parsed,
+            fallback,
         )
 
-    def _get_option(self,
-                    func: Callable[..., Any],
-                    option: str,
-                    default: Sentinel | _T,
-                    above: int | float | None = None,
-                    below: int | float | None = None,
-                    minval: int | float | None = None,
-                    maxval: int | float | None = None,
-                    deprecate: bool = False
-                    ) -> Any:
+    def _get_option(
+        self,
+        func: Callable[..., Any],
+        option: str,
+        default: Sentinel | _T,
+        above: float | None = None,
+        below: float | None = None,
+        minval: float | None = None,
+        maxval: float | None = None,
+        deprecate: bool = False,
+    ) -> Any:
         section = self.section
         warn_fallback = False
-        if (
-            self.section not in self.config and
-            self.fallback_section is not None
-        ):
+        if self.section not in self.config and self.fallback_section is not None:
             section = self.fallback_section
             warn_fallback = True
         try:
@@ -151,102 +156,124 @@ class ConfigHelper:
             self.parsed[self.section][CFG_ERROR_KEY] = True
             raise ConfigError(
                 f"[{self.section}]: Option '{option}' encountered the following "
-                f"error while parsing: {e}"
+                f"error while parsing: {e}",
             ) from e
         else:
             if deprecate:
                 self.server.add_warning(
                     f"[{self.section}]: Option '{option}' is "
                     "deprecated, see the configuration documentation "
-                    f"at {DOCS_URL}/configuration/")
+                    f"at {DOCS_URL}/configuration/",
+                )
             if warn_fallback:
                 help = f"{DOCS_URL}/configuration/#option-moved-deprecations"
                 self.server.add_warning(
                     f"[{section}]: Option '{option}' has been moved "
                     f"to section [{self.section}].  Please correct your "
-                    f"configuration, see {help} for detailed documentation."
+                    f"configuration, see {help} for detailed documentation.",
                 )
             if isinstance(val, (int, float)):
                 self._check_option(option, val, above, below, minval, maxval)
         if option not in self.parsed[section]:
-            if (
-                val is None or
-                isinstance(val, (int, float, bool, str, dict, list))
-            ):
+            if val is None or isinstance(val, (int, float, bool, str, dict, list)):
                 self.parsed[section][option] = copy.deepcopy(val)
             else:
                 # If the item cannot be encoded to json serialize to a string
                 self.parsed[section][option] = str(val)
         return val
 
-    def _check_option(self,
-                      option: str,
-                      value: int | float,
-                      above: int | float | None,
-                      below: int | float | None,
-                      minval: int | float | None,
-                      maxval: int | float | None
-                      ) -> None:
+    def _check_option(
+        self,
+        option: str,
+        value: float,
+        above: float | None,
+        below: float | None,
+        minval: float | None,
+        maxval: float | None,
+    ) -> None:
         if above is not None and value <= above:
             raise self.error(
                 f"Config Error: Section [{self.section}], Option "
-                f"'{option}: {value}': value is not above {above}")
+                f"'{option}: {value}': value is not above {above}",
+            )
         if below is not None and value >= below:
             raise self.error(
                 f"Config Error: Section [{self.section}], Option "
-                f"'{option}: {value}': value is not below {below}")
+                f"'{option}: {value}': value is not below {below}",
+            )
         if minval is not None and value < minval:
             raise self.error(
                 f"Config Error: Section [{self.section}], Option "
-                f"'{option}: {value}': value is below minimum value {minval}")
+                f"'{option}: {value}': value is below minimum value {minval}",
+            )
         if maxval is not None and value > maxval:
             raise self.error(
                 f"Config Error: Section [{self.section}], Option "
-                f"'{option}: {value}': value is above maximum value {minval}")
+                f"'{option}: {value}': value is above maximum value {minval}",
+            )
 
-    def get(self,
-            option: str,
-            default: Sentinel | _T = Sentinel.MISSING,
-            deprecate: bool = False
-            ) -> str | _T:
-        return self._get_option(
-            self.config.get, option, default,
-            deprecate=deprecate)
+    def get(
+        self,
+        option: str,
+        default: Sentinel | _T = Sentinel.MISSING,
+        deprecate: bool = False,
+    ) -> str | _T:
+        return self._get_option(self.config.get, option, default, deprecate=deprecate)
 
-    def getint(self,
-               option: str,
-               default: Sentinel | _T = Sentinel.MISSING,
-               above: int | None = None,
-               below: int | None = None,
-               minval: int | None = None,
-               maxval: int | None = None,
-               deprecate: bool = False
-               ) -> int | _T:
+    def getint(
+        self,
+        option: str,
+        default: Sentinel | _T = Sentinel.MISSING,
+        above: int | None = None,
+        below: int | None = None,
+        minval: int | None = None,
+        maxval: int | None = None,
+        deprecate: bool = False,
+    ) -> int | _T:
         return self._get_option(
-            self.config.getint, option, default,
-            above, below, minval, maxval, deprecate)
+            self.config.getint,
+            option,
+            default,
+            above,
+            below,
+            minval,
+            maxval,
+            deprecate,
+        )
 
-    def getboolean(self,
-                   option: str,
-                   default: Sentinel | _T = Sentinel.MISSING,
-                   deprecate: bool = False
-                   ) -> bool | _T:
+    def getboolean(
+        self,
+        option: str,
+        default: Sentinel | _T = Sentinel.MISSING,
+        deprecate: bool = False,
+    ) -> bool | _T:
         return self._get_option(
-            self.config.getboolean, option, default,
-            deprecate=deprecate)
+            self.config.getboolean,
+            option,
+            default,
+            deprecate=deprecate,
+        )
 
-    def getfloat(self,
-                 option: str,
-                 default: Sentinel | _T = Sentinel.MISSING,
-                 above: float | None = None,
-                 below: float | None = None,
-                 minval: float | None = None,
-                 maxval: float | None = None,
-                 deprecate: bool = False
-                 ) -> float | _T:
+    def getfloat(
+        self,
+        option: str,
+        default: Sentinel | _T = Sentinel.MISSING,
+        above: float | None = None,
+        below: float | None = None,
+        minval: float | None = None,
+        maxval: float | None = None,
+        deprecate: bool = False,
+    ) -> float | _T:
         return self._get_option(
-            self.config.getfloat, option, default,
-            above, below, minval, maxval, deprecate)
+            self.config.getfloat,
+            option,
+            default,
+            above,
+            below,
+            minval,
+            maxval,
+            deprecate,
+        )
 
     def getchoice(
         self,
@@ -254,10 +281,13 @@ class ConfigHelper:
         choices: dict[str, _T] | list[_T],
         default_key: Sentinel | str = Sentinel.MISSING,
         force_lowercase: bool = False,
-        deprecate: bool = False
+        deprecate: bool = False,
     ) -> _T:
         result: str = self._get_option(
-            self.config.get, option, default_key, deprecate=deprecate
+            self.config.get,
+            option,
+            default_key,
+            deprecate=deprecate,
         )
         if force_lowercase:
             result = result.lower()
@@ -266,52 +296,51 @@ class ConfigHelper:
             raise ConfigError(
                 f"Section [{self.section}], Option '{option}: Value "
                 f"{result} is not a vailid choice.  Must be one of the "
-                f"following {items}"
+                f"following {items}",
             )
         if isinstance(choices, dict):
             return choices[result]
-        else:
-            return result  # type: ignore
+        return result  # type: ignore
 
-    def getlists(self,
-                 option: str,
-                 default: Sentinel | _T = Sentinel.MISSING,
-                 list_type: type = str,
-                 separators: tuple[str | None, ...] = ('\n',),
-                 count: tuple[int | None, ...] | None = None,
-                 deprecate: bool = False
-                 ) -> list[Any] | _T:
+    def getlists(
+        self,
+        option: str,
+        default: Sentinel | _T = Sentinel.MISSING,
+        list_type: type = str,
+        separators: tuple[str | None, ...] = ("\n",),
+        count: tuple[int | None, ...] | None = None,
+        deprecate: bool = False,
+    ) -> list[Any] | _T:
         if count is not None and len(count) != len(separators):
             raise ConfigError(
                 f"Option '{option}' in section "
                 f"[{self.section}]: length of 'count' argument must ",
-                "match length of 'separators' argument")
-        elif count is None:
+                "match length of 'separators' argument",
+            )
+        if count is None:
             count = tuple(None for _ in range(len(separators)))
 
-        def list_parser(value: str,
-                        ltype: type,
-                        seps: tuple[str | None, ...],
-                        expected_cnt: tuple[int | None, ...]
-                        ) -> list[Any]:
+        def list_parser(
+            value: str,
+            ltype: type,
+            seps: tuple[str | None, ...],
+            expected_cnt: tuple[int | None, ...],
+        ) -> list[Any]:
             sep = seps[0]
             seps = seps[1:]
             cnt = expected_cnt[0]
             expected_cnt = expected_cnt[1:]
             ret: list[Any] = []
             if seps:
-                sub_lists = [val.strip() for val in value.split(sep)
-                             if val.strip()]
+                sub_lists = [val.strip() for val in value.split(sep) if val.strip()]
                 for sub_list in sub_lists:
-                    ret.append(list_parser(sub_list, ltype, seps,
-                                           expected_cnt))
+                    ret.append(list_parser(sub_list, ltype, seps, expected_cnt))
             else:
-                ret = [ltype(val.strip()) for val in value.split(sep)
-                       if val.strip()]
+                ret = [ltype(val.strip()) for val in value.split(sep) if val.strip()]
             if cnt is not None and len(ret) != cnt:
                 raise ConfigError(
-                    f"List length mismatch, expected {cnt}, "
-                    f"parsed {len(ret)}")
+                    f"List length mismatch, expected {cnt}, parsed {len(ret)}",
+                )
             return ret
 
         def getlist_wrapper(sec: str, opt: str) -> list[Any]:
@@ -319,52 +348,72 @@ class ConfigHelper:
             assert count is not None
             return list_parser(val, list_type, separators, count)
 
-        return self._get_option(getlist_wrapper, option, default,
-                                deprecate=deprecate)
+        return self._get_option(getlist_wrapper, option, default, deprecate=deprecate)
 
+    def getlist(
+        self,
+        option: str,
+        default: Sentinel | _T = Sentinel.MISSING,
+        separator: str | None = "\n",
+        count: int | None = None,
+        deprecate: bool = False,
+    ) -> list[str] | _T:
+        return self.getlists(
+            option,
+            default,
+            str,
+            (separator,),
+            (count,),
+            deprecate=deprecate,
+        )
 
-    def getlist(self,
-                option: str,
-                default: Sentinel | _T = Sentinel.MISSING,
-                separator: str | None = '\n',
-                count: int | None = None,
-                deprecate: bool = False
-                ) -> list[str] | _T:
-        return self.getlists(option, default, str, (separator,), (count,),
-                             deprecate=deprecate)
+    def getintlist(
+        self,
+        option: str,
+        default: Sentinel | _T = Sentinel.MISSING,
+        separator: str | None = "\n",
+        count: int | None = None,
+        deprecate: bool = False,
+    ) -> list[int] | _T:
+        return self.getlists(
+            option,
+            default,
+            int,
+            (separator,),
+            (count,),
+            deprecate=deprecate,
+        )
 
-    def getintlist(self,
-                   option: str,
-                   default: Sentinel | _T = Sentinel.MISSING,
-                   separator: str | None = '\n',
-                   count: int | None = None,
-                   deprecate: bool = False
-                   ) -> list[int] | _T:
-        return self.getlists(option, default, int, (separator,), (count,),
-                             deprecate=deprecate)
+    def getfloatlist(
+        self,
+        option: str,
+        default: Sentinel | _T = Sentinel.MISSING,
+        separator: str | None = "\n",
+        count: int | None = None,
+        deprecate: bool = False,
+    ) -> list[float] | _T:
+        return self.getlists(
+            option,
+            default,
+            float,
+            (separator,),
+            (count,),
+            deprecate=deprecate,
+        )
 
-    def getfloatlist(self,
-                     option: str,
-                     default: Sentinel | _T = Sentinel.MISSING,
-                     separator: str | None = '\n',
-                     count: int | None = None,
-                     deprecate: bool = False
-                     ) -> list[float] | _T:
-        return self.getlists(option, default, float, (separator,), (count,),
-                             deprecate=deprecate)
-
-    def getdict(self,
-                option: str,
-                default: Sentinel | _T = Sentinel.MISSING,
-                separators: tuple[str | None, str | None] = ('\n', '='),
-                dict_type: type = str,
-                allow_empty_fields: bool = False,
-                deprecate: bool = False
-                ) -> dict[str, Any] | _T:
+    def getdict(
+        self,
+        option: str,
+        default: Sentinel | _T = Sentinel.MISSING,
+        separators: tuple[str | None, str | None] = ("\n", "="),
+        dict_type: type = str,
+        allow_empty_fields: bool = False,
+        deprecate: bool = False,
+    ) -> dict[str, Any] | _T:
         if len(separators) != 2:
             raise ConfigError(
-                "The `separators` argument of getdict() must be a Tuple"
-                "of length of 2")
+                "The `separators` argument of getdict() must be a Tupleof length of 2",
+            )
 
         def getdict_wrapper(sec: str, opt: str) -> dict[str, Any]:
             val = self.config.get(sec, opt)
@@ -378,94 +427,106 @@ class ConfigHelper:
                     if allow_empty_fields:
                         ret[parts[0].strip()] = None
                     else:
-                        raise ConfigError(
-                            f"Failed to parse dictionary field, {line}")
+                        raise ConfigError(f"Failed to parse dictionary field, {line}")
                 else:
                     ret[parts[0].strip()] = dict_type(parts[1].strip())
             return ret
 
-        return self._get_option(getdict_wrapper, option, default,
-                                deprecate=deprecate)
+        return self._get_option(getdict_wrapper, option, default, deprecate=deprecate)
 
-    def getgpioout(self,
-                   option: str,
-                   default: Sentinel | _T = Sentinel.MISSING,
-                   initial_value: int = 0,
-                   deprecate: bool = False
-                   ) -> GpioOutputPin | _T:
+    def getgpioout(
+        self,
+        option: str,
+        default: Sentinel | _T = Sentinel.MISSING,
+        initial_value: int = 0,
+        deprecate: bool = False,
+    ) -> GpioOutputPin | _T:
         try:
             gpio: GpioFactory = self.server.load_component(self, "gpio")
         except Exception:
             raise ConfigError(
                 f"Section [{self.section}], option '{option}', "
-                "GPIO Component not available")
+                "GPIO Component not available",
+            )
 
         def getgpio_wrapper(sec: str, opt: str) -> GpioOutputPin:
             val = self.config.get(sec, opt)
             return gpio.setup_gpio_out(val, initial_value)
-        return self._get_option(getgpio_wrapper, option, default,
-                                deprecate=deprecate)
+
+        return self._get_option(getgpio_wrapper, option, default, deprecate=deprecate)
 
     def getgpioevent(
         self,
         option: str,
         event_callback: GpioEventCallback,
         default: Sentinel | _T = Sentinel.MISSING,
-        deprecate: bool = False
+        deprecate: bool = False,
     ) -> GpioEvent | _T:
         try:
             gpio: GpioFactory = self.server.load_component(self, "gpio")
         except Exception:
             raise ConfigError(
                 f"Section [{self.section}], option '{option}', "
-                "GPIO Component not available"
+                "GPIO Component not available",
             )
 
         def getgpioevent_wrapper(sec: str, opt: str) -> GpioEvent:
             val = self.config.get(sec, opt)
             return gpio.register_gpio_event(val, event_callback)
+
         return self._get_option(
-            getgpioevent_wrapper, option, default, deprecate=deprecate
+            getgpioevent_wrapper,
+            option,
+            default,
+            deprecate=deprecate,
         )
 
-    def gettemplate(self,
-                    option: str,
-                    default: Sentinel | _T = Sentinel.MISSING,
-                    is_async: bool = False,
-                    deprecate: bool = False
-                    ) -> RenderableTemplate | _T:
+    def gettemplate(
+        self,
+        option: str,
+        default: Sentinel | _T = Sentinel.MISSING,
+        is_async: bool = False,
+        deprecate: bool = False,
+    ) -> RenderableTemplate | _T:
         try:
-            template: TemplateFactory = self.server.load_component(self, 'template')
+            template: TemplateFactory = self.server.load_component(self, "template")
         except Exception:
             raise ConfigError(
                 f"Section [{self.section}], option '{option}': "
-                "Failed to load 'template' component."
+                "Failed to load 'template' component.",
             )
 
         def gettemplate_wrapper(sec: str, opt: str) -> RenderableTemplate:
             val = self.config.get(sec, opt)
             return template.create_template(val.strip(), is_async)
-        return self._get_option(gettemplate_wrapper, option, default,
-                                deprecate=deprecate)
 
-    def load_template(self,
-                      option: str,
-                      default: Sentinel | str = Sentinel.MISSING,
-                      is_async: bool = False,
-                      deprecate: bool = False
-                      ) -> RenderableTemplate:
+        return self._get_option(
+            gettemplate_wrapper,
+            option,
+            default,
+            deprecate=deprecate,
+        )
+
+    def load_template(
+        self,
+        option: str,
+        default: Sentinel | str = Sentinel.MISSING,
+        is_async: bool = False,
+        deprecate: bool = False,
+    ) -> RenderableTemplate:
         val = self.gettemplate(option, default, is_async, deprecate)
         if isinstance(val, str):
             template: TemplateFactory
-            template = self.server.lookup_component('template')
+            template = self.server.lookup_component("template")
             return template.create_template(val.strip(), is_async)
         return val
 
-    def getpath(self,
-                option: str,
-                default: Sentinel | _T = Sentinel.MISSING,
-                deprecate: bool = False
-                ) -> pathlib.Path | _T:
+    def getpath(
+        self,
+        option: str,
+        default: Sentinel | _T = Sentinel.MISSING,
+        deprecate: bool = False,
+    ) -> pathlib.Path | _T:
         val = self.gettemplate(option, default, deprecate=deprecate)
         if isinstance(val, RenderableTemplate):
             ctx = {"data_path": self.server.get_app_args()["data_path"]}
@@ -510,7 +571,7 @@ class ConfigHelper:
                     f"Unparsed config section [{sect}] detected.  This "
                     "may be the result of a component that failed to "
                     "load.  In the future this will result in a startup "
-                    "error."
+                    "error.",
                 )
                 continue
             parsed_opts = self.parsed[sect]
@@ -525,7 +586,7 @@ class ConfigHelper:
                         f"section [{sect}].  This may be an option no longer "
                         "available or could be the result of a module that "
                         "failed to load.  In the future this will result "
-                        "in a startup error."
+                        "in a startup error.",
                     )
 
     def create_backup(self) -> None:
@@ -550,6 +611,7 @@ class ConfigHelper:
         finally:
             if backup_fp is not None:
                 backup_fp.close()
+
 
 class ConfigSourceWrapper:
     def __init__(self):
@@ -587,9 +649,12 @@ class ConfigSourceWrapper:
         return {}
 
     def find_config_file(
-        self, section: str, option: str | None = None
+        self,
+        section: str,
+        option: str | None = None,
     ) -> pathlib.Path | None:
         return None
+
 
 class DictSourceWrapper(ConfigSourceWrapper):
     def __init__(self):
@@ -600,6 +665,7 @@ class DictSourceWrapper(ConfigSourceWrapper):
             self.config.read_dict(cfg)
         except Exception as e:
             raise ConfigError("Error Reading config as dict") from e
+
 
 class FileSourceWrapper(ConfigSourceWrapper):
     section_r = re.compile(r"\s*\[([^]]+)\]")
@@ -619,23 +685,20 @@ class FileSourceWrapper(ConfigSourceWrapper):
         return self.files
 
     def is_in_transaction(self) -> bool:
-        return (
-            len(self.updates_pending) > 0 or
-            self.save_lock.locked()
-        )
+        return len(self.updates_pending) > 0 or self.save_lock.locked()
 
     def backup_source(self) -> None:
         self.backup = {
             "raw_data": list(self.raw_config_data),
             "section_map": copy.deepcopy(self.file_section_map),
             "option_map": copy.deepcopy(self.file_option_map),
-            "config": self.write_to_string()
+            "config": self.write_to_string(),
         }
 
     def _acquire_save_lock(self) -> None:
         if not self.files:
             raise ConfigError(
-                "Can only modify file backed configurations"
+                "Can only modify file backed configurations",
             )
         if not self.save_lock.acquire(blocking=False):
             raise ConfigError("Configuration locked, cannot modify")
@@ -645,7 +708,7 @@ class FileSourceWrapper(ConfigSourceWrapper):
         try:
             value = value.strip()
             try:
-                if (self.config.get(section, option).strip() == value):
+                if self.config.get(section, option).strip() == value:
                     return
             except (configparser.NoSectionError, configparser.NoOptionError):
                 pass
@@ -698,7 +761,7 @@ class FileSourceWrapper(ConfigSourceWrapper):
             except Exception as e:
                 raise ConfigError(
                     f"Failed to set option '{option}' in section "
-                    f"[{section}], file: {self.files[file_idx]}"
+                    f"[{section}], file: {self.files[file_idx]}",
                 ) from e
             # Update local configuration/tracking
             self.raw_config_data[file_idx] = updated_cfg
@@ -729,8 +792,8 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     start = opt_info["start"]
                     end = opt_info["end"]
                     if (
-                        end < len(buf) and
-                        not buf[start-1].strip()
+                        end < len(buf)
+                        and not buf[start - 1].strip()
                         and not buf[end].strip()
                     ):
                         end += 1
@@ -745,10 +808,10 @@ class FileSourceWrapper(ConfigSourceWrapper):
                 except Exception as e:
                     raise ConfigError(
                         f"Failed to remove option '{option}' from section "
-                        f"[{section}], file: {self.files[idx]}"
+                        f"[{section}], file: {self.files[idx]}",
                     ) from e
             # Update configuration/tracking
-            for (idx, data) in pending:
+            for idx, data in pending:
                 self.updates_pending.add(idx)
                 self.raw_config_data[idx] = data
             del self.file_option_map[key]
@@ -774,7 +837,7 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     raise ConfigError("Section not added")
             except Exception as e:
                 raise ConfigError(
-                    f"Failed to add section [{section}], file: {self.files[0]}"
+                    f"Failed to add section [{section}], file: {self.files[0]}",
                 ) from e
             self.updates_pending.add(0)
             self.file_section_map[section] = [0]
@@ -797,8 +860,8 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     start = sec_info["start"]
                     end = sec_info["end"]
                     if (
-                        end < len(buf) and
-                        not buf[start-1].strip()
+                        end < len(buf)
+                        and not buf[start - 1].strip()
                         and not buf[end].strip()
                     ):
                         end += 1
@@ -812,10 +875,9 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     pending.append((idx, updated_cfg))
                 except Exception as e:
                     raise ConfigError(
-                        f"Failed to remove section [{section}], "
-                        f"file: {self.files[0]}"
+                        f"Failed to remove section [{section}], file: {self.files[0]}",
                     ) from e
-            for (idx, data) in pending:
+            for idx, data in pending:
                 self.updates_pending.add(idx)
                 self.raw_config_data[idx] = data
             del self.file_section_map[section]
@@ -840,7 +902,8 @@ class FileSourceWrapper(ConfigSourceWrapper):
             for idx in self.updates_pending:
                 fpath = self.files[idx]
                 fpath.write_text(
-                    self.raw_config_data[idx], encoding="utf-8"
+                    self.raw_config_data[idx],
+                    encoding="utf-8",
                 )
             self.updates_pending.clear()
             return True
@@ -880,7 +943,8 @@ class FileSourceWrapper(ConfigSourceWrapper):
             return True
 
     def write_config(
-        self, dest_folder: str | pathlib.Path
+        self,
+        dest_folder: str | pathlib.Path,
     ) -> Awaitable[None]:
         eventloop = self.server.get_event_loop()
         if self.server.is_running():
@@ -903,20 +967,23 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     dest_file = dest_folder.joinpath(rel_path)
                 except ValueError:
                     dest_file = dest_folder.joinpath(
-                        f"{path.parent.name}-{path.name}"
+                        f"{path.parent.name}-{path.name}",
                     )
                 os.makedirs(str(dest_file.parent), exist_ok=True)
                 dest_file.write_text(self.raw_config_data[i])
 
     def _find_section_info(
-        self, section: str, file_data: list[str], raise_error: bool = True
+        self,
+        section: str,
+        file_data: list[str],
+        raise_error: bool = True,
     ) -> dict[str, Any]:
         options: dict[str, dict[str, Any]] = {}
         result: dict[str, Any] = {
             "indent": -1,
             "start": -1,
             "end": -1,
-            "options": options
+            "options": options,
         }
         last_option: str = ""
         opt_indent = -1
@@ -952,7 +1019,7 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     options[last_option] = {
                         "indent": line_indent,
                         "start": idx,
-                        "end": idx + 1
+                        "end": idx + 1,
                     }
         if result["start"] != -1:
             return result
@@ -971,7 +1038,9 @@ class FileSourceWrapper(ConfigSourceWrapper):
         return sections_by_file
 
     def find_config_file(
-        self, section: str, option: str | None = None
+        self,
+        section: str,
+        option: str | None = None,
     ) -> pathlib.Path | None:
         idx: int = -1
         if option is not None:
@@ -990,7 +1059,9 @@ class FileSourceWrapper(ConfigSourceWrapper):
         self.config.read_string("\n".join(buffer), fpath.name)
 
     def _parse_file(
-        self, file_path: pathlib.Path, visited: list[tuple[int, int]]
+        self,
+        file_path: pathlib.Path,
+        visited: list[tuple[int, int]],
     ) -> None:
         buffer: list[str] = []
         try:
@@ -998,7 +1069,7 @@ class FileSourceWrapper(ConfigSourceWrapper):
             cur_stat = (stat.st_dev, stat.st_ino)
             if cur_stat in visited:
                 raise ConfigError(
-                    f"Recursive include directive detected, {file_path}"
+                    f"Recursive include directive detected, {file_path}",
                 )
             visited.append(cur_stat)
             self.files.append(file_path)
@@ -1016,7 +1087,7 @@ class FileSourceWrapper(ConfigSourceWrapper):
                 # Search for and remove inline comments
                 cmt_match = re.search(r" +[#;]", line)
                 if cmt_match is not None:
-                    line = line[:cmt_match.start()]
+                    line = line[: cmt_match.start()]
                 # Unescape prefix chars that are preceded by whitespace
                 line = re.sub(r" \\(#|;)", r" \1", line)
                 line_indent = len(line) - len(line.lstrip())
@@ -1033,7 +1104,7 @@ class FileSourceWrapper(ConfigSourceWrapper):
                         inc_path = section[8:].strip()
                         if not inc_path:
                             raise ConfigError(
-                                f"Invalid include directive: [{section}]"
+                                f"Invalid include directive: [{section}]",
                             )
                         if inc_path[0] == "/":
                             new_path = pathlib.Path(inc_path).resolve()
@@ -1042,8 +1113,7 @@ class FileSourceWrapper(ConfigSourceWrapper):
                             paths = sorted(file_path.parent.glob(inc_path))
                         if not paths:
                             raise ConfigError(
-                                "No files matching include directive "
-                                f"[{section}]"
+                                f"No files matching include directive [{section}]",
                             )
                         # Write out buffered data to the config before parsing
                         # included files
@@ -1053,16 +1123,14 @@ class FileSourceWrapper(ConfigSourceWrapper):
                             self._parse_file(p, visited)
                         # Don't add included sections to the configparser
                         continue
-                    else:
-                        last_section = section
-                        if section not in self.file_section_map:
-                            self.file_section_map[section] = []
-                        elif file_index in self.file_section_map[section]:
-                            raise ConfigError(
-                                f"Duplicate section [{section}] in file "
-                                f"{file_path}"
-                            )
-                        self.file_section_map[section].insert(0, file_index)
+                    last_section = section
+                    if section not in self.file_section_map:
+                        self.file_section_map[section] = []
+                    elif file_index in self.file_section_map[section]:
+                        raise ConfigError(
+                            f"Duplicate section [{section}] in file {file_path}",
+                        )
+                    self.file_section_map[section].insert(0, file_index)
                 else:
                     # This line must specify an option
                     opt_indent = line_indent
@@ -1073,7 +1141,7 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     elif file_index in self.file_option_map[key]:
                         raise ConfigError(
                             f"Duplicate option '{option}' in section "
-                            f"[{last_section}], file {file_path} "
+                            f"[{last_section}], file {file_path} ",
                         )
                     self.file_option_map[key].insert(0, file_index)
                 buffer.append(line)
@@ -1083,11 +1151,13 @@ class FileSourceWrapper(ConfigSourceWrapper):
         except Exception as e:
             if not file_path.is_file():
                 raise ConfigError(
-                    f"Configuration File Not Found: '{file_path}''") from e
+                    f"Configuration File Not Found: '{file_path}''",
+                ) from e
             if not os.access(file_path, os.R_OK):
                 raise ConfigError(
                     "Moonraker does not have Read/Write permission for "
-                    f"config file at path '{file_path}'") from e
+                    f"config file at path '{file_path}'",
+                ) from e
             raise ConfigError(f"Error Reading Config: '{file_path}'") from e
 
     def read_file(self, main_conf: pathlib.Path) -> None:
@@ -1100,12 +1170,13 @@ class FileSourceWrapper(ConfigSourceWrapper):
         self._parse_file(main_conf, [])
         size = sum([len(rawcfg) for rawcfg in self.raw_config_data])
         logging.info(
-            f"Configuration File '{main_conf}' parsed, total size: {size} B"
+            f"Configuration File '{main_conf}' parsed, total size: {size} B",
         )
 
 
 def get_configuration(
-    server: Server, app_args: dict[str, Any]
+    server: Server,
+    app_args: dict[str, Any],
 ) -> ConfigHelper:
     cfg_file = app_args["config_file"]
     if app_args["is_backup_config"]:
@@ -1113,9 +1184,10 @@ def get_configuration(
     start_path = pathlib.Path(cfg_file).expanduser().absolute()
     source = FileSourceWrapper(server)
     source.read_file(start_path)
-    if not source.config.has_section('server'):
+    if not source.config.has_section("server"):
         raise ConfigError("No section [server] in config")
-    return ConfigHelper(server, source, 'server', {})
+    return ConfigHelper(server, source, "server", {})
+
 
 def find_config_backup(cfg_path: str) -> str | None:
     cfg = pathlib.Path(cfg_path).expanduser()

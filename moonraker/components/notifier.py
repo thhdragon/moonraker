@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .file_manager.file_manager import FileManager
     from .klippy_apis import KlippyAPI as APIComp
 
+
 class Notifier:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -65,10 +66,7 @@ class Notifier:
         await notifier.notify("remote_action", [], message)
 
     async def _on_job_state_changed(
-            self,
-            job_event: JobEvent,
-            prev_stats: dict[str, Any],
-            new_stats: dict[str, Any]
+        self, job_event: JobEvent, prev_stats: dict[str, Any], new_stats: dict[str, Any]
     ) -> None:
         evt_name = str(job_event)
         for notifier in self.events.get(evt_name, []):
@@ -82,35 +80,29 @@ class Notifier:
             "/debug/notifiers/test", RequestType.POST, self._handle_notifier_test
         )
 
-    async def _handle_notifier_list(
-        self, web_request: WebRequest
-    ) -> dict[str, Any]:
+    async def _handle_notifier_list(self, web_request: WebRequest) -> dict[str, Any]:
         return {"notifiers": self._list_notifiers()}
 
     def _list_notifiers(self) -> list[dict[str, Any]]:
         return [notifier.as_dict() for notifier in self.notifiers.values()]
 
-    async def _handle_notifier_test(
-        self, web_request: WebRequest
-    ) -> dict[str, Any]:
-
+    async def _handle_notifier_test(self, web_request: WebRequest) -> dict[str, Any]:
         name = web_request.get_str("name")
         if name not in self.notifiers:
             raise self.server.error(f"Notifier '{name}' not found", 404)
         notifier = self.notifiers[name]
 
-        kapis: APIComp = self.server.lookup_component('klippy_apis')
+        kapis: APIComp = self.server.lookup_component("klippy_apis")
         result: dict[str, Any] = await kapis.query_objects(
-            {'print_stats': None}, default={})
-        print_stats = result.get('print_stats', {})
+            {"print_stats": None}, default={}
+        )
+        print_stats = result.get("print_stats", {})
         print_stats["filename"] = "notifier_test.gcode"  # Mock the filename
 
         await notifier.notify(notifier.events[0], [print_stats, print_stats])
 
-        return {
-            "status": "success",
-            "stats": print_stats
-        }
+        return {"status": "success", "stats": print_stats}
+
 
 class NotifierInstance:
     def __init__(self, config: ConfigHelper) -> None:
@@ -130,7 +122,7 @@ class NotifierInstance:
 
         self.title = config.gettemplate("title", None)
         self.body = config.gettemplate("body", None)
-        upper_body_format = config.get("body_format", 'text').upper()
+        upper_body_format = config.get("body_format", "text").upper()
         if not hasattr(apprise.NotifyFormat, upper_body_format):
             raise config.error(f"Invalid body_format for {config.get_name()}")
         self.body_format = getattr(apprise.NotifyFormat, upper_body_format)
@@ -145,7 +137,7 @@ class NotifierInstance:
             "body": self.config.get("body", None),
             "body_format": self.config.get("body_format", None),
             "events": self.events,
-            "attach": self.attach
+            "attach": self.attach,
         }
 
     async def notify(
@@ -154,15 +146,11 @@ class NotifierInstance:
         context = {
             "event_name": event_name,
             "event_args": event_args,
-            "event_message": message
+            "event_message": message,
         }
 
-        rendered_title = (
-            '' if self.title is None else self.title.render(context)
-        )
-        rendered_body = (
-            event_name if self.body is None else self.body.render(context)
-        )
+        rendered_title = "" if self.title is None else self.title.render(context)
+        rendered_body = event_name if self.body is None else self.body.render(context)
 
         # Verify the attachment
         attachments: list[str] = []
@@ -175,7 +163,7 @@ class NotifierInstance:
                     f"[notifier {self.name}]: The attachment is not valid. The "
                     "template failed to render.",
                     f"notifier {self.name}",
-                    exc_info=e
+                    exc_info=e,
                 )
                 self.attach = None
             else:
@@ -192,20 +180,21 @@ class NotifierInstance:
                         self.server.add_warning(
                             f"[notifier {self.name}]: Invalid attachment detected, "
                             f"file does not exist: {attach_path}.",
-                            f"notifier {self.name}"
+                            f"notifier {self.name}",
                         )
                     elif not fm.can_access_path(attach_path):
                         self.server.add_warning(
                             f"[notifier {self.name}]: Invalid attachment detected, "
                             f"no read permission for the file {attach_path}.",
-                            f"notifier {self.name}"
+                            f"notifier {self.name}",
                         )
                     else:
                         attachments.append(str(attach_path))
         await self.apprise.async_notify(
-            rendered_body.strip(), rendered_title.strip(),
+            rendered_body.strip(),
+            rendered_title.strip(),
             body_format=self.body_format,
-            attach=None if not attachments else attachments
+            attach=None if not attachments else attachments,
         )
 
     def get_name(self) -> str:

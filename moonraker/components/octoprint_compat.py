@@ -15,6 +15,7 @@ from typing import (
     Dict,
     List,
 )
+
 if TYPE_CHECKING:
     from .klippy_connection import KlippyConnection
     from ..confighelper import ConfigHelper
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
     from .file_manager.file_manager import FileManager
     from .job_queue import JobQueue
 
-OCTO_VERSION = '1.5.0'
+OCTO_VERSION = "1.5.0"
 
 
 class OctoPrintCompat:
@@ -41,52 +42,66 @@ class OctoPrintCompat:
 
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.software_version = self.server.get_app_args().get(
-            'software_version')
-        self.enable_ufp: bool = config.getboolean('enable_ufp', True)
+        self.software_version = self.server.get_app_args().get("software_version")
+        self.enable_ufp: bool = config.getboolean("enable_ufp", True)
 
         # Get webcam settings from config
         self.webcam: dict[str, Any] = {
-            'flipH': config.getboolean('flip_h', False),
-            'flipV': config.getboolean('flip_v', False),
-            'rotate90': config.getboolean('rotate_90', False),
-            'streamUrl': config.get('stream_url', '/webcam/?action=stream'),
-            'webcamEnabled': config.getboolean('webcam_enabled', True),
+            "flipH": config.getboolean("flip_h", False),
+            "flipV": config.getboolean("flip_v", False),
+            "rotate90": config.getboolean("rotate_90", False),
+            "streamUrl": config.get("stream_url", "/webcam/?action=stream"),
+            "webcamEnabled": config.getboolean("webcam_enabled", True),
         }
 
         # Local variables
-        self.klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
+        self.klippy_apis: APIComp = self.server.lookup_component("klippy_apis")
         self.heaters: dict[str, dict[str, Any]] = {}
         self.last_print_stats: dict[str, Any] = {}
 
         # Register status update event
+        self.server.register_event_handler("server:klippy_ready", self._init)
         self.server.register_event_handler(
-            'server:klippy_ready', self._init)
-        self.server.register_event_handler(
-            'server:status_update', self._handle_status_update)
+            "server:status_update", self._handle_status_update
+        )
 
         # Version & Server information
         self.server.register_endpoint(
-            '/api/version', RequestType.GET, self._get_version,
-            transports=TransportType.HTTP, wrap_result=False
+            "/api/version",
+            RequestType.GET,
+            self._get_version,
+            transports=TransportType.HTTP,
+            wrap_result=False,
         )
         self.server.register_endpoint(
-            '/api/server', RequestType.GET, self._get_server,
-            transports=TransportType.HTTP, wrap_result=False
+            "/api/server",
+            RequestType.GET,
+            self._get_server,
+            transports=TransportType.HTTP,
+            wrap_result=False,
         )
 
         # Login, User & Settings
         self.server.register_endpoint(
-            '/api/login', RequestType.POST, self._post_login_user,
-            transports=TransportType.HTTP, wrap_result=False
+            "/api/login",
+            RequestType.POST,
+            self._post_login_user,
+            transports=TransportType.HTTP,
+            wrap_result=False,
         )
         self.server.register_endpoint(
-            '/api/currentuser', RequestType.GET, self._post_login_user,
-            transports=TransportType.HTTP, wrap_result=False
+            "/api/currentuser",
+            RequestType.GET,
+            self._post_login_user,
+            transports=TransportType.HTTP,
+            wrap_result=False,
         )
         self.server.register_endpoint(
-            '/api/settings', RequestType.GET, self._get_settings,
-            transports=TransportType.HTTP, wrap_result=False
+            "/api/settings",
+            RequestType.GET,
+            self._get_settings,
+            transports=TransportType.HTTP,
+            wrap_result=False,
         )
 
         # File operations
@@ -95,33 +110,50 @@ class OctoPrintCompat:
 
         # Job operations
         self.server.register_endpoint(
-            '/api/job', RequestType.GET, self._get_job,
-            transports=TransportType.HTTP, wrap_result=False
+            "/api/job",
+            RequestType.GET,
+            self._get_job,
+            transports=TransportType.HTTP,
+            wrap_result=False,
         )
         # TODO: start/cancel/restart/pause jobs
 
         # Printer operations
         self.server.register_endpoint(
-            '/api/printer', RequestType.GET, self._get_printer,
-            transports=TransportType.HTTP, wrap_result=False)
+            "/api/printer",
+            RequestType.GET,
+            self._get_printer,
+            transports=TransportType.HTTP,
+            wrap_result=False,
+        )
         self.server.register_endpoint(
-            '/api/printer/command', RequestType.POST, self._post_command,
-            transports=TransportType.HTTP, wrap_result=False
+            "/api/printer/command",
+            RequestType.POST,
+            self._post_command,
+            transports=TransportType.HTTP,
+            wrap_result=False,
         )
         # TODO: head/tool/bed/chamber specific read/issue
 
         # Printer profiles
         self.server.register_endpoint(
-            '/api/printerprofiles', RequestType.GET, self._get_printerprofiles,
-            transports=TransportType.HTTP, wrap_result=False
+            "/api/printerprofiles",
+            RequestType.GET,
+            self._get_printerprofiles,
+            transports=TransportType.HTTP,
+            wrap_result=False,
         )
 
         # Upload Handlers
         self.server.register_upload_handler(
-            "/api/files/local", location_prefix="api/files/moonraker")
+            "/api/files/local", location_prefix="api/files/moonraker"
+        )
         self.server.register_endpoint(
-            "/api/files/moonraker/(?P<relative_path>.+)", RequestType.POST,
-            self._select_file, transports=TransportType.HTTP, wrap_result=False
+            "/api/files/moonraker/(?P<relative_path>.+)",
+            RequestType.POST,
+            self._select_file,
+            transports=TransportType.HTTP,
+            wrap_result=False,
         )
 
         # System
@@ -133,22 +165,22 @@ class OctoPrintCompat:
         try:
             result: dict[str, Any]
             sensors: list[str]
-            result = await self.klippy_apis.query_objects({'heaters': None})
-            sensors = result.get('heaters', {}).get('available_sensors', [])
+            result = await self.klippy_apis.query_objects({"heaters": None})
+            sensors = result.get("heaters", {}).get("available_sensors", [])
         except self.server.error as e:
-            logging.info(f'Error Configuring heaters: {e}')
+            logging.info(f"Error Configuring heaters: {e}")
             sensors = []
         # subscribe objects
         sub: dict[str, Any] = {s: None for s in sensors}
-        sub['print_stats'] = None
+        sub["print_stats"] = None
         result = await self.klippy_apis.subscribe_objects(sub)
-        self.last_print_stats = result.get('print_stats', {})
+        self.last_print_stats = result.get("print_stats", {})
         if sensors:
             self.heaters = {name: result.get(name, {}) for name in sensors}
 
     def _handle_status_update(self, status: dict[str, Any]) -> None:
-        if 'print_stats' in status:
-            self.last_print_stats.update(status['print_stats'])
+        if "print_stats" in status:
+            self.last_print_stats.update(status["print_stats"])
         for heater_name, data in self.heaters.items():
             if heater_name in status:
                 data.update(status[heater_name])
@@ -157,63 +189,57 @@ class OctoPrintCompat:
         kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
         klippy_state = kconn.state
         if not klippy_state.startup_complete():
-            return 'Offline'
+            return "Offline"
         elif klippy_state != KlippyState.READY:
-            return 'Error'
+            return "Error"
         return {
-            'standby': 'Operational',
-            'printing': 'Printing',
-            'paused': 'Paused',
-            'complete': 'Operational'
-        }.get(self.last_print_stats.get('state', 'standby'), 'Error')
+            "standby": "Operational",
+            "printing": "Printing",
+            "paused": "Paused",
+            "complete": "Operational",
+        }.get(self.last_print_stats.get("state", "standby"), "Error")
 
     def printer_temps(self) -> dict[str, Any]:
         temps: dict[str, Any] = {}
         for heater, data in self.heaters.items():
-            name = 'bed'
-            if heater.startswith('extruder'):
+            name = "bed"
+            if heater.startswith("extruder"):
                 try:
                     tool_no = int(heater[8:])
                 except ValueError:
                     tool_no = 0
-                name = f'tool{tool_no}'
+                name = f"tool{tool_no}"
             elif heater != "heater_bed":
                 continue
             temps[name] = {
-                'actual': round(data.get('temperature', 0.), 2),
-                'offset': 0,
-                'target': data.get('target', 0.),
+                "actual": round(data.get("temperature", 0.0), 2),
+                "offset": 0,
+                "target": data.get("target", 0.0),
             }
         return temps
 
-    async def _get_version(self,
-                           web_request: WebRequest
-                           ) -> dict[str, str]:
+    async def _get_version(self, web_request: WebRequest) -> dict[str, str]:
         """
         Version information
         """
         return {
-            'server': OCTO_VERSION,
-            'api': '0.1',
-            'text': f'OctoPrint (Moonraker {self.software_version})',
+            "server": OCTO_VERSION,
+            "api": "0.1",
+            "text": f"OctoPrint (Moonraker {self.software_version})",
         }
 
-    async def _get_server(self,
-                          web_request: WebRequest
-                          ) -> dict[str, Any]:
+    async def _get_server(self, web_request: WebRequest) -> dict[str, Any]:
         """
         Server status
         """
         kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
         klippy_state = kconn.state
         return {
-            'server': OCTO_VERSION,
-            'safemode': None if klippy_state == KlippyState.READY else 'settings'
+            "server": OCTO_VERSION,
+            "safemode": None if klippy_state == KlippyState.READY else "settings",
         }
 
-    async def _post_login_user(self,
-                               web_request: WebRequest
-                               ) -> dict[str, Any]:
+    async def _post_login_user(self, web_request: WebRequest) -> dict[str, Any]:
         """
         Confirm session login.
 
@@ -221,102 +247,91 @@ class OctoPrintCompat:
         Report hardcoded user called _api
         """
         return {
-            '_is_external_client': False,
-            '_login_mechanism': 'apikey',
-            'name': '_api',
-            'active': True,
-            'user': True,
-            'admin': True,
-            'apikey': None,
-            'permissions': [],
-            'groups': ['admins', 'users'],
+            "_is_external_client": False,
+            "_login_mechanism": "apikey",
+            "name": "_api",
+            "active": True,
+            "user": True,
+            "admin": True,
+            "apikey": None,
+            "permissions": [],
+            "groups": ["admins", "users"],
         }
 
-    async def _get_settings(self,
-                            web_request: WebRequest
-                            ) -> dict[str, Any]:
+    async def _get_settings(self, web_request: WebRequest) -> dict[str, Any]:
         """
         Used to parse OctoPrint capabilities
         """
         settings = {
-            'plugins': {},
-            'feature': {
-                'sdSupport': False,
-                'temperatureGraph': False
-            },
-            'webcam': self.webcam,
+            "plugins": {},
+            "feature": {"sdSupport": False, "temperatureGraph": False},
+            "webcam": self.webcam,
         }
         if self.enable_ufp:
-            settings['plugins'] = {
-                'UltimakerFormatPackage': {
-                    'align_inline_thumbnail': False,
-                    'inline_thumbnail': False,
-                    'inline_thumbnail_align_value': 'left',
-                    'inline_thumbnail_scale_value': '50',
-                    'installed': True,
-                    'installed_version': '0.2.2',
-                    'scale_inline_thumbnail': False,
-                    'state_panel_thumbnail': True,
+            settings["plugins"] = {
+                "UltimakerFormatPackage": {
+                    "align_inline_thumbnail": False,
+                    "inline_thumbnail": False,
+                    "inline_thumbnail_align_value": "left",
+                    "inline_thumbnail_scale_value": "50",
+                    "installed": True,
+                    "installed_version": "0.2.2",
+                    "scale_inline_thumbnail": False,
+                    "state_panel_thumbnail": True,
                 },
             }
         return settings
 
-    async def _get_job(self,
-                       web_request: WebRequest
-                       ) -> dict[str, Any]:
+    async def _get_job(self, web_request: WebRequest) -> dict[str, Any]:
         """
         Get current job status
         """
         return {
-            'job': {
-                'file': {'name': None},
-                'estimatedPrintTime': None,
-                'filament': {'length': None},
-                'user': None,
+            "job": {
+                "file": {"name": None},
+                "estimatedPrintTime": None,
+                "filament": {"length": None},
+                "user": None,
             },
-            'progress': {
-                'completion': None,
-                'filepos': None,
-                'printTime': None,
-                'printTimeLeft': None,
-                'printTimeOrigin': None,
+            "progress": {
+                "completion": None,
+                "filepos": None,
+                "printTime": None,
+                "printTimeLeft": None,
+                "printTimeOrigin": None,
             },
-            'state': self.printer_state()
+            "state": self.printer_state(),
         }
 
-    async def _get_printer(self,
-                           web_request: WebRequest
-                           ) -> dict[str, Any]:
+    async def _get_printer(self, web_request: WebRequest) -> dict[str, Any]:
         """
         Get Printer status
         """
         state = self.printer_state()
         return {
-            'temperature': self.printer_temps(),
-            'state': {
-                'text': state,
-                'flags': {
-                    'operational': state not in ['Error', 'Offline'],
-                    'paused': state == 'Paused',
-                    'printing': state == 'Printing',
-                    'cancelling': state == 'Cancelling',
-                    'pausing': False,
-                    'error': state == 'Error',
-                    'ready': state == 'Operational',
-                    'closedOrError': state in ['Error', 'Offline'],
+            "temperature": self.printer_temps(),
+            "state": {
+                "text": state,
+                "flags": {
+                    "operational": state not in ["Error", "Offline"],
+                    "paused": state == "Paused",
+                    "printing": state == "Printing",
+                    "cancelling": state == "Cancelling",
+                    "pausing": False,
+                    "error": state == "Error",
+                    "ready": state == "Operational",
+                    "closedOrError": state in ["Error", "Offline"],
                 },
             },
         }
 
-    async def _post_command(self,
-                            web_request: WebRequest
-                            ) -> dict:
+    async def _post_command(self, web_request: WebRequest) -> dict:
         """
         Request to run some gcode command
         """
-        commands: list[str] = web_request.get('commands', [])
+        commands: list[str] = web_request.get("commands", [])
         for command in commands:
-            logging.info(f'Executing GCode: {command}')
+            logging.info(f"Executing GCode: {command}")
             try:
                 await self.klippy_apis.run_gcode(command)
             except self.server.error:
@@ -325,66 +340,50 @@ class OctoPrintCompat:
 
         return {}
 
-    async def _get_printerprofiles(self,
-                                   web_request: WebRequest
-                                   ) -> dict[str, Any]:
+    async def _get_printerprofiles(self, web_request: WebRequest) -> dict[str, Any]:
         """
         Get Printer profiles
         """
         return {
-            'profiles': {
-                '_default': {
-                    'id': '_default',
-                    'name': 'Default',
-                    'color': 'default',
-                    'model': 'Default',
-                    'default': True,
-                    'current': True,
-                    'heatedBed': 'heater_bed' in self.heaters,
-                    'heatedChamber': 'chamber' in self.heaters,
-                    'axes': {
-                        'x': {
-                            'speed': 6000.,
-                            'inverted': False
-                        },
-                        'y': {
-                            'speed': 6000.,
-                            'inverted': False
-                        },
-                        'z': {
-                            'speed': 6000.,
-                            'inverted': False
-                        },
-                        'e': {
-                            'speed': 300.,
-                            'inverted': False
-                        }
-                    }
+            "profiles": {
+                "_default": {
+                    "id": "_default",
+                    "name": "Default",
+                    "color": "default",
+                    "model": "Default",
+                    "default": True,
+                    "current": True,
+                    "heatedBed": "heater_bed" in self.heaters,
+                    "heatedChamber": "chamber" in self.heaters,
+                    "axes": {
+                        "x": {"speed": 6000.0, "inverted": False},
+                        "y": {"speed": 6000.0, "inverted": False},
+                        "z": {"speed": 6000.0, "inverted": False},
+                        "e": {"speed": 300.0, "inverted": False},
+                    },
                 }
             }
         }
 
-    async def _select_file(self,
-                           web_request: WebRequest
-                           ) -> None:
-        command: str = web_request.get_str('command')
-        rel_path: str = web_request.get_str('relative_path')
+    async def _select_file(self, web_request: WebRequest) -> None:
+        command: str = web_request.get_str("command")
+        rel_path: str = web_request.get_str("relative_path")
         root, filename = rel_path.strip("/").split("/", 1)
-        fmgr: FileManager = self.server.lookup_component('file_manager')
+        fmgr: FileManager = self.server.lookup_component("file_manager")
         if command == "select":
-            start_print: bool = web_request.get_boolean('print', False)
+            start_print: bool = web_request.get_boolean("print", False)
             if not start_print:
                 # No-op, selecting a file has no meaning in Moonraker
                 return
             if root != "gcodes":
                 raise self.server.error(
-                    "File must be located in the 'gcodes' root", 400)
+                    "File must be located in the 'gcodes' root", 400
+                )
             if not fmgr.check_file_exists(root, filename):
                 raise self.server.error("File does not exist")
             try:
-                ret = await self.klippy_apis.query_objects(
-                    {'print_stats': None})
-                pstate: str = ret['print_stats']['state']
+                ret = await self.klippy_apis.query_objects({"print_stats": None})
+                pstate: str = ret["print_stats"]["state"]
             except self.server.error:
                 pstate = "not_avail"
             started: bool = False
@@ -399,8 +398,7 @@ class OctoPrintCompat:
                     started = True
             if not started:
                 if fmgr.upload_queue_enabled():
-                    job_queue: JobQueue = self.server.lookup_component(
-                        'job_queue')
+                    job_queue: JobQueue = self.server.lookup_component("job_queue")
                     await job_queue.queue_job(filename, check_exists=False, user=user)
                     logging.debug(f"Job '{filename}' queued via OctoPrint API")
                 else:

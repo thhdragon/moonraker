@@ -16,14 +16,7 @@ import asyncio
 import shlex
 from ..common import RequestType
 from ..utils import json_wrapper as jsonw
-from typing import (
-    TYPE_CHECKING,
-    Union,
-    Optional,
-    Dict,
-    Any,
-    Tuple
-)
+from typing import TYPE_CHECKING, Union, Optional, Any
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
@@ -36,7 +29,8 @@ if TYPE_CHECKING:
     from .machine import Machine
     from .shell_command import ShellCommandFactory
     from .http_client import HttpClient
-    StrOrPath = Union[str, pathlib.Path]
+
+    StrOrPath = str | pathlib.Path
 
 ESTIMATOR_URL = (
     "https://github.com/Annex-Engineering/klipper_estimator/"
@@ -47,16 +41,17 @@ UPDATE_CONFIG = {
     "channel": "stable",
     "repo": "Annex-Engineering/klipper_estimator",
     "is_system_service": "False",
-    "path": ""
+    "path": "",
 }
 RELEASE_INFO = {
     "project_name": "klipper_estimator",
     "project_owner": "Annex-Engineering",
     "version": "",
-    "asset_name": ""
+    "asset_name": "",
 }
 
 IDENT_REGEX = r"^; Processed by klipper_estimator (?P<version>v?\d+(?:\.\d+)*)"
+
 
 def _check_processed(gc_path: pathlib.Path) -> str | None:
     size = gc_path.stat().st_size
@@ -72,6 +67,7 @@ def _check_processed(gc_path: pathlib.Path) -> str | None:
     if not versions:
         return None
     return versions[-1]
+
 
 class GcodeAnalysis:
     def __init__(self, config: ConfigHelper) -> None:
@@ -148,37 +144,32 @@ class GcodeAnalysis:
                 "--config_file",
                 str(self.estimator_config),
                 "post-process",
-                "{gcode_file_path}"
+                "{gcode_file_path}",
             ],
             "timeout": self.estimator_timeout,
             "version": self.estimator_version,
-            "ident": {
-                "regex": IDENT_REGEX,
-                "location": "footer"
-            },
-            "enabled": False
+            "ident": {"regex": IDENT_REGEX, "location": "footer"},
+            "enabled": False,
         }
         mdst = self.file_manger.get_metadata_storage()
         mdst.register_gcode_processor("klipper_estimator", self.proc_config)
         self.server.register_endpoint(
-            "/server/analysis/status", RequestType.GET,
-            self._handle_status_request
+            "/server/analysis/status", RequestType.GET, self._handle_status_request
         )
         self.server.register_endpoint(
-            "/server/analysis/estimate", RequestType.POST,
-            self._handle_estimator_request
+            "/server/analysis/estimate",
+            RequestType.POST,
+            self._handle_estimator_request,
         )
         self.server.register_endpoint(
-            "/server/analysis/process", RequestType.POST,
-            self._handle_estimator_request
+            "/server/analysis/process", RequestType.POST, self._handle_estimator_request
         )
         self.server.register_endpoint(
-            "/server/analysis/dump_config", RequestType.POST,
-            self._handle_dump_cfg_request
+            "/server/analysis/dump_config",
+            RequestType.POST,
+            self._handle_dump_cfg_request,
         )
-        self.server.register_event_handler(
-            "server:klippy_ready", self._on_klippy_ready
-        )
+        self.server.register_event_handler("server:klippy_ready", self._on_klippy_ready)
 
     @property
     def estimator_version_tuple(self) -> tuple[int, ...]:
@@ -199,13 +190,15 @@ class GcodeAnalysis:
             )
             eventloop = self.server.get_event_loop()
             if (
-                self.auto_analyze and
-                self.default_config == self.estimator_config and
-                not self.default_config.exists()
+                self.auto_analyze
+                and self.default_config == self.estimator_config
+                and not self.default_config.exists()
             ):
+
                 async def _dump_and_update_proc_cfg() -> None:
                     await self._dump_estimator_config(self.default_config)
                     self._update_gcode_proc_config()
+
                 eventloop.create_task(_dump_and_update_proc_cfg())
             else:
                 eventloop.create_task(self._dump_estimator_config(self.default_config))
@@ -264,7 +257,7 @@ class GcodeAnalysis:
                 self.server.add_warning(
                     "[analysis]: Failed to detect CPU architecture.  "
                     "Manual configuration of the 'platform' option is required.",
-                    "analysis_estimator"
+                    "analysis_estimator",
                 )
                 return None
             if arch == "x86_64":
@@ -276,14 +269,14 @@ class GcodeAnalysis:
                 self.server.add_warning(
                     f"[analysis]: Unsupported CPU architecture '{arch}'.  "
                     "Manual configuration of the 'platform' option is required.",
-                    "analysis_estimator"
+                    "analysis_estimator",
                 )
                 return None
         else:
             self.server.add_warning(
                 f"[analysis]: Unsupported platform '{sys.platform}'. "
                 "Manual configuration of the 'platform' option is required.",
-                "analysis_estimator"
+                "analysis_estimator",
             )
 
     async def _download_klipper_estimator(self, estimator_path: pathlib.Path) -> None:
@@ -310,7 +303,7 @@ class GcodeAnalysis:
     async def _detect_estimator_version(self) -> None:
         cmd = f"{self.estimator_path} --version"
         scmd: ShellCommandFactory = self.server.lookup_component("shell_command")
-        ret = await scmd.exec_cmd(cmd, timeout=10.)
+        ret = await scmd.exec_cmd(cmd, timeout=10.0)
         ver_match = re.match(r"klipper_estimator (v?\d+(?:\.\d+)*)", ret)
         if ver_match is None:
             self.estimator_version = "?"
@@ -327,9 +320,7 @@ class GcodeAnalysis:
             try:
                 estimator_path.chmod(kest_perms | req_perms)
             except OSError:
-                logging.exception(
-                    "Failed to set Klipper Estimator Permissions"
-                )
+                logging.exception("Failed to set Klipper Estimator Permissions")
         return os.access(estimator_path, os.X_OK)
 
     async def _check_release_info(self, estimator_path: pathlib.Path) -> None:
@@ -370,7 +361,7 @@ class GcodeAnalysis:
         self,
         gc_path: pathlib.Path,
         est_cfg_path: pathlib.Path,
-        is_post_process: bool = False
+        is_post_process: bool = False,
     ) -> str:
         if self.estimator_path is None or not self.estimator_ready:
             raise self.server.error("Klipper Estimator not available")
@@ -406,13 +397,12 @@ class GcodeAnalysis:
             eventloop = self.server.get_event_loop()
             if not kconn.is_ready():
                 raise self.server.error(
-                    "Klipper Estimator cannot dump configuration, Klippy not ready",
-                    504
+                    "Klipper Estimator cannot dump configuration, Klippy not ready", 504
                 )
             dump_cmd = self._gen_dump_cmd()
             try:
                 ret = await scmd.exec_cmd(
-                    dump_cmd, timeout=10., log_complete=False, log_stderr=True
+                    dump_cmd, timeout=10.0, log_complete=False, log_stderr=True
                 )
                 await eventloop.run_in_thread(dest.write_text, ret)
             except scmd.error:
@@ -444,7 +434,7 @@ class GcodeAnalysis:
         self,
         gc_path: pathlib.Path,
         est_config: pathlib.Path | None = None,
-        force: bool = False
+        force: bool = False,
     ) -> dict[str, Any]:
         async with self.cmd_lock:
             if est_config is None:
@@ -474,9 +464,7 @@ class GcodeAnalysis:
                 "bypassed": bypassed,
             }
 
-    async def _handle_status_request(
-        self, web_request: WebRequest
-    ) -> dict[str, Any]:
+    async def _handle_status_request(self, web_request: WebRequest) -> dict[str, Any]:
         est_exec = "unknown"
         if self.estimator_path is not None:
             est_exec = self.estimator_path.name
@@ -486,7 +474,7 @@ class GcodeAnalysis:
             "estimator_ready": self.estimator_ready,
             "estimator_version": self.estimator_version,
             "estimator_config_exists": self.estimator_config.exists(),
-            "using_default_config": is_default
+            "using_default_config": is_default,
         }
 
     async def _handle_estimator_request(
@@ -518,9 +506,7 @@ class GcodeAnalysis:
             raise self.server.error(f"Unknown request {ep}", 404)
         return ret
 
-    async def _handle_dump_cfg_request(
-        self, web_request: WebRequest
-    ) -> dict[str, Any]:
+    async def _handle_dump_cfg_request(self, web_request: WebRequest) -> dict[str, Any]:
         dest = web_request.get_str("dest_config", None)
         root: str | None = None
         if dest is not None:
@@ -538,7 +524,7 @@ class GcodeAnalysis:
         return {
             "dest_root": root,
             "dest_config_path": dest,
-            "klipper_estimator_config": result
+            "klipper_estimator_config": result,
         }
 
 

@@ -16,9 +16,11 @@ from typing import (
     List,
 )
 from ..common import JobEvent, KlippyState
+
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from .klippy_apis import KlippyAPI
+
 
 class JobState:
     def __init__(self, config: ConfigHelper) -> None:
@@ -42,7 +44,7 @@ class JobState:
     async def _handle_started(self, state: KlippyState) -> None:
         if state != KlippyState.READY:
             return
-        kapis: KlippyAPI = self.server.lookup_component('klippy_apis')
+        kapis: KlippyAPI = self.server.lookup_component("klippy_apis")
         sub: dict[str, list[str] | None] = {"print_stats": None}
         try:
             result = await kapis.subscribe_objects(sub, self._status_update)
@@ -55,13 +57,13 @@ class JobState:
             logging.info(f"Job state initialized: {state}")
 
     async def _status_update(self, data: dict[str, Any], _: float) -> None:
-        if 'print_stats' not in data:
+        if "print_stats" not in data:
             return
-        ps = data['print_stats']
+        ps = data["print_stats"]
         if "state" in ps:
             prev_ps = dict(self.last_print_stats)
-            old_state: str = prev_ps['state']
-            new_state: str = ps['state']
+            old_state: str = prev_ps["state"]
+            new_state: str = ps["state"]
             new_ps = dict(self.last_print_stats)
             new_ps.update(ps)
             if new_state != old_state:
@@ -91,18 +93,14 @@ class JobState:
             cur_layer: int | None = ps["info"].get("current_layer")
             if cur_layer is not None:
                 total: int = ps["info"].get("total_layer", 0)
-                self.server.send_event(
-                    "job_state:layer_changed", cur_layer, total
-                )
+                self.server.send_event("job_state:layer_changed", cur_layer, total)
         self.last_print_stats.update(ps)
 
-    def _check_resumed(
-        self, prev_ps: dict[str, Any], new_ps: dict[str, Any]
-    ) -> bool:
+    def _check_resumed(self, prev_ps: dict[str, Any], new_ps: dict[str, Any]) -> bool:
         return (
-            prev_ps['state'] == "paused" and
-            prev_ps['filename'] == new_ps['filename'] and
-            prev_ps['total_duration'] < new_ps['total_duration']
+            prev_ps["state"] == "paused"
+            and prev_ps["filename"] == new_ps["filename"]
+            and prev_ps["total_duration"] < new_ps["total_duration"]
         )
 
     def _check_idle(self, state: str) -> bool:
@@ -119,10 +117,7 @@ class JobState:
         self.server.send_event(f"job_state:{state}", prev_ps, new_ps)
         self.last_event = JobEvent.from_string(state)
         self.server.send_event(
-            "job_state:state_changed",
-            self.last_event,
-            prev_ps,
-            new_ps
+            "job_state:state_changed", self.last_event, prev_ps, new_ps
         )
 
     def get_last_stats(self) -> dict[str, Any]:
@@ -130,6 +125,7 @@ class JobState:
 
     def get_last_job_event(self) -> JobEvent:
         return self.last_event
+
 
 def load_component(config: ConfigHelper) -> JobState:
     return JobState(config)

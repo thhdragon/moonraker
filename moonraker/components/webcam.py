@@ -14,8 +14,6 @@ from ..common import RequestType
 from typing import (
     TYPE_CHECKING,
     Optional,
-    Dict,
-    List,
     Any,
 )
 
@@ -32,12 +30,19 @@ if TYPE_CHECKING:
 # This provides a mapping of fields defined by Moonraker to fields
 # defined by the database.
 CAM_FIELDS = {
-    "name": "name", "service": "service", "target_fps": "targetFps",
-    "stream_url": "urlStream", "snapshot_url": "urlSnapshot",
-    "flip_horizontal": "flipX", "flip_vertical": "flipY",
-    "enabled": "enabled", "target_fps_idle": "targetFpsIdle",
-    "aspect_ratio": "aspectRatio", "icon": "icon"
+    "name": "name",
+    "service": "service",
+    "target_fps": "targetFps",
+    "stream_url": "urlStream",
+    "snapshot_url": "urlSnapshot",
+    "flip_horizontal": "flipX",
+    "flip_vertical": "flipY",
+    "enabled": "enabled",
+    "target_fps_idle": "targetFpsIdle",
+    "aspect_ratio": "aspectRatio",
+    "icon": "icon",
 }
+
 
 class WebcamManager:
     def __init__(self, config: ConfigHelper) -> None:
@@ -54,8 +59,7 @@ class WebcamManager:
             "/server/webcams/list", RequestType.GET, self._handle_webcam_list
         )
         self.server.register_endpoint(
-            "/server/webcams/item", RequestType.all(),
-            self._handle_webcam_request
+            "/server/webcams/item", RequestType.all(), self._handle_webcam_request
         )
         self.server.register_endpoint(
             "/server/webcams/test", RequestType.POST, self._handle_webcam_test
@@ -214,10 +218,7 @@ class WebcamManager:
         client: HttpClient = self.server.lookup_component("http_client")
         webcam = self._lookup_camera(web_request)
         assert webcam is not None
-        result: dict[str, Any] = {
-            "name": webcam.name,
-            "snapshot_reachable": False
-        }
+        result: dict[str, Any] = {"name": webcam.name, "snapshot_reachable": False}
         for img_type in ["snapshot", "stream"]:
             try:
                 func = getattr(webcam, f"get_{img_type}_url")
@@ -227,7 +228,7 @@ class WebcamManager:
                 result[f"{img_type}_url"] = ""
         url: str = result["snapshot_url"]
         if url.startswith("http"):
-            ret = await client.get(url, connect_timeout=1., request_timeout=1.)
+            ret = await client.get(url, connect_timeout=1.0, request_timeout=1.0)
             result["snapshot_reachable"] = not ret.has_error()
         return result
 
@@ -235,6 +236,7 @@ class WebcamManager:
 class WebCam:
     _default_host: str = "http://127.0.0.1"
     _protected_fields: list[str] = ["source", "uid"]
+
     def __init__(self, server: Server, **kwargs) -> None:
         self._server = server
         self.name: str = kwargs["name"]
@@ -257,9 +259,7 @@ class WebCam:
             raise server.error(f"Invalid value for 'rotation': {self.rotation}")
         prefix, sep, postfix = self.aspect_ratio.partition(":")
         if not (prefix.isdigit() and sep == ":" and postfix.isdigit()):
-            raise server.error(
-                f"Invalid value for 'aspect_ratio': {self.aspect_ratio}"
-            )
+            raise server.error(f"Invalid value for 'aspect_ratio': {self.aspect_ratio}")
 
     def as_dict(self):
         return {k: v for k, v in self.__dict__.items() if k[0] != "_"}
@@ -362,8 +362,9 @@ class WebCam:
 
     def update(self, web_request: WebRequest) -> None:
         valid_fields = [
-            f for f in self.__dict__.keys() if f[0] != "_"
-            and f not in self._protected_fields
+            f
+            for f in self.__dict__.keys()
+            if f[0] != "_" and f not in self._protected_fields
         ]
         for field in web_request.get_args().keys():
             if field not in valid_fields:
@@ -410,7 +411,7 @@ class WebCam:
                 flip_vertical=config.getboolean("flip_vertical", False),
                 rotation=config.getint("rotation", 0),
                 source="config",
-                uid=str(uuid.uuid5(ns, f"moonraker.webcam.{name}"))
+                uid=str(uuid.uuid5(ns, f"moonraker.webcam.{name}")),
             )
         except server.error as err:
             raise config.error(str(err)) from err
@@ -437,7 +438,7 @@ class WebCam:
             rotation=web_request.get_int("rotation", 0),
             source="database",
             extra_data=web_request.get("extra_data", {}),
-            uid=uid
+            uid=uid,
         )
 
     @classmethod
@@ -459,8 +460,9 @@ class WebCam:
             rotation=int(cam_data.get("rotation", cam_data.get("rotate", 0))),
             source="database",
             extra_data=cam_data.get("extra_data", {}),
-            uid=cam_data["uid"]
+            uid=cam_data["uid"],
         )
+
 
 def load_component(config: ConfigHelper) -> WebcamManager:
     return WebcamManager(config)

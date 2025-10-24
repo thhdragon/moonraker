@@ -5,21 +5,23 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
-import socket
+
 import asyncio
 import errno
-import struct
 import logging
+import socket
+import struct
+
 from . import ServerError
-from typing import List, Dict, Optional, Union
 
 CAN_FMT = "<IB3x8s"
 CAN_READER_LIMIT = 1024 * 1024
-KLIPPER_ADMIN_ID = 0x3f0
+KLIPPER_ADMIN_ID = 0x3F0
 KLIPPER_SET_NODE_CMD = 0x01
 KATAPULT_SET_NODE_CMD = 0x11
 CMD_QUERY_UNASSIGNED = 0x00
 CANBUS_RESP_NEED_NODEID = 0x20
+
 
 class CanNode:
     def __init__(self, node_id: int, cansocket: CanSocket) -> None:
@@ -28,17 +30,23 @@ class CanNode:
         self._cansocket = cansocket
 
     async def read(
-        self, n: int = -1, timeout: float | None = 2
+        self,
+        n: int = -1,
+        timeout: float | None = 2,
     ) -> bytes:
         return await asyncio.wait_for(self._reader.read(n), timeout)
 
     async def readexactly(
-        self, n: int, timeout: float | None = 2
+        self,
+        n: int,
+        timeout: float | None = 2,
     ) -> bytes:
         return await asyncio.wait_for(self._reader.readexactly(n), timeout)
 
     async def readuntil(
-        self, sep: bytes = b"\x03", timeout: float | None = 2
+        self,
+        sep: bytes = b"\x03",
+        timeout: float | None = 2,
     ) -> bytes:
         return await asyncio.wait_for(self._reader.readuntil(sep), timeout)
 
@@ -51,7 +59,7 @@ class CanNode:
         self,
         payload: bytearray | bytes,
         resp_length: int,
-        timeout: float | None = 2.
+        timeout: float | None = 2.0,
     ) -> bytes:
         self.write(payload)
         return await self.readexactly(resp_length, timeout)
@@ -61,6 +69,7 @@ class CanNode:
 
     def close(self) -> None:
         self._reader.feed_eof()
+
 
 class CanSocket:
     def __init__(self, interface: str):
@@ -100,7 +109,7 @@ class CanSocket:
             # closed by the data check
             if e.errno == errno.EBADF:
                 logging.exception("Can Socket Read Error, closing")
-                data = b''
+                data = b""
             else:
                 return
         if not data:
@@ -136,8 +145,7 @@ class CanSocket:
                 length = min(len(payload), 8)
                 pkt_data = payload[:length]
                 payload = payload[length:]
-                packet = struct.pack(
-                    CAN_FMT, can_id, length, pkt_data)
+                packet = struct.pack(CAN_FMT, can_id, length, pkt_data)
                 self.output_packets.append(packet)
         if self.send_task is not None:
             return
@@ -163,16 +171,17 @@ class CanSocket:
         self._loop.remove_reader(self.cansock.fileno())
         self.cansock.close()
 
+
 async def query_klipper_uuids(can_socket: CanSocket) -> list[dict[str, str]]:
     loop = asyncio.get_running_loop()
     admin_node = can_socket.register_node(KLIPPER_ADMIN_ID)
     payload = bytes([CMD_QUERY_UNASSIGNED])
     admin_node.write(payload)
     curtime = loop.time()
-    endtime = curtime + 2.
+    endtime = curtime + 2.0
     uuids: list[dict[str, str]] = []
     while curtime < endtime:
-        timeout = max(.1, endtime - curtime)
+        timeout = max(0.1, endtime - curtime)
         try:
             resp = await admin_node.read(8, timeout)
         except TimeoutError:
@@ -183,7 +192,7 @@ async def query_klipper_uuids(can_socket: CanSocket) -> list[dict[str, str]]:
             continue
         app_names = {
             KLIPPER_SET_NODE_CMD: "Klipper",
-            KATAPULT_SET_NODE_CMD: "Katapult"
+            KATAPULT_SET_NODE_CMD: "Katapult",
         }
         app = "Unknown"
         if len(resp) > 7:
@@ -192,7 +201,7 @@ async def query_klipper_uuids(can_socket: CanSocket) -> list[dict[str, str]]:
         uuids.append(
             {
                 "uuid": data.hex(),
-                "application": app
-            }
+                "application": app,
+            },
         )
     return uuids

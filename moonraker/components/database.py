@@ -26,24 +26,21 @@ from typing import (
     TYPE_CHECKING,
     Any,
     TypeVar,
-    Tuple,
     Optional,
     Union,
-    Dict,
-    List,
-    Set,
-    Type
 )
 from collections.abc import Callable, Sequence, Generator
+
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .klippy_connection import KlippyConnection
     from lmdb import Environment as LmdbEnvironment
     from types import TracebackType
-    DBRecord = Optional[int | float | bool | str | list[Any] | dict[str, Any]]
+
+    DBRecord = int | float | bool | str | list[Any] | dict[str, Any] | None
     DBType = DBRecord
-    SqlParams = Union[list[Any], tuple[Any, ...], dict[str, Any]]
+    SqlParams = list[Any] | tuple[Any, ...] | dict[str, Any]
     _T = TypeVar("_T")
 
 DATABASE_VERSION = 2
@@ -51,8 +48,7 @@ SQL_DB_FILENAME = "moonraker-sql.db"
 NAMESPACE_TABLE = "namespace_store"
 REGISTRATION_TABLE = "table_registry"
 SCHEMA_TABLE = (
-    "sqlite_schema" if sqlite3.sqlite_version_info >= (3, 33, 0)
-    else "sqlite_master"
+    "sqlite_schema" if sqlite3.sqlite_version_info >= (3, 33, 0) else "sqlite_master"
 )
 
 RECORD_ENCODE_FUNCS: dict[type, Callable[..., bytes]] = {
@@ -72,17 +68,17 @@ RECORD_DECODE_FUNCS: dict[int, Callable[..., DBRecord]] = {
     ord("s"): lambda x: bytes(x[1:]).decode(),
     ord("["): lambda x: jsonw.loads(bytes(x)),
     ord("{"): lambda x: jsonw.loads(bytes(x)),
-    0: lambda _: None
+    0: lambda _: None,
 }
+
 
 def encode_record(value: DBRecord) -> bytes:
     try:
         enc_func = RECORD_ENCODE_FUNCS[type(value)]
         return enc_func(value)
     except Exception:
-        raise ServerError(
-            f"Error encoding val: {value}, type: {type(value)}"
-        )
+        raise ServerError(f"Error encoding val: {value}, type: {type(value)}")
+
 
 def decode_record(bvalue: bytes) -> DBRecord:
     fmt = bvalue[0]
@@ -91,29 +87,29 @@ def decode_record(bvalue: bytes) -> DBRecord:
         return decode_func(bvalue)
     except Exception:
         val = bytes(bvalue).decode()
-        raise ServerError(
-            f"Error decoding value {val}, format: {chr(fmt)}"
-        )
+        raise ServerError(f"Error decoding value {val}, format: {chr(fmt)}")
+
 
 def getitem_with_default(item: dict, field: Any) -> Any:
     if not isinstance(item, dict):
-        raise ServerError(
-            f"Cannot reduce a value of type {type(item)}")
+        raise ServerError(f"Cannot reduce a value of type {type(item)}")
     if field not in item:
         item[field] = {}
     return item[field]
 
+
 def parse_namespace_key(key: list[str] | str) -> list[str]:
     try:
-        key_list = key if isinstance(key, list) else key.split('.')
+        key_list = key if isinstance(key, list) else key.split(".")
     except Exception:
         key_list = []
     if not key_list or "" in key_list:
         raise ServerError(f"Invalid Key Format: '{key}'")
     return key_list
 
+
 def generate_lmdb_entries(
-    db_folder: pathlib.Path
+    db_folder: pathlib.Path,
 ) -> Generator[tuple[str, str, bytes], Any]:
     if not db_folder.joinpath("data.mdb").is_file():
         return
@@ -123,26 +119,24 @@ def generate_lmdb_entries(
     while True:
         try:
             import lmdb
+
             lmdb_env: LmdbEnvironment = lmdb.open(
                 str(db_folder), map_size=MAX_LMDB_SIZE, max_dbs=MAX_LMDB_NAMESPACES
             )
         except ModuleNotFoundError:
             if inst_attempted:
-                logging.info(
-                    "Attempt to install LMDB failed, aborting conversion."
-                )
+                logging.info("Attempt to install LMDB failed, aborting conversion.")
                 return
             import sys
             from ..utils import pip_utils
+
             inst_attempted = True
             logging.info("LMDB module not found, attempting installation...")
             pip_cmd = f"{sys.executable} -m pip"
             pip_exec = pip_utils.PipExecutor(pip_cmd, logging.info)
             pip_exec.install_packages(["lmdb"])
         except Exception:
-            logging.exception(
-                "Failed to open lmdb database, aborting conversion"
-            )
+            logging.exception("Failed to open lmdb database, aborting conversion")
             return
         else:
             break
@@ -159,7 +153,7 @@ def generate_lmdb_entries(
                 lmdb_namespaces.append((key.decode(), db))
                 remaining = cursor.next()
         # Copy all records
-        for (ns, db) in lmdb_namespaces:
+        for ns, db in lmdb_namespaces:
             logging.info(f"Converting LMDB namespace '{ns}'")
             with txn.cursor(db=db) as cursor:
                 remaining = cursor.first()
@@ -171,7 +165,7 @@ def generate_lmdb_entries(
                         value = bytes(cursor.value())
                     except Exception:
                         logging.info("Database Key/Value Decode Error")
-                        decoded_key = ''
+                        decoded_key = ""
                     remaining = cursor.next()
                     if not decoded_key or not value:
                         hk = bytes(key_buf).hex()
@@ -195,6 +189,7 @@ def generate_lmdb_entries(
                     yield (ns, decoded_key, value)
     lmdb_env.close()
 
+
 class MoonrakerDatabase:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
@@ -212,7 +207,7 @@ class MoonrakerDatabase:
                 self.server.add_log_rollover_item(
                     "uuid_mismatch",
                     "Database: Stored Instance ID does not match current Instance "
-                    f"ID.\n\nCurrent UUID: {instance_id}\nStored UUID: {stored_iid}"
+                    f"ID.\n\nCurrent UUID: {instance_id}\nStored UUID: {stored_iid}",
                 )
         else:
             self.insert_item("moonraker", "instance_id", instance_id)
@@ -232,7 +227,7 @@ class MoonrakerDatabase:
             self.debug_counter.update(db_counter)
             self.server.add_log_rollover_item(
                 "database_debug_counter",
-                f"Database Debug Counter: {self.debug_counter}"
+                f"Database Debug Counter: {self.debug_counter}",
             )
         # Track unsafe shutdowns
         self.unsafe_shutdowns: int = dbinfo.get("unsafe_shutdowns", 0)
@@ -246,8 +241,9 @@ class MoonrakerDatabase:
             "/server/database/item", RequestType.all(), self._handle_item_request
         )
         self.server.register_endpoint(
-            "/server/database/backup", RequestType.POST | RequestType.DELETE,
-            self._handle_backup_request
+            "/server/database/backup",
+            RequestType.POST | RequestType.DELETE,
+            self._handle_backup_request,
         )
         self.server.register_endpoint(
             "/server/database/restore", RequestType.POST, self._handle_restore_request
@@ -289,8 +285,8 @@ class MoonrakerDatabase:
         dep_path = config.get("database_path", None, deprecate=True)
         db_path = pathlib.Path(app_args["data_path"]).joinpath("database")
         if (
-            app_args["is_default_data_path"] and
-            not db_path.joinpath(SQL_DB_FILENAME).exists()
+            app_args["is_default_data_path"]
+            and not db_path.joinpath(SQL_DB_FILENAME).exists()
         ):
             # Allow configured DB fallback
             dep_path = dep_path or "~/.moonraker_database"
@@ -300,9 +296,7 @@ class MoonrakerDatabase:
             except Exception:
                 same = False
             if not same and legacy_db.joinpath("data.mdb").is_file():
-                logging.info(
-                    f"Reverting to legacy database folder: {legacy_db}"
-                )
+                logging.info(f"Reverting to legacy database folder: {legacy_db}")
                 db_path = legacy_db
         if not db_path.is_dir():
             db_path.mkdir()
@@ -331,9 +325,7 @@ class MoonrakerDatabase:
             self.db_provider.update_item, namespace, key, value
         )
 
-    def delete_item(
-        self, namespace: str, key: list[str] | str
-    ) -> Future[Any]:
+    def delete_item(self, namespace: str, key: list[str] | str) -> Future[Any]:
         return self.db_provider.execute_db_function(
             self.db_provider.delete_item, namespace, key
         )
@@ -342,7 +334,7 @@ class MoonrakerDatabase:
         self,
         namespace: str,
         key: list[str] | str | None = None,
-        default: Any = Sentinel.MISSING
+        default: Any = Sentinel.MISSING,
     ) -> Future[Any]:
         return self.db_provider.execute_db_function(
             self.db_provider.get_item, namespace, key, default
@@ -353,9 +345,7 @@ class MoonrakerDatabase:
     #  methods can be used to perform record level batch operations on
     #  a namespace in a single transaction.
 
-    def insert_batch(
-        self, namespace: str, records: dict[str, Any]
-    ) -> Future[None]:
+    def insert_batch(self, namespace: str, records: dict[str, Any]) -> Future[None]:
         return self.db_provider.execute_db_function(
             self.db_provider.insert_batch, namespace, records
         )
@@ -367,16 +357,12 @@ class MoonrakerDatabase:
             self.db_provider.move_batch, namespace, source_keys, dest_keys
         )
 
-    def delete_batch(
-        self, namespace: str, keys: list[str]
-    ) -> Future[dict[str, Any]]:
+    def delete_batch(self, namespace: str, keys: list[str]) -> Future[dict[str, Any]]:
         return self.db_provider.execute_db_function(
             self.db_provider.delete_batch, namespace, keys
         )
 
-    def get_batch(
-        self, namespace: str, keys: list[str]
-    ) -> Future[dict[str, Any]]:
+    def get_batch(self, namespace: str, keys: list[str]) -> Future[dict[str, Any]]:
         return self.db_provider.execute_db_function(
             self.db_provider.get_batch, namespace, keys
         )
@@ -409,7 +395,8 @@ class MoonrakerDatabase:
 
     def ns_keys(self, namespace: str) -> Future[list[str]]:
         return self.db_provider.execute_db_function(
-            self.db_provider.get_namespace_keys, namespace,
+            self.db_provider.get_namespace_keys,
+            namespace,
         )
 
     def ns_values(self, namespace: str) -> Future[list[Any]]:
@@ -422,9 +409,7 @@ class MoonrakerDatabase:
             self.db_provider.get_namespace_items, namespace
         )
 
-    def ns_contains(
-        self, namespace: str, key: list[str] | str
-    ) -> Future[bool]:
+    def ns_contains(self, namespace: str, key: list[str] | str) -> Future[bool]:
         return self.db_provider.execute_db_function(
             self.db_provider.namespace_contains, namespace
         )
@@ -461,9 +446,7 @@ class MoonrakerDatabase:
         return self.db_provider.execute_db_function(callback)
 
     def compact_database(self) -> Future[dict[str, int]]:
-        return self.db_provider.execute_db_function(
-            self.db_provider.compact_database
-        )
+        return self.db_provider.execute_db_function(self.db_provider.compact_database)
 
     def backup_database(self, bkp_path: pathlib.Path) -> Future[None]:
         return self.db_provider.execute_db_function(
@@ -476,7 +459,7 @@ class MoonrakerDatabase:
         )
 
     def register_local_namespace(
-            self, namespace: str, forbidden: bool = False, parse_keys: bool = False
+        self, namespace: str, forbidden: bool = False, parse_keys: bool = False
     ) -> NamespaceWrapper:
         if namespace in self.registered_namespaces:
             raise self.server.error(f"Namespace '{namespace}' already registered")
@@ -486,8 +469,9 @@ class MoonrakerDatabase:
             if namespace not in self.forbidden_namespaces:
                 self.forbidden_namespaces.add(namespace)
                 self.insert_item(
-                    "database", "forbidden_namespaces",
-                    sorted(self.forbidden_namespaces)
+                    "database",
+                    "forbidden_namespaces",
+                    sorted(self.forbidden_namespaces),
                 )
         elif namespace not in self.protected_namespaces:
             self.protected_namespaces.add(namespace)
@@ -571,9 +555,7 @@ class MoonrakerDatabase:
                 await self.eventloop.run_in_thread(bkp_path.unlink)
             else:
                 raise self.server.error("Invalid request type")
-            return {
-                "backup_path": str(bkp_path)
-            }
+            return {"backup_path": str(bkp_path)}
 
     async def _handle_restore_request(self, web_request: WebRequest) -> dict[str, Any]:
         kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
@@ -586,7 +568,7 @@ class MoonrakerDatabase:
             if bkp_dir not in restore_path.parents:
                 raise self.server.error(f"Invalid name {db_name}.")
             restore_info = await self.restore_database(restore_path)
-            self.server.restart(.1)
+            self.server.restart(0.1)
             return restore_info
 
     async def _handle_list_request(
@@ -600,15 +582,12 @@ class MoonrakerDatabase:
             backups = [bkp.name for bkp in bkp_dir.iterdir() if bkp.is_file()]
         if not path.startswith("/debug/"):
             ns_list -= self.forbidden_namespaces
-            return {
-                "namespaces": list(ns_list),
-                "backups": backups
-            }
+            return {"namespaces": list(ns_list), "backups": backups}
         else:
             return {
                 "namespaces": list(ns_list),
                 "backups": backups,
-                "tables": list(self.db_provider.tables)
+                "tables": list(self.db_provider.tables),
             }
 
     async def _handle_item_request(self, web_request: WebRequest) -> dict[str, Any]:
@@ -623,8 +602,7 @@ class MoonrakerDatabase:
             key = web_request.get("key", None)
             if key is not None and not isinstance(key, (list, str)):
                 raise self.server.error(
-                    "Value for argument 'key' is an invalid type: "
-                    f"{type(key).__name__}"
+                    f"Value for argument 'key' is an invalid type: {type(key).__name__}"
                 )
             val = await self.get_item(namespace, key)
         else:
@@ -635,8 +613,7 @@ class MoonrakerDatabase:
             key = web_request.get("key")
             if not isinstance(key, (list, str)):
                 raise self.server.error(
-                    "Value for argument 'key' is an invalid type: "
-                    f"{type(key).__name__}"
+                    f"Value for argument 'key' is an invalid type: {type(key).__name__}"
                 )
             if req_type == RequestType.POST:
                 val = web_request.get("value")
@@ -650,15 +627,13 @@ class MoonrakerDatabase:
         if is_debug:
             name = req_type.name or str(req_type).split(".", 1)[-1]
             self.debug_counter[name.lower()] += 1
-            await self.insert_item(
-                "database", "debug_counter", self.debug_counter
-            )
+            await self.insert_item("database", "debug_counter", self.debug_counter)
             self.server.add_log_rollover_item(
                 "database_debug_counter",
                 f"Database Debug Counter: {self.debug_counter}",
-                log=False
+                log=False,
             )
-        return {'namespace': namespace, 'key': key, 'value': val}
+        return {"namespace": namespace, "key": key, "value": val}
 
     async def close(self) -> None:
         if not self.db_provider.is_restored():
@@ -674,18 +649,13 @@ class MoonrakerDatabase:
         if table not in self.db_provider.tables:
             raise self.server.error(f"Table name '{table}' does not exist", 404)
         cur = await self.sql_execute(f"SELECT rowid, * FROM {table}")
-        return {
-            "table_name": table,
-            "rows": [dict(r) for r in await cur.fetchall()]
-        }
+        return {"table_name": table, "rows": [dict(r) for r in await cur.fetchall()]}
 
     async def _handle_row_request(self, web_request: WebRequest) -> dict[str, Any]:
         req_type = web_request.get_request_type()
         table = web_request.get_str("table")
         if table not in self.db_provider.tables:
-            raise self.server.error(
-                f"Table name '{table}' does not exist", 404
-            )
+            raise self.server.error(f"Table name '{table}' does not exist", 404)
         if req_type == RequestType.POST:
             row_id = web_request.get_int("id", None)
             values = web_request.get("values")
@@ -715,7 +685,7 @@ class MoonrakerDatabase:
                 val_str = ",".join("?" * len(vals))
                 cur = await self.sql_execute(
                     f"UPDATE {table} SET ({col_str}) = ({val_str}) WHERE rowid = ?",
-                    vals
+                    vals,
                 )
                 if not cur.rowcount:
                     raise self.server.error(f"No row with id {row_id} to update")
@@ -726,12 +696,9 @@ class MoonrakerDatabase:
         )
         item = dict(await cur.fetchone() or {})
         if req_type == RequestType.DELETE:
-            await self.sql_execute(
-                f"DELETE FROM {table} WHERE rowid = ?", (row_id,)
-            )
-        return {
-            "row": item
-        }
+            await self.sql_execute(f"DELETE FROM {table} WHERE rowid = ?", (row_id,))
+        return {"row": item}
+
 
 class SqliteProvider(Thread):
     def __init__(self, config: ConfigHelper, db_path: pathlib.Path) -> None:
@@ -750,7 +717,7 @@ class SqliteProvider(Thread):
         sqlite3.register_adapter(list, jsonw.dumps)
         sqlite3.register_adapter(dict, jsonw.dumps)
         self.sync_conn = sqlite3.connect(
-            str(db_path), timeout=1., detect_types=sqlite3.PARSE_DECLTYPES
+            str(db_path), timeout=1.0, detect_types=sqlite3.PARSE_DECLTYPES
         )
         self.sync_conn.row_factory = sqlite3.Row
         self.setup_database()
@@ -773,7 +740,7 @@ class SqliteProvider(Thread):
     def run(self) -> None:
         loop = self.asyncio_loop
         conn = sqlite3.connect(
-            str(self._db_path), timeout=1., detect_types=sqlite3.PARSE_DECLTYPES
+            str(self._db_path), timeout=1.0, detect_types=sqlite3.PARSE_DECLTYPES
         )
         conn.row_factory = sqlite3.Row
         while True:
@@ -789,9 +756,7 @@ class SqliteProvider(Thread):
         conn.close()
         loop.call_soon_threadsafe(future.set_result, None)
 
-    def execute_db_function(
-        self, command_func: Callable[..., _T], *args
-    ) -> Future[_T]:
+    def execute_db_function(self, command_func: Callable[..., _T], *args) -> Future[_T]:
         fut = self.asyncio_loop.create_future()
         if self.is_alive():
             self.command_queue.put_nowait((fut, command_func, args))
@@ -804,7 +769,7 @@ class SqliteProvider(Thread):
         self.server.add_log_rollover_item(
             "sqlite_intro",
             "Loading Sqlite database provider. "
-            f"Sqlite Version: {sqlite3.sqlite_version}"
+            f"Sqlite Version: {sqlite3.sqlite_version}",
         )
         cur = self.sync_conn.execute(
             f"SELECT name FROM {SCHEMA_TABLE} WHERE type='table'"
@@ -833,7 +798,7 @@ class SqliteProvider(Thread):
         with self.sync_conn:
             self.sync_conn.executemany(
                 f"INSERT INTO {NAMESPACE_TABLE} VALUES (?,?,?)",
-                generate_lmdb_entries(db_folder)
+                generate_lmdb_entries(db_folder),
             )
 
     def _create_default_tables(self) -> None:
@@ -881,15 +846,14 @@ class SqliteProvider(Thread):
                 f"INSERT INTO {REGISTRATION_TABLE} VALUES(?, ?, ?) "
                 "ON CONFLICT(name) DO UPDATE SET "
                 "prototype=excluded.prototype, version=excluded.version",
-                (table_name, prototype, version)
+                (table_name, prototype, version),
             )
         self._tables.add(table_name)
 
     def _lookup_registered_table(self, table_name: str) -> tuple[str, int]:
         cur = self.sync_conn.execute(
-            f"SELECT prototype, version FROM {REGISTRATION_TABLE} "
-            f"WHERE name = ?",
-            (table_name,)
+            f"SELECT prototype, version FROM {REGISTRATION_TABLE} WHERE name = ?",
+            (table_name,),
         )
         ret = cur.fetchall()
         if not ret:
@@ -906,7 +870,7 @@ class SqliteProvider(Thread):
                 conn.execute(
                     f"INSERT INTO {NAMESPACE_TABLE} VALUES(?, ?, ?) "
                     "ON CONFLICT(namespace, key) DO UPDATE SET value=excluded.value",
-                    (namespace, key, encode_record(val))
+                    (namespace, key, encode_record(val)),
                 )
         except sqlite3.Error:
             if self.server.is_verbose_enabled():
@@ -919,11 +883,11 @@ class SqliteProvider(Thread):
         conn: sqlite3.Connection,
         namespace: str,
         key: str,
-        default: Sentinel | DBRecord = Sentinel.MISSING
+        default: Sentinel | DBRecord = Sentinel.MISSING,
     ) -> DBRecord:
         cur = conn.execute(
             f"SELECT value FROM {NAMESPACE_TABLE} WHERE namespace = ? and key = ?",
-            (namespace, key)
+            (namespace, key),
         )
         val = cur.fetchone()
         if val is None:
@@ -945,16 +909,13 @@ class SqliteProvider(Thread):
             raise self.server.error(f"Namespace {namespace} not found", 404)
         cur = conn.execute(
             f"SELECT key, value FROM {NAMESPACE_TABLE} WHERE namespace = ?",
-            (namespace,)
+            (namespace,),
         )
         cur.arraysize = 200
         return dict(cur.fetchall())
 
     def iter_namespace(
-        self,
-        conn: sqlite3.Connection,
-        namespace: str,
-        count: int = 1000
+        self, conn: sqlite3.Connection, namespace: str, count: int = 1000
     ) -> Generator[dict[str, Any], Any]:
         if self.is_alive():
             raise self.server.error("Cannot iterate a namespace asynchronously")
@@ -966,7 +927,7 @@ class SqliteProvider(Thread):
             cur = conn.execute(
                 f"SELECT key, value FROM {NAMESPACE_TABLE} WHERE namespace = ? "
                 f"LIMIT ? OFFSET ?",
-                (namespace, count, offset)
+                (namespace, count, offset),
             )
             cur.arraysize = count
             ret = cur.fetchall()
@@ -992,6 +953,7 @@ class SqliteProvider(Thread):
         def generate_params():
             for key, val in values.items():
                 yield (namespace, key, val)
+
         with conn:
             conn.execute(
                 f"DELETE FROM {NAMESPACE_TABLE} WHERE namespace = ?", (namespace,)
@@ -1003,14 +965,13 @@ class SqliteProvider(Thread):
     def get_namespace_length(self, conn: sqlite3.Connection, namespace: str) -> int:
         cur = conn.execute(
             f"SELECT COUNT(namespace) FROM {NAMESPACE_TABLE} WHERE namespace = ?",
-            (namespace,)
+            (namespace,),
         )
         return cur.fetchone()[0]
 
     def get_namespace_keys(self, conn: sqlite3.Connection, namespace: str) -> list[str]:
         cur = conn.execute(
-            f"SELECT key FROM {NAMESPACE_TABLE} WHERE namespace = ?",
-            (namespace,)
+            f"SELECT key FROM {NAMESPACE_TABLE} WHERE namespace = ?", (namespace,)
         )
         cur.arraysize = 200
         return [row[0] for row in cur.fetchall()]
@@ -1019,8 +980,7 @@ class SqliteProvider(Thread):
         self, conn: sqlite3.Connection, namespace: str
     ) -> list[Any]:
         cur = conn.execute(
-            f"SELECT value FROM {NAMESPACE_TABLE} WHERE namespace = ?",
-            (namespace,)
+            f"SELECT value FROM {NAMESPACE_TABLE} WHERE namespace = ?", (namespace,)
         )
         cur.arraysize = 200
         return [row[0] for row in cur.fetchall()]
@@ -1030,7 +990,7 @@ class SqliteProvider(Thread):
     ) -> list[tuple[str, Any]]:
         cur = conn.execute(
             f"SELECT key, value FROM {NAMESPACE_TABLE} WHERE namespace = ?",
-            (namespace,)
+            (namespace,),
         )
         cur.arraysize = 200
         return cur.fetchall()
@@ -1044,7 +1004,7 @@ class SqliteProvider(Thread):
                 cur = conn.execute(
                     f"SELECT key FROM {NAMESPACE_TABLE} "
                     "WHERE namespace = ? and key = ?",
-                    (namespace, key)
+                    (namespace, key),
                 )
                 return cur.fetchone() is not None
             record = self._get_record(conn, namespace, key_list[0])
@@ -1058,7 +1018,7 @@ class SqliteProvider(Thread):
         conn: sqlite3.Connection,
         namespace: str,
         key: list[str] | str,
-        value: DBType
+        value: DBType,
     ) -> None:
         key_list = parse_namespace_key(key)
         record = value
@@ -1089,7 +1049,7 @@ class SqliteProvider(Thread):
         conn: sqlite3.Connection,
         namespace: str,
         key: list[str] | str,
-        value: DBType
+        value: DBType,
     ) -> None:
         key_list = parse_namespace_key(key)
         record = self._get_record(conn, namespace, key_list[0])
@@ -1101,9 +1061,7 @@ class SqliteProvider(Thread):
         else:
             try:
                 assert isinstance(record, dict)
-                item: dict[str, Any] = reduce(
-                    operator.getitem, key_list[1:-1], record
-                )
+                item: dict[str, Any] = reduce(operator.getitem, key_list[1:-1], record)
             except Exception:
                 raise self.server.error(
                     f"Key '{key}' in namespace '{namespace}' not found", 404
@@ -1130,26 +1088,23 @@ class SqliteProvider(Thread):
         if len(key_list) > 1:
             try:
                 assert isinstance(record, dict)
-                item: dict[str, Any] = reduce(
-                    operator.getitem, key_list[1:-1], record)
+                item: dict[str, Any] = reduce(operator.getitem, key_list[1:-1], record)
                 val = item.pop(key_list[-1])
             except Exception:
                 raise self.server.error(
-                    f"Key '{key}' in namespace '{namespace}' not found",
-                    404)
+                    f"Key '{key}' in namespace '{namespace}' not found", 404
+                )
             remove_record = False if record else True
         if remove_record:
             with conn:
                 conn.execute(
                     f"DELETE FROM {NAMESPACE_TABLE} WHERE namespace = ? and key = ?",
-                    (namespace, key_list[0])
+                    (namespace, key_list[0]),
                 )
         else:
             ret = self._insert_record(conn, namespace, key_list[0], record)
             if not ret:
-                logging.info(
-                    f"Error deleting key '{key}' from namespace '{namespace}'"
-                )
+                logging.info(f"Error deleting key '{key}' from namespace '{namespace}'")
         return val
 
     def get_item(
@@ -1157,7 +1112,7 @@ class SqliteProvider(Thread):
         conn: sqlite3.Connection,
         namespace: str,
         key: list[str] | str | None = None,
-        default: Any = Sentinel.MISSING
+        default: Any = Sentinel.MISSING,
     ) -> Any:
         try:
             if key is None:
@@ -1181,11 +1136,12 @@ class SqliteProvider(Thread):
         def generate_params():
             for key, val in records.items():
                 yield (namespace, key, encode_record(val))
+
         with conn:
             conn.executemany(
                 f"INSERT INTO {NAMESPACE_TABLE} VALUES(?, ?, ?) "
                 "ON CONFLICT(namespace, key) DO UPDATE SET value=excluded.value",
-                generate_params()
+                generate_params(),
             )
         self._namespaces.add(namespace)
 
@@ -1194,16 +1150,17 @@ class SqliteProvider(Thread):
         conn: sqlite3.Connection,
         namespace: str,
         source_keys: list[str],
-        dest_keys: list[str]
+        dest_keys: list[str],
     ) -> None:
         def generate_params():
             for src, dest in zip(source_keys, dest_keys):
                 yield (dest, namespace, src)
+
         with conn:
             conn.executemany(
                 f"UPDATE OR REPLACE {NAMESPACE_TABLE} SET key = ? "
                 "WHERE namespace = ? and key = ?",
-                generate_params()
+                generate_params(),
             )
 
     def delete_batch(
@@ -1212,12 +1169,13 @@ class SqliteProvider(Thread):
         def generate_params():
             for key in keys:
                 yield (namespace, key)
+
         if sqlite3.sqlite_version_info < (3, 35):
             vals = self.get_batch(conn, namespace, keys)
             with conn:
                 conn.executemany(
                     f"DELETE FROM {NAMESPACE_TABLE} WHERE namespace = ? and key = ?",
-                    generate_params()
+                    generate_params(),
                 )
             return vals
         else:
@@ -1248,29 +1206,21 @@ class SqliteProvider(Thread):
 
     # SQL Direct Manipulation
     def sql_execute(
-        self,
-        conn: sqlite3.Connection,
-        statement: str,
-        params: SqlParams
+        self, conn: sqlite3.Connection, statement: str, params: SqlParams
     ) -> SqliteCursorProxy:
         cur = conn.execute(statement, params)
         cur.arraysize = 100
         return SqliteCursorProxy(self, cur)
 
     def sql_executemany(
-        self,
-        conn: sqlite3.Connection,
-        statement: str,
-        params: Sequence[SqlParams]
+        self, conn: sqlite3.Connection, statement: str, params: Sequence[SqlParams]
     ) -> SqliteCursorProxy:
         cur = conn.executemany(statement, params)
         cur.arraysize = 100
         return SqliteCursorProxy(self, cur)
 
     def sql_executescript(
-        self,
-        conn: sqlite3.Connection,
-        script: str
+        self, conn: sqlite3.Connection, script: str
     ) -> SqliteCursorProxy:
         cur = conn.executescript(script)
         cur.arraysize = 100
@@ -1287,9 +1237,7 @@ class SqliteProvider(Thread):
 
     def register_table(self, table_def: SqlTableDefinition) -> None:
         if self.is_alive():
-            raise self.server.error(
-                "Table registration must occur during during init."
-            )
+            raise self.server.error("Table registration must occur during during init.")
         if table_def.name in self._tables:
             logging.info(f"Found registered table {table_def.name}")
             if table_def.name in (NAMESPACE_TABLE, REGISTRATION_TABLE):
@@ -1326,18 +1274,11 @@ class SqliteProvider(Thread):
         cur_size = self._db_path.stat().st_size
         conn.execute("VACUUM")
         new_size = self._db_path.stat().st_size
-        return {
-            "previous_size": cur_size,
-            "new_size": new_size
-        }
+        return {"previous_size": cur_size, "new_size": new_size}
 
-    def backup_database(
-        self, conn: sqlite3.Connection, bkp_path: pathlib.Path
-    ) -> None:
+    def backup_database(self, conn: sqlite3.Connection, bkp_path: pathlib.Path) -> None:
         if self.restored:
-            raise self.server.error(
-                "Cannot backup restored database, awaiting restart"
-            )
+            raise self.server.error("Cannot backup restored database, awaiting restart")
         parent = bkp_path.parent
         if not parent.exists():
             parent.mkdir(parents=True, exist_ok=True)
@@ -1361,9 +1302,7 @@ class SqliteProvider(Thread):
         self.restored = True
         return restore_info
 
-    def _validate_restore_db(
-        self, restore_conn: sqlite3.Connection
-    ) -> dict[str, Any]:
+    def _validate_restore_db(self, restore_conn: sqlite3.Connection) -> dict[str, Any]:
         cursor = restore_conn.execute(
             f"SELECT name FROM {SCHEMA_TABLE} WHERE type = 'table'"
         )
@@ -1385,10 +1324,7 @@ class SqliteProvider(Thread):
         missing_ns = self._namespaces.difference(namespaces)
         if missing_ns:
             logging.info(f"Database to restore missing namespaces: {missing_ns}")
-        return {
-            "restored_tables": tables,
-            "restored_namespaces": namespaces
-        }
+        return {"restored_tables": tables, "restored_namespaces": namespaces}
 
     def get_provider_wapper(self) -> DBProviderWrapper:
         return DBProviderWrapper(self)
@@ -1403,6 +1339,7 @@ class SqliteProvider(Thread):
         else:
             self.command_queue.put_nowait((fut, None, tuple()))
         return fut
+
 
 class DBProviderWrapper:
     def __init__(self, provider: SqliteProvider) -> None:
@@ -1438,24 +1375,17 @@ class DBProviderWrapper:
         self.provider.clear_namespace(self._sql_conn, namespace)
 
     def get_item(
-        self,
-        namespace: str,
-        key: str | list[str],
-        default: Any = Sentinel.MISSING
+        self, namespace: str, key: str | list[str], default: Any = Sentinel.MISSING
     ) -> Any:
         return self.provider.get_item(self._sql_conn, namespace, key, default)
 
     def delete_item(self, namespace: str, key: str | list[str]) -> Any:
         return self.provider.delete_item(self._sql_conn, namespace, key)
 
-    def insert_item(
-        self, namespace: str, key: str | list[str], value: DBType
-    ) -> None:
+    def insert_item(self, namespace: str, key: str | list[str], value: DBType) -> None:
         self.provider.insert_item(self._sql_conn, namespace, key, value)
 
-    def update_item(
-        self, namespace: str, key: str | list[str], value: DBType
-    ) -> None:
+    def update_item(self, namespace: str, key: str | list[str], value: DBType) -> None:
         self.provider.update_item(self._sql_conn, namespace, key, value)
 
     def get_batch(self, namespace: str, keys: list[str]) -> dict[str, Any]:
@@ -1511,11 +1441,13 @@ class SqliteCursorProxy:
         def wrapper(_) -> None:
             self._cursor.arraysize = size
             self._array_size = size
+
         return self._db_provider.execute_db_function(wrapper)
 
     def fetchone(self) -> Future[sqlite3.Row | None]:
         def fetch_wrapper(_) -> sqlite3.Row | None:
             return self._cursor.fetchone()
+
         return self._db_provider.execute_db_function(fetch_wrapper)
 
     def fetchmany(self, size: int | None = None) -> Future[list[sqlite3.Row]]:
@@ -1523,18 +1455,19 @@ class SqliteCursorProxy:
             if size is None:
                 return self._cursor.fetchmany()
             return self._cursor.fetchmany(size)
+
         return self._db_provider.execute_db_function(fetch_wrapper)
 
     def fetchall(self) -> Future[list[sqlite3.Row]]:
         def fetch_wrapper(_) -> list[sqlite3.Row]:
             return self._cursor.fetchall()
+
         return self._db_provider.execute_db_function(fetch_wrapper)
+
 
 class SqlTableWrapper(contextlib.AbstractAsyncContextManager):
     def __init__(
-        self,
-        database: MoonrakerDatabase,
-        table_def: SqlTableDefinition
+        self, database: MoonrakerDatabase, table_def: SqlTableDefinition
     ) -> None:
         self._database = database
         self._table_def = table_def
@@ -1566,9 +1499,7 @@ class SqlTableWrapper(contextlib.AbstractAsyncContextManager):
     ) -> Future[Any]:
         return self._db_provider.execute_db_function(callback)
 
-    def execute(
-        self, sql: str, params: SqlParams = []
-    ) -> Future[SqliteCursorProxy]:
+    def execute(self, sql: str, params: SqlParams = []) -> Future[SqliteCursorProxy]:
         return self._db_provider.execute_db_function(
             self._db_provider.sql_execute, sql, params
         )
@@ -1586,22 +1517,15 @@ class SqlTableWrapper(contextlib.AbstractAsyncContextManager):
         )
 
     def commit(self) -> Future[None]:
-        return self._db_provider.execute_db_function(
-            self._db_provider.sql_commit
-        )
+        return self._db_provider.execute_db_function(self._db_provider.sql_commit)
 
     def rollback(self) -> Future[None]:
-        return self._db_provider.execute_db_function(
-            self._db_provider.sql_rollback
-        )
+        return self._db_provider.execute_db_function(self._db_provider.sql_rollback)
 
 
 class NamespaceWrapper:
     def __init__(
-        self,
-        namespace: str,
-        database: MoonrakerDatabase,
-        parse_keys: bool = False
+        self, namespace: str, database: MoonrakerDatabase, parse_keys: bool = False
     ) -> None:
         self.namespace = namespace
         self.db = database
@@ -1622,16 +1546,12 @@ class NamespaceWrapper:
     def get_provider_wrapper(self) -> DBProviderWrapper:
         return self.db.get_provider_wrapper()
 
-    def insert(
-        self, key: list[str] | str, value: DBType
-    ) -> Future[None]:
+    def insert(self, key: list[str] | str, value: DBType) -> Future[None]:
         if isinstance(key, str) and not self._parse_keys:
             key = [key]
         return self.db.insert_item(self.namespace, key, value)
 
-    def update_child(
-        self, key: list[str] | str, value: DBType
-    ) -> Future[None]:
+    def update_child(self, key: list[str] | str, value: DBType) -> Future[None]:
         if isinstance(key, str) and not self._parse_keys:
             key = [key]
         return self.db.update_item(self.namespace, key, value)
@@ -1655,10 +1575,7 @@ class NamespaceWrapper:
     def insert_batch(self, records: dict[str, Any]) -> Future[None]:
         return self.db.insert_batch(self.namespace, records)
 
-    def move_batch(self,
-                   source_keys: list[str],
-                   dest_keys: list[str]
-                   ) -> Future[None]:
+    def move_batch(self, source_keys: list[str], dest_keys: list[str]) -> Future[None]:
         return self.db.move_batch(self.namespace, source_keys, dest_keys)
 
     def delete_batch(self, keys: list[str]) -> Future[dict[str, Any]]:
@@ -1725,6 +1642,7 @@ class NamespaceWrapper:
                     raise
                 val = default
             return val
+
         return self.eventloop.create_task(_do_pop())
 
     def clear(self) -> Future[None]:
@@ -1733,9 +1651,9 @@ class NamespaceWrapper:
     def _check_sync_method(self, func_name: str) -> None:
         if self.db.db_provider.is_alive():
             raise self.server.error(
-                f"Cannot call method {func_name} while "
-                "the eventloop is running"
+                f"Cannot call method {func_name} while the eventloop is running"
             )
+
 
 def load_component(config: ConfigHelper) -> MoonrakerDatabase:
     return MoonrakerDatabase(config)

@@ -5,32 +5,33 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
+
 import asyncio
 import logging
-import time
 import re
-from ...thirdparty.packagekit import enums as PkEnum
-from .base_deploy import BaseDeploy
+import time
+from collections.abc import Awaitable
 
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
     Any,
-    Optional,
     Union,
-    Dict,
-    List,
 )
-from collections.abc import Awaitable
+
+from ...thirdparty.packagekit import enums as PkEnum
+from .base_deploy import BaseDeploy
 
 if TYPE_CHECKING:
-    from ...confighelper import ConfigHelper
-    from ..shell_command import ShellCommandFactory as SCMDComp
-    from ..dbus_manager import DbusManager
-    from ..machine import Machine
-    from .update_manager import CommandHelper
     from dbus_fast import Variant
     from dbus_fast.aio import ProxyInterface
+
+    from ...confighelper import ConfigHelper
+    from ..dbus_manager import DbusManager
+    from ..machine import Machine
+    from ..shell_command import ShellCommandFactory as SCMDComp
+    from .update_manager import CommandHelper
+
     JsonType = Union[list[Any], dict[str, Any]]
 
 
@@ -43,7 +44,7 @@ class PackageDeploy(BaseDeploy):
 
     async def initialize(self) -> dict[str, Any]:
         storage = await super().initialize()
-        self.available_packages = storage.get('packages', [])
+        self.available_packages = storage.get("packages", [])
         provider: BasePackageProvider
         try_fallback = True
         if self.use_packagekit:
@@ -62,11 +63,12 @@ class PackageDeploy(BaseDeploy):
             if fallback is None:
                 provider = BasePackageProvider(self.cmd_helper)
                 machine: Machine = self.server.lookup_component("machine")
-                dist_info = machine.get_system_info()['distribution']
-                dist_id: str = dist_info['id'].lower()
+                dist_info = machine.get_system_info()["distribution"]
+                dist_id: str = dist_info["id"].lower()
                 self.server.add_warning(
                     "Unable to initialize System Update Provider for "
-                    f"distribution: {dist_id}")
+                    f"distribution: {dist_id}",
+                )
             else:
                 self.log_info("PackageDeploy: Using APT CLI Provider")
                 self.prefix = "Package Manager APT: "
@@ -100,8 +102,7 @@ class PackageDeploy(BaseDeploy):
             self.available_packages = await self.provider.get_packages()
             pkg_msg = "\n".join(self.available_packages)
             self.log_info(
-                f"Detected {len(self.available_packages)} package updates:"
-                f"\n{pkg_msg}"
+                f"Detected {len(self.available_packages)} package updates:\n{pkg_msg}",
             )
         except Exception:
             self.log_exc("Error Refreshing System Packages")
@@ -110,7 +111,7 @@ class PackageDeploy(BaseDeploy):
 
     def get_persistent_data(self) -> dict[str, Any]:
         storage = super().get_persistent_data()
-        storage['packages'] = self.available_packages
+        storage["packages"] = self.available_packages
         return storage
 
     async def update(self) -> bool:
@@ -125,22 +126,22 @@ class PackageDeploy(BaseDeploy):
         self.available_packages = []
         self._save_state()
         self.cmd_helper.notify_update_response(
-            "Package update finished...", is_complete=True)
+            "Package update finished...",
+            is_complete=True,
+        )
         return True
 
-    async def _update_package_cache(self,
-                                    force: bool = False,
-                                    notify: bool = False
-                                    ) -> None:
+    async def _update_package_cache(
+        self,
+        force: bool = False,
+        notify: bool = False,
+    ) -> None:
         curtime = time.time()
-        if force or curtime > self.last_refresh_time + 3600.:
+        if force or curtime > self.last_refresh_time + 3600.0:
             # Don't update if a request was done within the last hour
             await self.provider.refresh_packages(notify)
 
-    async def install_packages(self,
-                               package_list: list[str],
-                               **kwargs
-                               ) -> None:
+    async def install_packages(self, package_list: list[str], **kwargs) -> None:
         await self.provider.install_packages(package_list, **kwargs)
 
     def get_update_status(self) -> dict[str, Any]:
@@ -148,8 +149,9 @@ class PackageDeploy(BaseDeploy):
             "name": self.name,
             "configured_type": "system",
             "package_count": len(self.available_packages),
-            "package_list": self.available_packages
+            "package_list": self.available_packages,
         }
+
 
 class BasePackageProvider:
     def __init__(self, cmd_helper: CommandHelper) -> None:
@@ -165,25 +167,26 @@ class BasePackageProvider:
     async def get_packages(self) -> list[str]:
         raise self.server.error("Cannot retrieve packages, no provider set")
 
-    async def install_packages(self,
-                               package_list: list[str],
-                               **kwargs
-                               ) -> None:
+    async def install_packages(self, package_list: list[str], **kwargs) -> None:
         raise self.server.error("Cannot install packages, no provider set")
 
     async def upgrade_system(self) -> None:
         raise self.server.error("Cannot upgrade packages, no provider set")
+
 
 class AptCliProvider(BasePackageProvider):
     APT_CMD = "sudo DEBIAN_FRONTEND=noninteractive apt-get"
 
     async def refresh_packages(self, notify: bool = False) -> None:
         await self.cmd_helper.run_cmd(
-            f"{self.APT_CMD} update", timeout=600., notify=notify)
+            f"{self.APT_CMD} update",
+            timeout=600.0,
+            notify=notify,
+        )
 
     async def get_packages(self) -> list[str]:
         shell_cmd = self.cmd_helper.get_shell_command()
-        res = await shell_cmd.exec_cmd("apt list --upgradable", timeout=60.)
+        res = await shell_cmd.exec_cmd("apt list --upgradable", timeout=60.0)
         pkg_list = [p.strip() for p in res.split("\n") if p.strip()]
         if pkg_list:
             pkg_list = pkg_list[2:]
@@ -193,21 +196,16 @@ class AptCliProvider(BasePackageProvider):
     async def resolve_packages(self, package_list: list[str]) -> list[str]:
         self.cmd_helper.notify_update_response("Resolving packages...")
         search_regex = "|".join([f"^{pkg}$" for pkg in package_list])
-        cmd = f"apt-cache search --names-only \"{search_regex}\""
+        cmd = f'apt-cache search --names-only "{search_regex}"'
         shell_cmd = self.cmd_helper.get_shell_command()
-        ret = await shell_cmd.exec_cmd(cmd, timeout=600.)
-        resolved = [
-            pkg.strip().split()[0] for pkg in ret.split("\n") if pkg.strip()
-        ]
+        ret = await shell_cmd.exec_cmd(cmd, timeout=600.0)
+        resolved = [pkg.strip().split()[0] for pkg in ret.split("\n") if pkg.strip()]
         return [avail for avail in package_list if avail in resolved]
 
-    async def install_packages(self,
-                               package_list: list[str],
-                               **kwargs
-                               ) -> None:
-        timeout: float = kwargs.get('timeout', 300.)
-        retries: int = kwargs.get('retries', 3)
-        notify: bool = kwargs.get('notify', False)
+    async def install_packages(self, package_list: list[str], **kwargs) -> None:
+        timeout: float = kwargs.get("timeout", 300.0)
+        retries: int = kwargs.get("retries", 3)
+        notify: bool = kwargs.get("notify", False)
         await self.refresh_packages(notify=notify)
         resolved = await self.resolve_packages(package_list)
         if not resolved:
@@ -216,13 +214,19 @@ class AptCliProvider(BasePackageProvider):
         logging.debug(f"Resolved packages: {resolved}")
         pkgs = " ".join(resolved)
         await self.cmd_helper.run_cmd(
-            f"{self.APT_CMD} install --yes {pkgs}", timeout=timeout,
-            attempts=retries, notify=notify)
+            f"{self.APT_CMD} install --yes {pkgs}",
+            timeout=timeout,
+            attempts=retries,
+            notify=notify,
+        )
 
     async def upgrade_system(self) -> None:
         await self.cmd_helper.run_cmd(
-            f"{self.APT_CMD} upgrade --yes", timeout=3600.,
-            notify=True)
+            f"{self.APT_CMD} upgrade --yes",
+            timeout=3600.0,
+            notify=True,
+        )
+
 
 class PackageKitProvider(BasePackageProvider):
     def __init__(self, cmd_helper: CommandHelper) -> None:
@@ -237,19 +241,22 @@ class PackageKitProvider(BasePackageProvider):
         # Check for PolicyKit permissions
         await self.dbus_mgr.check_permission(
             "org.freedesktop.packagekit.system-sources-refresh",
-            "The Update Manager will fail to fetch package updates")
+            "The Update Manager will fail to fetch package updates",
+        )
         await self.dbus_mgr.check_permission(
             "org.freedesktop.packagekit.package-install",
-            "The Update Manager will fail to install packages")
+            "The Update Manager will fail to install packages",
+        )
         await self.dbus_mgr.check_permission(
             "org.freedesktop.packagekit.system-update",
-            "The Update Manager will fail to update packages"
+            "The Update Manager will fail to update packages",
         )
         # Fetch the PackageKit DBus Interface
         self.pkgkit = await self.dbus_mgr.get_interface(
             "org.freedesktop.PackageKit",
             "/org/freedesktop/PackageKit",
-            "org.freedesktop.PackageKit")
+            "org.freedesktop.PackageKit",
+        )
 
     async def refresh_packages(self, notify: bool = False) -> None:
         await self.run_transaction("refresh_cache", False, notify=notify)
@@ -257,68 +264,70 @@ class PackageKitProvider(BasePackageProvider):
     async def get_packages(self) -> list[str]:
         flags = PkEnum.Filter.NONE
         pkgs = await self.run_transaction("get_updates", flags.value)
-        pkg_ids = [info['package_id'] for info in pkgs if 'package_id' in info]
+        pkg_ids = [info["package_id"] for info in pkgs if "package_id" in info]
         return [pkg_id.split(";")[0] for pkg_id in pkg_ids]
 
-    async def install_packages(self,
-                               package_list: list[str],
-                               **kwargs
-                               ) -> None:
-        notify: bool = kwargs.get('notify', False)
+    async def install_packages(self, package_list: list[str], **kwargs) -> None:
+        notify: bool = kwargs.get("notify", False)
         await self.refresh_packages(notify=notify)
         flags = (
-            PkEnum.Filter.NEWEST | PkEnum.Filter.NOT_INSTALLED |
-            PkEnum.Filter.BASENAME | PkEnum.Filter.ARCH
+            PkEnum.Filter.NEWEST
+            | PkEnum.Filter.NOT_INSTALLED
+            | PkEnum.Filter.BASENAME
+            | PkEnum.Filter.ARCH
         )
         pkgs = await self.run_transaction("resolve", flags.value, package_list)
-        pkg_ids = [info['package_id'] for info in pkgs if 'package_id' in info]
+        pkg_ids = [info["package_id"] for info in pkgs if "package_id" in info]
         if pkg_ids:
             logging.debug(f"Installing Packages: {pkg_ids}")
             tflag = PkEnum.TransactionFlag.ONLY_TRUSTED
-            await self.run_transaction("install_packages", tflag.value,
-                                       pkg_ids, notify=notify)
+            await self.run_transaction(
+                "install_packages",
+                tflag.value,
+                pkg_ids,
+                notify=notify,
+            )
 
     async def upgrade_system(self) -> None:
         # Get Updates, Install Packages
         flags = PkEnum.Filter.NONE
         pkgs = await self.run_transaction("get_updates", flags.value)
-        pkg_ids = [info['package_id'] for info in pkgs if 'package_id' in info]
+        pkg_ids = [info["package_id"] for info in pkgs if "package_id" in info]
         if pkg_ids:
             logging.debug(f"Upgrading Packages: {pkg_ids}")
             tflag = PkEnum.TransactionFlag.ONLY_TRUSTED
-            await self.run_transaction("update_packages", tflag.value,
-                                       pkg_ids, notify=True)
+            await self.run_transaction(
+                "update_packages",
+                tflag.value,
+                pkg_ids,
+                notify=True,
+            )
 
     def create_transaction(self) -> PackageKitTransaction:
         if self.pkgkit is None:
             raise self.server.error("PackageKit Interface Not Available")
-        return PackageKitTransaction(self.dbus_mgr, self.pkgkit,
-                                     self.cmd_helper)
+        return PackageKitTransaction(self.dbus_mgr, self.pkgkit, self.cmd_helper)
 
-    async def run_transaction(self,
-                              method: str,
-                              *args,
-                              notify: bool = False
-                              ) -> Any:
+    async def run_transaction(self, method: str, *args, notify: bool = False) -> Any:
         transaction = self.create_transaction()
         return await transaction.run(method, *args, notify=notify)
 
+
 class PackageKitTransaction:
     GET_PKG_ROLES = (
-        PkEnum.Role.RESOLVE | PkEnum.Role.GET_PACKAGES |
-        PkEnum.Role.GET_UPDATES
+        PkEnum.Role.RESOLVE | PkEnum.Role.GET_PACKAGES | PkEnum.Role.GET_UPDATES
     )
     QUERY_ROLES = GET_PKG_ROLES | PkEnum.Role.GET_REPO_LIST
     PROGRESS_STATUS = (
-        PkEnum.Status.RUNNING | PkEnum.Status.INSTALL |
-        PkEnum.Status.UPDATE
+        PkEnum.Status.RUNNING | PkEnum.Status.INSTALL | PkEnum.Status.UPDATE
     )
 
-    def __init__(self,
-                 dbus_mgr: DbusManager,
-                 pkgkit: ProxyInterface,
-                 cmd_helper: CommandHelper
-                 ) -> None:
+    def __init__(
+        self,
+        dbus_mgr: DbusManager,
+        pkgkit: ProxyInterface,
+        cmd_helper: CommandHelper,
+    ) -> None:
         self.server = cmd_helper.get_server()
         self.eventloop = self.server.get_event_loop()
         self.cmd_helper = cmd_helper
@@ -339,46 +348,45 @@ class PackageKitTransaction:
         self.uid = 0
         # Transaction data tracking
         self.tfut: asyncio.Future | None = None
-        self.last_progress_notify_time: float = 0.
+        self.last_progress_notify_time: float = 0.0
         self.result: list[dict[str, Any]] = []
         self.err_msg: str = ""
 
-    def run(self,
-            method: str,
-            *args,
-            notify: bool = False
-            ) -> Awaitable:
+    def run(self, method: str, *args, notify: bool = False) -> Awaitable:
         if self.tfut is not None:
-            raise self.server.error(
-                "PackageKit transaction can only be used once")
+            raise self.server.error("PackageKit transaction can only be used once")
         self.notify = notify
         self.tfut = self.eventloop.create_future()
         coro = self._start_transaction(method, *args)
         self.eventloop.create_task(coro)
         return self.tfut
 
-    async def _start_transaction(self,
-                                 method: str,
-                                 *args
-                                 ) -> None:
+    async def _start_transaction(self, method: str, *args) -> None:
         assert self.tfut is not None
         try:
             # Create Transaction
             tid = await self.pkgkit.call_create_transaction()  # type: ignore
             transaction, props = await self.dbus_mgr.get_interfaces(
-                "org.freedesktop.PackageKit", tid,
-                ["org.freedesktop.PackageKit.Transaction",
-                 "org.freedesktop.DBus.Properties"])
+                "org.freedesktop.PackageKit",
+                tid,
+                [
+                    "org.freedesktop.PackageKit.Transaction",
+                    "org.freedesktop.DBus.Properties",
+                ],
+            )
             # Set interface callbacks
-            transaction.on_package(self._on_package_signal)    # type: ignore
-            transaction.on_repo_detail(                        # type: ignore
-                self._on_repo_detail_signal)
-            transaction.on_item_progress(                      # type: ignore
-                self._on_item_progress_signal)
-            transaction.on_error_code(self._on_error_signal)   # type: ignore
+            transaction.on_package(self._on_package_signal)  # type: ignore
+            transaction.on_repo_detail(  # type: ignore
+                self._on_repo_detail_signal,
+            )
+            transaction.on_item_progress(  # type: ignore
+                self._on_item_progress_signal,
+            )
+            transaction.on_error_code(self._on_error_signal)  # type: ignore
             transaction.on_finished(self._on_finished_signal)  # type: ignore
-            props.on_properties_changed(                       # type: ignore
-                self._on_properties_changed)
+            props.on_properties_changed(  # type: ignore
+                self._on_properties_changed,
+            )
             # Run method
             logging.debug(f"PackageKit: Running transaction call_{method}")
             func = getattr(transaction, f"call_{method}")
@@ -386,42 +394,36 @@ class PackageKitTransaction:
         except Exception as e:
             self.tfut.set_exception(e)
 
-    def _on_package_signal(self,
-                           info_code: int,
-                           package_id: str,
-                           summary: str
-                           ) -> None:
+    def _on_package_signal(self, info_code: int, package_id: str, summary: str) -> None:
         info = PkEnum.Info.from_index(info_code)
         if self._role in self.GET_PKG_ROLES:
-            pkg_data = {
-                'package_id': package_id,
-                'info': info.desc,
-                'summary': summary
-            }
+            pkg_data = {"package_id": package_id, "info": info.desc, "summary": summary}
             self.result.append(pkg_data)
         else:
             self._notify_package(info, package_id)
 
-    def _on_repo_detail_signal(self,
-                               repo_id: str,
-                               description: str,
-                               enabled: bool
-                               ) -> None:
+    def _on_repo_detail_signal(
+        self,
+        repo_id: str,
+        description: str,
+        enabled: bool,
+    ) -> None:
         if self._role == PkEnum.Role.GET_REPO_LIST:
             repo_data = {
                 "repo_id": repo_id,
                 "description": description,
-                "enabled": enabled
+                "enabled": enabled,
             }
             self.result.append(repo_data)
         else:
             self._notify_repo(repo_id, description)
 
-    def _on_item_progress_signal(self,
-                                 item_id: str,
-                                 status_code: int,
-                                 percent_complete: int
-                                 ) -> None:
+    def _on_item_progress_signal(
+        self,
+        item_id: str,
+        status_code: int,
+        percent_complete: int,
+    ) -> None:
         status = PkEnum.Status.from_index(status_code)  # noqa: F841
         # NOTE: This signal doesn't seem to fire predictably,
         # nor does it seem to provide a consistent "percent complete"
@@ -432,10 +434,7 @@ class PackageKitTransaction:
         #    f"Percent Complete: {percent_complete}\n"
         #    f"Status: {status.desc}")
 
-    def _on_error_signal(self,
-                         error_code: int,
-                         details: str
-                         ) -> None:
+    def _on_error_signal(self, error_code: int, details: str) -> None:
         err = PkEnum.Error.from_index(error_code)
         self.err_msg = f"{err.name}: {details}"
 
@@ -443,24 +442,27 @@ class PackageKitTransaction:
         if self.tfut is None:
             return
         ext = PkEnum.Exit.from_index(exit_code)
-        secs = run_time / 1000.
+        secs = run_time / 1000.0
         if ext == PkEnum.Exit.SUCCESS:
             self.tfut.set_result(self.result)
         else:
             err = self.err_msg or ext.desc
             server = self.cmd_helper.get_server()
             self.tfut.set_exception(server.error(err))
-        msg = f"Transaction {self._role.desc}: Exit {ext.desc}, " \
-              f"Run time: {secs:.2f} seconds"
+        msg = (
+            f"Transaction {self._role.desc}: Exit {ext.desc}, "
+            f"Run time: {secs:.2f} seconds"
+        )
         if self.notify:
             self.cmd_helper.notify_update_response(msg)
         logging.debug(msg)
 
-    def _on_properties_changed(self,
-                               iface_name: str,
-                               changed_props: dict[str, Variant],
-                               invalid_props: dict[str, Variant]
-                               ) -> None:
+    def _on_properties_changed(
+        self,
+        iface_name: str,
+        changed_props: dict[str, Variant],
+        invalid_props: dict[str, Variant],
+    ) -> None:
         for name, var in changed_props.items():
             formatted = re.sub(r"(\w)([A-Z])", r"\g<1>_\g<2>", name).lower()
             setattr(self, formatted, var.value)

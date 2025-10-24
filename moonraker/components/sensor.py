@@ -16,14 +16,9 @@ from ..common import RequestType, HistoryFieldData
 # Annotation imports
 from typing import (
     Any,
-    DefaultDict,
-    Deque,
-    Dict,
-    List,
     Optional,
-    Type,
     TYPE_CHECKING,
-    Union
+    Union,
 )
 from collections.abc import Callable
 
@@ -36,9 +31,8 @@ if TYPE_CHECKING:
 SENSOR_UPDATE_TIME = 1.0
 SENSOR_EVENT_NAME = "sensors:sensor_update"
 
-def _set_result(
-    name: str, value: int | float, store: dict[str, int | float]
-) -> None:
+
+def _set_result(name: str, value: int | float, store: dict[str, int | float]) -> None:
     if not isinstance(value, (int, float)):
         store[name] = float(value)
     else:
@@ -67,20 +61,19 @@ class BaseSensor:
         hist_field_prefix = "history_field_"
         for opt in all_opts:
             if opt.startswith(param_prefix):
-                name = opt[len(param_prefix):]
+                name = opt[len(param_prefix) :]
                 data = config.getdict(opt)
-                data["name"] = opt[len(param_prefix):]
+                data["name"] = opt[len(param_prefix) :]
                 self.param_info.append(data)
                 continue
             if not opt.startswith(hist_field_prefix):
                 continue
-            name = opt[len(hist_field_prefix):]
+            name = opt[len(hist_field_prefix) :]
             field_cfg: dict[str, str] = config.getdict(opt)
             ident: str | None = field_cfg.pop("parameter", None)
             if ident is None:
                 raise config.error(
-                    f"[{cfg_name}]: option '{opt}', key 'parameter' must be"
-                    f"specified"
+                    f"[{cfg_name}]: option '{opt}', key 'parameter' must bespecified"
                 )
             do_init: str = field_cfg.pop("init_tracker", "false").lower()
             reset_cb = self._gen_reset_callback(ident) if do_init == "true" else None
@@ -116,6 +109,7 @@ class BaseSensor:
     def _gen_reset_callback(self, param_name: str) -> Callable[[], float]:
         def on_reset() -> float:
             return self.last_measurements.get(param_name, 0)
+
         return on_reset
 
     def _update_sensor_value(self, eventtime: float) -> None:
@@ -178,7 +172,7 @@ class MQTTSensor(BaseSensor):
         measurements: dict[str, int | float] = {}
         context = {
             "payload": payload.decode(),
-            "set_result": partial(_set_result, store=measurements)
+            "set_result": partial(_set_result, store=measurements),
         }
 
         try:

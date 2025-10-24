@@ -23,12 +23,11 @@ from ..utils import json_wrapper as jsonw
 from typing import (
     TYPE_CHECKING,
     Optional,
-    Dict,
-    List,
     Union,
     Any,
 )
 from collections.abc import Awaitable, Callable
+
 if TYPE_CHECKING:
     from .application import InternalTransport
     from ..confighelper import ConfigHelper
@@ -51,11 +50,16 @@ SP_VERSION = "0.1"
 TEST_ENDPOINT = f"wss://testws3.simplyprint.io/{SP_VERSION}/p"
 PROD_ENDPOINT = f"wss://ws.simplyprint.io/{SP_VERSION}/p"
 # TODO: Increase this time to something greater, perhaps 30 minutes
-CONNECTION_ERROR_LOG_TIME = 60.
+CONNECTION_ERROR_LOG_TIME = 60.0
 PRE_SETUP_EVENTS = [
-    "connection", "state_change", "shutdown", "machine_data", "firmware",
-    "ping"
+    "connection",
+    "state_change",
+    "shutdown",
+    "machine_data",
+    "firmware",
+    "ping",
 ]
+
 
 class SimplyPrint(APITransport):
     def __init__(self, config: ConfigHelper) -> None:
@@ -79,30 +83,31 @@ class SimplyPrint(APITransport):
         self.webcam_stream = WebcamStream(config, self)
         self.print_handler = PrintHandler(self)
         self.last_received_temps: dict[str, float] = {}
-        self.last_err_log_time: float = 0.
-        self.last_cpu_update_time: float = 0.
+        self.last_err_log_time: float = 0.0
+        self.last_cpu_update_time: float = 0.0
         self.intervals: dict[str, float] = {
-            "job": 1.,
-            "temps": 1.,
-            "temps_target": .25,
-            "cpu": 10.,
-            "ai": 0.,
-            "ping": 20.,
+            "job": 1.0,
+            "temps": 1.0,
+            "temps_target": 0.25,
+            "cpu": 10.0,
+            "ai": 0.0,
+            "ping": 20.0,
         }
         self.printer_status: dict[str, dict[str, Any]] = {}
         self.heaters: dict[str, str] = {}
         self.missed_job_events: list[dict[str, Any]] = []
         self.announce_mutex = asyncio.Lock()
         self.connection_task: asyncio.Task | None = None
-        self.reconnect_delay: float = 1.
+        self.reconnect_delay: float = 1.0
         self.reconnect_token: str | None = None
-        self._last_sp_ping: float = 0.
+        self._last_sp_ping: float = 0.0
         self.ping_sp_timer = self.eventloop.register_timer(self._handle_sp_ping)
         self.printer_info_timer = self.eventloop.register_timer(
-            self._handle_printer_info_update)
+            self._handle_printer_info_update
+        )
         self._print_request_event: asyncio.Event = asyncio.Event()
-        self.next_temp_update_time: float = 0.
-        self._last_ping_received: float = 0.
+        self.next_temp_update_time: float = 0.0
+        self._last_ping_received: float = 0.0
         self.gcode_terminal_enabled: bool = False
         self._current_job_id: int | None = None
         self.connected = False
@@ -150,32 +155,42 @@ class SimplyPrint(APITransport):
 
         # Register State Events
         self.server.register_event_handler(
-            "server:klippy_started", self._on_klippy_startup)
+            "server:klippy_started", self._on_klippy_startup
+        )
+        self.server.register_event_handler("server:klippy_ready", self._on_klippy_ready)
         self.server.register_event_handler(
-            "server:klippy_ready", self._on_klippy_ready)
+            "server:klippy_shutdown", self._on_klippy_shutdown
+        )
         self.server.register_event_handler(
-            "server:klippy_shutdown", self._on_klippy_shutdown)
+            "server:klippy_disconnect", self._on_klippy_disconnected
+        )
         self.server.register_event_handler(
-            "server:klippy_disconnect", self._on_klippy_disconnected)
+            "job_state:state_changed", self._on_job_state_changed
+        )
         self.server.register_event_handler(
-            "job_state:state_changed", self._on_job_state_changed)
+            "klippy_apis:pause_requested", self._on_pause_requested
+        )
         self.server.register_event_handler(
-            "klippy_apis:pause_requested", self._on_pause_requested)
+            "klippy_apis:resume_requested", self._on_resume_requested
+        )
         self.server.register_event_handler(
-            "klippy_apis:resume_requested", self._on_resume_requested)
+            "klippy_apis:cancel_requested", self._on_cancel_requested
+        )
         self.server.register_event_handler(
-            "klippy_apis:cancel_requested", self._on_cancel_requested)
-        self.server.register_event_handler(
-            "proc_stats:proc_stat_update", self._on_proc_update)
+            "proc_stats:proc_stat_update", self._on_proc_update
+        )
         self.server.register_event_handler(
             "proc_stats:cpu_throttled", self._on_cpu_throttled
         )
         self.server.register_event_handler(
-            "websockets:client_identified", self._on_websocket_identified)
+            "websockets:client_identified", self._on_websocket_identified
+        )
         self.server.register_event_handler(
-            "websockets:client_removed", self._on_websocket_removed)
+            "websockets:client_removed", self._on_websocket_removed
+        )
         self.server.register_event_handler(
-            "server:gcode_response", self._on_gcode_response)
+            "server:gcode_response", self._on_gcode_response
+        )
         self.server.register_event_handler(
             "klippy_connection:gcode_received", self._on_gcode_received
         )
@@ -199,7 +214,8 @@ class SimplyPrint(APITransport):
                 log_connect = False
             try:
                 self.ws = await tornado.websocket.websocket_connect(
-                    url, connect_timeout=5.,
+                    url,
+                    connect_timeout=5.0,
                 )
                 setattr(self.ws, "on_ping", self._on_ws_ping)
                 cur_time = self.eventloop.get_loop_time()
@@ -275,12 +291,12 @@ class SimplyPrint(APITransport):
                 name = data.get("name")
                 if name is not None:
                     self.save_item("printer_name", name)
-            self.reconnect_delay = 1.
+            self.reconnect_delay = 1.0
             self._push_initial_state()
             self.ping_sp_timer.start()
         elif event == "error":
             logging.info(f"SimplyPrint Connection Error: {data}")
-            self.reconnect_delay = 30.
+            self.reconnect_delay = 30.0
             self.reconnect_token = None
         elif event == "new_token":
             if data is None:
@@ -302,9 +318,7 @@ class SimplyPrint(APITransport):
                 if not isinstance(short_id, str):
                     self._logger.debug(f"Invalid short_id received: {short_id}")
                 else:
-                    self.eventloop.create_task(
-                        self._announce_setup(data["short_id"])
-                    )
+                    self.eventloop.create_task(self._announce_setup(data["short_id"]))
         elif event == "complete_setup":
             if data is None:
                 logging.debug("Invalid message, no data")
@@ -327,7 +341,7 @@ class SimplyPrint(APITransport):
                 self._update_intervals(data)
         elif event == "pong":
             diff = self.eventloop.get_loop_time() - self._last_sp_ping
-            self.send_sp("latency", {"ms": int(diff * 1000 + .5)})
+            self.send_sp("latency", {"ms": int(diff * 1000 + 0.5)})
         else:
             # TODO: It would be good for the backend to send an
             # event indicating that it is ready to recieve printer
@@ -365,10 +379,7 @@ class SimplyPrint(APITransport):
             self._current_job_id = int(args.get("job_id", 0)) or None
             self.print_handler.download_file(url, start)
         elif demand == "start_print":
-            if (
-                kconn.is_connected() and
-                self.cache.state == "operational"
-            ):
+            if kconn.is_connected() and self.cache.state == "operational":
                 self.eventloop.create_task(self.print_handler.start_print())
             else:
                 logging.debug("Failed to start print")
@@ -399,9 +410,7 @@ class SimplyPrint(APITransport):
             self.sp_info[name] = data
             self.spdb[name] = data
 
-    async def _handle_gcode_demand(
-        self, script: str, ident: str | None
-    ) -> None:
+    async def _handle_gcode_demand(self, script: str, ident: str | None) -> None:
         success: bool = True
         msg: str | None = None
         try:
@@ -412,11 +421,7 @@ class SimplyPrint(APITransport):
         if ident is not None:
             self.send_sp(
                 "gcode_executed",
-                {
-                    "identifier": ident,
-                    "success": success,
-                    "message": msg
-                }
+                {"identifier": ident, "success": success, "message": msg},
             )
 
     async def _call_internal_api(self, method: str, **kwargs) -> Any:
@@ -442,16 +447,13 @@ class SimplyPrint(APITransport):
 
     def _update_intervals(self, intervals: dict[str, Any]) -> None:
         for key, val in intervals.items():
-            self.intervals[key] = val / 1000.
+            self.intervals[key] = val / 1000.0
         logging.debug(f"Intervals Updated: {self.intervals}")
 
     async def _announce_setup(self, short_id: str) -> None:
         async with self.announce_mutex:
             eid: str | None = self.sp_info.get("announcement_id")
-            if (
-                eid is not None and
-                self.sp_info.get("temp_short_setup_id") == short_id
-            ):
+            if eid is not None and self.sp_info.get("temp_short_setup_id") == short_id:
                 return
             ann: Announcements = self.server.lookup_component("announcements")
             if eid is not None:
@@ -467,7 +469,9 @@ class SimplyPrint(APITransport):
                 "SimplyPrint is ready to complete setup for your printer. "
                 "Please log in to your account and enter the following "
                 f"setup code:\n\n{short_id}\n\n",
-                "https://simplyprint.io", "high", "simplyprint"
+                "https://simplyprint.io",
+                "high",
+                "simplyprint",
             )
             eid = entry.get("entry_id")
             self.save_item("announcement_id", eid)
@@ -517,16 +521,14 @@ class SimplyPrint(APITransport):
             # Wait for the "action" requested event to fire, then reset the
             # state
             try:
-                await asyncio.wait_for(self._print_request_event.wait(), 1.)
+                await asyncio.wait_for(self._print_request_event.wait(), 1.0)
             except Exception:
                 pass
             self._update_state_from_klippy()
 
     async def _test_webcam(self) -> None:
         await self.webcam_stream.test_connection()
-        self.send_sp(
-            "webcam_status", {"connected": self.webcam_stream.connected}
-        )
+        self.send_sp("webcam_status", {"connected": self.webcam_stream.connected})
 
     async def _on_klippy_ready(self) -> None:
         last_stats: dict[str, Any] = self.job_state.get_last_stats()
@@ -588,16 +590,14 @@ class SimplyPrint(APITransport):
         if status:
             logging.debug(f"SimplyPrint: Got Initial Status: {status}")
             self.printer_status = status
-            self._update_temps(1.)
-            self.next_temp_update_time = 0.
+            self._update_temps(1.0)
+            self.next_temp_update_time = 0.0
             if "bed_mesh" in status:
                 self._send_mesh_data()
             if "toolhead" in status:
                 self._send_active_extruder(status["toolhead"]["extruder"])
             if "gcode_move" in status:
-                self.layer_detect.update(
-                    status["gcode_move"]["gcode_position"]
-                )
+                self.layer_detect.update(status["gcode_move"]["gcode_position"])
             if "exclude_object" in status:
                 self._handle_exclude_object(status["exclude_object"])
             if self.filament_sensor and self.filament_sensor in status:
@@ -609,7 +609,7 @@ class SimplyPrint(APITransport):
                 self.amb_detect.update_ambient(status[cfg_amb_sensor])
         if not has_amb_sensor:
             self.amb_detect.start()
-        self.printer_info_timer.start(delay=1.)
+        self.printer_info_timer.start(delay=1.0)
 
     def _on_power_changed(self, device_info: dict[str, Any]) -> None:
         if self.power_id and device_info["device"] == self.power_id:
@@ -617,13 +617,10 @@ class SimplyPrint(APITransport):
             self.send_sp("power_controller", {"on": is_on})
 
     def _on_websocket_identified(self, ws: BaseRemoteConnection) -> None:
-        if (
-            self.cache.current_wsid is None and
-            ws.client_data.get("type", "") == "web"
-        ):
+        if self.cache.current_wsid is None and ws.client_data.get("type", "") == "web":
             ui_data: dict[str, Any] = {
                 "ui": ws.client_data["name"],
-                "ui_version": ws.client_data["version"]
+                "ui_version": ws.client_data["version"],
             }
             self.cache.firmware_info.update(ui_data)
             self.cache.current_wsid = ws.uid
@@ -672,7 +669,7 @@ class SimplyPrint(APITransport):
         self,
         prev_stats: dict[str, Any],
         new_stats: dict[str, Any],
-        need_start_event: bool = True
+        need_start_event: bool = True,
     ) -> None:
         # includes started and resumed events
         self._update_state("printing")
@@ -694,14 +691,12 @@ class SimplyPrint(APITransport):
         self._send_job_event(job_info)
 
     def _check_job_started(
-        self,
-        prev_stats: dict[str, Any],
-        new_stats: dict[str, Any]
+        self, prev_stats: dict[str, Any], new_stats: dict[str, Any]
     ) -> None:
         if not self.cache.job_info:
             job_info: dict[str, Any] = {
                 "filename": new_stats.get("filename", ""),
-                "started": True
+                "started": True,
             }
             self._send_job_event(job_info)
 
@@ -774,9 +769,7 @@ class SimplyPrint(APITransport):
 
     def _on_gcode_response(self, response: str):
         if self.gcode_terminal_enabled:
-            resp = [
-                r.strip() for r in response.strip().split("\n") if r.strip()
-            ]
+            resp = [r.strip() for r in response.strip().split("\n") if r.strip()]
             self.send_sp("term_update", {"response": resp})
 
     def _on_gcode_received(self, script: str):
@@ -793,17 +786,17 @@ class SimplyPrint(APITransport):
             return
         self.last_cpu_update_time = curtime
         sys_mem = proc_stats["system_memory"]
-        mem_pct: float = 0.
+        mem_pct: float = 0.0
         if sys_mem:
             mem_pct = sys_mem["used"] / sys_mem["total"] * 100
         cpu_data = {
-            "usage": int(cpu["cpu"] + .5),
-            "memory": int(mem_pct + .5),
-            "flags": self.cache.throttled_state.get("bits", 0)
+            "usage": int(cpu["cpu"] + 0.5),
+            "memory": int(mem_pct + 0.5),
+            "flags": self.cache.throttled_state.get("bits", 0),
         }
         temp: float | None = proc_stats["cpu_temp"]
         if temp is not None:
-            cpu_data["temp"] = int(temp + .5)
+            cpu_data["temp"] = int(temp + 0.5)
         diff = self._get_object_diff(cpu_data, self.cache.cpu_info)
         if diff:
             self.cache.cpu_info.update(cpu_data)
@@ -864,20 +857,16 @@ class SimplyPrint(APITransport):
         if job_data:
             self.send_sp("job_info", job_data)
 
-
     def _update_job_progress(self) -> None:
         job_info: dict[str, Any] = {}
         est_time = self.cache.metadata.get("estimated_time")
         last_stats: dict[str, Any] = self.job_state.get_last_stats()
         if est_time is not None:
             duration: float = last_stats["print_duration"]
-            time_left = max(0, int(est_time - duration + .5))
-            last_time_left = self.cache.job_info.get("time", time_left + 60.)
+            time_left = max(0, int(est_time - duration + 0.5))
+            last_time_left = self.cache.job_info.get("time", time_left + 60.0)
             time_diff = last_time_left - time_left
-            if (
-                (time_left < 60 or time_diff >= 30) and
-                time_left != last_time_left
-            ):
+            if (time_left < 60 or time_diff >= 30) and time_left != last_time_left:
                 job_info["time"] = time_left
 
         progress = None
@@ -890,8 +879,8 @@ class SimplyPrint(APITransport):
         if not progress and "virtual_sdcard" in self.printer_status:
             if "file_position" in self.printer_status["virtual_sdcard"]:
                 file_position = self.printer_status["virtual_sdcard"]["file_position"]
-                gcode_start_byte = self.cache.metadata.get('gcode_start_byte', 0)
-                gcode_end_byte = self.cache.metadata.get('gcode_end_byte', 0)
+                gcode_start_byte = self.cache.metadata.get("gcode_start_byte", 0)
+                gcode_end_byte = self.cache.metadata.get("gcode_end_byte", 0)
                 gcode_length = gcode_end_byte - gcode_start_byte
                 if gcode_start_byte and gcode_end_byte and gcode_length > 0:
                     progress = (file_position - gcode_start_byte) / gcode_length
@@ -900,7 +889,7 @@ class SimplyPrint(APITransport):
                 progress = self.printer_status["virtual_sdcard"]["progress"]
 
         if progress:
-            pct_prog = int(progress * 100 + .5)
+            pct_prog = int(progress * 100 + 0.5)
             if pct_prog != self.cache.job_info.get("progress", 0):
                 job_info["progress"] = pct_prog
 
@@ -921,10 +910,10 @@ class SimplyPrint(APITransport):
         for printer_obj, key in self.heaters.items():
             reported_temp = self.printer_status[printer_obj]["temperature"]
             ret = [
-                int(reported_temp + .5),
-                int(self.printer_status[printer_obj]["target"] + .5)
+                int(reported_temp + 0.5),
+                int(self.printer_status[printer_obj]["target"] + 0.5),
             ]
-            last_temps = self.cache.temps.get(key, [-100., -100.])
+            last_temps = self.cache.temps.get(key, [-100.0, -100.0])
             if ret[1] == last_temps[1]:
                 if ret[1]:
                     seeking_target = abs(ret[1] - ret[0]) > 5
@@ -934,7 +923,7 @@ class SimplyPrint(APITransport):
                 # The target hasn't changed and not heating, debounce temp
                 if key in self.last_received_temps and not seeking_target:
                     last_reported = self.last_received_temps[key]
-                    if abs(reported_temp - last_reported) < .75:
+                    if abs(reported_temp - last_reported) < 0.75:
                         self.last_received_temps.pop(key)
                         continue
                 if ret[0] == last_temps[0]:
@@ -948,8 +937,9 @@ class SimplyPrint(APITransport):
             self.cache.temps[key] = ret
         if need_rapid_update:
             self.next_temp_update_time = (
-                0. if self.intervals["temps_target"] < .2501 else
-                eventtime + self.intervals["temps_target"]
+                0.0
+                if self.intervals["temps_target"] < 0.2501
+                else eventtime + self.intervals["temps_target"]
             )
         else:
             self.next_temp_update_time = eventtime + self.intervals["temps"]
@@ -1056,9 +1046,7 @@ class SimplyPrint(APITransport):
         diff = self._get_object_diff(fw_info, self.cache.firmware_info)
         if diff:
             self.cache.firmware_info = fw_info
-            self.send_sp(
-                "firmware", {"fw": diff, "raw": False, "unsafe": unsafe}
-            )
+            self.send_sp("firmware", {"fw": diff, "raw": False, "unsafe": unsafe})
 
     def _send_active_extruder(self, new_extruder: str):
         tool = "T0" if new_extruder == "extruder" else f"T{new_extruder[8:]}"
@@ -1072,7 +1060,7 @@ class SimplyPrint(APITransport):
         wc_data = {
             "flipH": wc_cfg.get("flip_horizontal", False),
             "flipV": wc_cfg.get("flip_vertical", False),
-            "rotate90": wc_cfg.get("rotation", 0) == 90
+            "rotate90": wc_cfg.get("rotation", 0) == 90,
         }
         self.send_sp("webcam", wc_data)
 
@@ -1090,12 +1078,10 @@ class SimplyPrint(APITransport):
         if self.cache.temps:
             self.send_sp("temps", self.cache.temps)
         if self.cache.firmware_info:
-            self.send_sp(
-                "firmware",
-                {"fw": self.cache.firmware_info, "raw": False})
+            self.send_sp("firmware", {"fw": self.cache.firmware_info, "raw": False})
         curtime = self.eventloop.get_loop_time()
         for evt in self.missed_job_events:
-            evt["delay"] = int((curtime - evt["delay"]) + .5)
+            evt["delay"] = int((curtime - evt["delay"]) + 0.5)
             self.send_sp("job_info", evt)
         self.missed_job_events = []
         if self.cache.active_extruder:
@@ -1106,12 +1092,8 @@ class SimplyPrint(APITransport):
         if self.power_id:
             self.eventloop.create_task(self._send_power_state())
         if self.cache.filament_state:
-            self.send_sp(
-                "filament_sensor", {"state": self.cache.filament_state}
-            )
-        self.send_sp(
-            "webcam_status", {"connected": self.webcam_stream.connected}
-        )
+            self.send_sp("filament_sensor", {"state": self.cache.filament_state})
+        self.send_sp("webcam_status", {"connected": self.webcam_stream.connected})
         self.eventloop.create_task(self._send_machine_data())
         self.eventloop.create_task(self._send_webcam_config())
 
@@ -1120,10 +1102,10 @@ class SimplyPrint(APITransport):
 
     def send_sp(self, evt_name: str, data: Any) -> Awaitable[bool]:
         if (
-            not self.connected or
-            self.ws is None or
-            self.ws.protocol is None or
-            not self._check_setup_event(evt_name)
+            not self.connected
+            or self.ws is None
+            or self.ws.protocol is None
+            or not self._check_setup_event(evt_name)
         ):
             fut = self.eventloop.create_future()
             fut.set_result(False)
@@ -1173,14 +1155,12 @@ class SimplyPrint(APITransport):
         self.is_closing = True
         if self.ws is not None:
             self.ws.close(1001, "Client Shutdown")
-        if (
-            self.connection_task is not None and
-            not self.connection_task.done()
-        ):
+        if self.connection_task is not None and not self.connection_task.done():
             try:
-                await asyncio.wait_for(self.connection_task, 2.)
+                await asyncio.wait_for(self.connection_task, 2.0)
             except TimeoutError:
                 pass
+
 
 class ReportCache:
     def __init__(self) -> None:
@@ -1207,29 +1187,26 @@ class ReportCache:
 
 
 INITIAL_AMBIENT = 85
-AMBIENT_CHECK_TIME = 5. * 60.
-TARGET_CHECK_TIME = 60. * 60.
-SAMPLE_CHECK_TIME = 20.
+AMBIENT_CHECK_TIME = 5.0 * 60.0
+TARGET_CHECK_TIME = 60.0 * 60.0
+SAMPLE_CHECK_TIME = 20.0
+
 
 class AmbientDetect:
     CHECK_INTERVAL = 5
+
     def __init__(
-        self,
-        config: ConfigHelper,
-        simplyprint: SimplyPrint,
-        initial_ambient: int
+        self, config: ConfigHelper, simplyprint: SimplyPrint, initial_ambient: int
     ) -> None:
         self.server = config.get_server()
         self.simplyprint = simplyprint
         self.cache = simplyprint.cache
         self._initial_sample: int = -1000
         self._ambient = initial_ambient
-        self._last_sample_time: float = 0.
+        self._last_sample_time: float = 0.0
         self._update_interval = AMBIENT_CHECK_TIME
         self.eventloop = self.server.get_event_loop()
-        self._detect_timer = self.eventloop.register_timer(
-            self._handle_detect_timer
-        )
+        self._detect_timer = self.eventloop.register_timer(self._handle_detect_timer)
         self._sensor_name: str = config.get("ambient_sensor", "")
 
     @property
@@ -1248,7 +1225,7 @@ class AmbientDetect:
         if eventtime < self._last_sample_time + SAMPLE_CHECK_TIME:
             return
         self._last_sample_time = eventtime
-        new_amb = int(sensor_info["temperature"] + .5)
+        new_amb = int(sensor_info["temperature"] + 0.5)
         if abs(new_amb - self._ambient) < 2:
             return
         self._ambient = new_amb
@@ -1273,7 +1250,7 @@ class AmbientDetect:
             diff = abs(temp - self._initial_sample)
             if diff <= 2:
                 last_ambient = self._ambient
-                self._ambient = int((temp + self._initial_sample) / 2 + .5)
+                self._ambient = int((temp + self._initial_sample) / 2 + 0.5)
                 self._initial_sample = -1000
                 self._last_sample_time = eventtime
                 self._update_interval = AMBIENT_CHECK_TIME
@@ -1301,15 +1278,16 @@ class AmbientDetect:
 
     def stop(self) -> None:
         self._detect_timer.stop()
-        self._last_sample_time = 0.
+        self._last_sample_time = 0.0
+
 
 class LayerDetect:
     def __init__(self) -> None:
         self._layer: int = 0
-        self._layer_z: float = 0.
+        self._layer_z: float = 0.0
         self._active: bool = False
-        self._layer_height: float = 0.
-        self._fl_height: float = 0.
+        self._layer_height: float = 0.0
+        self._fl_height: float = 0.0
         self._layer_count: int = 99999999999
         self._check_next: bool = False
 
@@ -1318,11 +1296,7 @@ class LayerDetect:
         return self._layer
 
     def update(self, new_pos: list[float]) -> None:
-        if (
-            not self._active or
-            self._layer_z == new_pos[2] or
-            self._layer_height == 0
-        ):
+        if not self._active or self._layer_z == new_pos[2] or self._layer_height == 0:
             self._check_next = False
             return
         if not self._check_next:
@@ -1330,9 +1304,7 @@ class LayerDetect:
             self._check_next = True
             return
         self._check_next = False
-        layer = 1 + int(
-            (new_pos[2] - self._fl_height) / self._layer_height + .5
-        )
+        layer = 1 + int((new_pos[2] - self._fl_height) / self._layer_height + 0.5)
         self._layer = min(layer, self._layer_count)
         self._layer_z = new_pos[2]
 
@@ -1349,10 +1321,10 @@ class LayerDetect:
             if layer_count is not None:
                 self._layer_count = layer_count
             elif obj_height is not None:
-                self._layer_count = int((obj_height - flh) / lh + .5)
+                self._layer_count = int((obj_height - flh) / lh + 0.5)
 
     def resume(self) -> None:
-        if self._layer_height > 0.:
+        if self._layer_height > 0.0:
             self._active = True
 
     def stop(self) -> None:
@@ -1361,9 +1333,9 @@ class LayerDetect:
     def reset(self) -> None:
         self._active = False
         self._layer = 0
-        self._layer_z = 0.
-        self._layer_height = 0.
-        self._fl_height = 0.
+        self._layer_z = 0.0
+        self._layer_height = 0.0
+        self._fl_height = 0.0
         self._layer_count = 99999999999
         self._check_next = False
 
@@ -1374,10 +1346,9 @@ class LayerDetect:
 FALLBACK_URL = "http://127.0.0.1:8080/?action=snapshot"
 SP_SNAPSHOT_URL = "https://api.simplyprint.io/jobs/ReceiveSnapshot"
 
+
 class WebcamStream:
-    def __init__(
-        self, config: ConfigHelper, simplyprint: SimplyPrint
-    ) -> None:
+    def __init__(self, config: ConfigHelper, simplyprint: SimplyPrint) -> None:
         self.server = config.get_server()
         self.eventloop = self.server.get_event_loop()
         self.simplyprint = simplyprint
@@ -1427,9 +1398,7 @@ class WebcamStream:
         headers = {"Accept": "image/jpeg"}
         resp = await self.client.get(self.url, headers, enable_cache=False)
         resp.raise_for_status()
-        return await self.eventloop.run_in_thread(
-            self._encode_image, resp.content
-        )
+        return await self.eventloop.run_in_thread(self._encode_image, resp.content)
 
     def _encode_image(self, image: bytes) -> str:
         return base64.b64encode(image).decode()
@@ -1443,7 +1412,7 @@ class WebcamStream:
                 img = await self.extract_image()
                 headers = {
                     "User-Agent": "Mozilla/5.0",
-                    "Content-Type": "application/x-www-form-urlencoded"
+                    "Content-Type": "application/x-www-form-urlencoded",
                 }
                 body = f"id={url_escape(uid)}&image={url_escape(img)}"
                 resp = await self.client.post(
@@ -1460,6 +1429,7 @@ class WebcamStream:
             if not self.server.is_verbose_enabled():
                 return
             logging.exception("SimplyPrint WebCam Stream Error")
+
 
 class PrintHandler:
     def __init__(self, simplyprint: SimplyPrint) -> None:
@@ -1479,10 +1449,7 @@ class PrintHandler:
         self.download_task = self.eventloop.create_task(coro)
 
     def cancel(self):
-        if (
-            self.download_task is not None and
-            not self.download_task.done()
-        ):
+        if self.download_task is not None and not self.download_task.done():
             self.download_task.cancel()
             self.download_task = None
 
@@ -1497,7 +1464,7 @@ class PrintHandler:
             logging.debug(f"GCode Path Not Registered: {gc_path}")
             self.simplyprint.send_sp(
                 "file_progress",
-                {"state": "error", "message": "GCode Path not Registered"}
+                {"state": "error", "message": "GCode Path not Registered"},
             )
             return
         accept = "text/plain,applicaton/octet-stream"
@@ -1505,16 +1472,17 @@ class PrintHandler:
         try:
             logging.debug(f"Downloading URL: {url}")
             tmp_path = await client.download_file(
-                url, accept, progress_callback=self._on_download_progress,
-                request_timeout=3600.
+                url,
+                accept,
+                progress_callback=self._on_download_progress,
+                request_timeout=3600.0,
             )
         except TimeoutError:
             raise
         except Exception:
             logging.exception(f"Failed to download file: {url}")
             self.simplyprint.send_sp(
-                "file_progress",
-                {"state": "error", "message": "Network Error"}
+                "file_progress", {"state": "error", "message": "Network Error"}
             )
             return
         finally:
@@ -1542,7 +1510,7 @@ class PrintHandler:
             logging.exception("GCode Finalization Failed")
             self.simplyprint.send_sp(
                 "file_progress",
-                {"state": "error", "message": f"GCode Finalization Failed: {e}"}
+                {"state": "error", "message": f"GCode Finalization Failed: {e}"},
             )
             return
         self.pending_file = fpath.name
@@ -1555,12 +1523,12 @@ class PrintHandler:
         if state == "pending":
             self.print_ready_event.clear()
             try:
-                await asyncio.wait_for(self.print_ready_event.wait(), 10.)
+                await asyncio.wait_for(self.print_ready_event.wait(), 10.0)
             except TimeoutError:
                 self.pending_file = ""
                 self.simplyprint.send_sp(
                     "file_progress",
-                    {"state": "error", "message": "Pending print timed out"}
+                    {"state": "error", "message": "Pending print timed out"},
                 )
                 return
             else:
@@ -1597,9 +1565,9 @@ class PrintHandler:
         except Exception:
             # Klippy not connected
             return False
-        if 'print_stats' not in result:
+        if "print_stats" not in result:
             return False
-        state: str = result['print_stats']['state']
+        state: str = result["print_stats"]["state"]
         if state in ["printing", "paused"]:
             return False
         return True
@@ -1611,6 +1579,7 @@ class PrintHandler:
         self.simplyprint.send_sp(
             "file_progress", {"state": "downloading", "percent": percent}
         )
+
 
 class ProtoLogger:
     def __init__(self, config: ConfigHelper) -> None:
@@ -1631,9 +1600,9 @@ class ProtoLogger:
         self._logger.addHandler(self.queue_handler)
         self._logger.propagate = False
         file_hdlr = logging.handlers.TimedRotatingFileHandler(
-            log_path, when='midnight', backupCount=2)
-        formatter = logging.Formatter(
-            '%(asctime)s [%(funcName)s()] - %(message)s')
+            log_path, when="midnight", backupCount=2
+        )
+        formatter = logging.Formatter("%(asctime)s [%(funcName)s()] - %(message)s")
         file_hdlr.setFormatter(formatter)
         self.qlistner = logging.handlers.QueueListener(queue, file_hdlr)
         self.qlistner.start()
@@ -1664,6 +1633,7 @@ class ProtoLogger:
         self._logger.removeHandler(self.queue_handler)
         self.qlistner.stop()
         self._logger = None
+
 
 def load_component(config: ConfigHelper) -> SimplyPrint:
     return SimplyPrint(config)

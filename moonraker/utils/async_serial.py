@@ -5,24 +5,27 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 from __future__ import annotations
-import os
-import errno
-import logging
+
 import asyncio
 import contextlib
-from serial import Serial, SerialException
-from typing import TYPE_CHECKING, Optional, List, Tuple
+import errno
+import logging
+import os
 from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
+
+from serial import Serial, SerialException
 
 if TYPE_CHECKING:
-    from ..server import Server
     from ..confighelper import ConfigHelper
+    from ..server import Server
 
-READER_LIMIT = 4*1024*1024
+READER_LIMIT = 4 * 1024 * 1024
 
 
 class AsyncSerialConnection:
     error = SerialException
+
     def __init__(self, server: Server, name: str, port: str, baud: int) -> None:
         self.name = name
         self.eventloop = server.get_event_loop()
@@ -48,7 +51,8 @@ class AsyncSerialConnection:
 
     @staticmethod
     def from_config(
-        config: ConfigHelper, default_baud: int = 57600
+        config: ConfigHelper,
+        default_baud: int = 57600,
     ) -> AsyncSerialConnection:
         port: str = config.get("serial")
         name = config.get_name()
@@ -57,7 +61,9 @@ class AsyncSerialConnection:
         return AsyncSerialConnection(server, name, port, baud)
 
     def set_read_callback(
-        self, callback: Callable[[bytes], None] | None, force: bool = False
+        self,
+        callback: Callable[[bytes], None] | None,
+        force: bool = False,
     ) -> None:
         if callback is None:
             if not force and self.reader_active:
@@ -75,14 +81,16 @@ class AsyncSerialConnection:
             self.ser.close()
             logging.info(f"{self.name}: Disconnected")
         self.ser = None
-        for (fut, _) in self.send_buffer:
+        for fut, _ in self.send_buffer:
             fut.set_exception(SerialException("Serial Device Closed"))
         self.send_buffer.clear()
         self._reader.feed_eof()
         if self.send_task is not None and not self.send_task.done():
+
             async def _cancel_send(send_task: asyncio.Task):
                 with contextlib.suppress(asyncio.TimeoutError):
-                    await asyncio.wait_for(send_task, 2.)
+                    await asyncio.wait_for(send_task, 2.0)
+
             return self.eventloop.create_task(_cancel_send(self.send_task))
         self.send_task = None
         fut = self.eventloop.create_future()
@@ -142,13 +150,13 @@ class AsyncSerialConnection:
                         if e.errno == errno.EBADF or e.errno == errno.EPIPE:
                             sent = 0
                         else:
-                            await asyncio.sleep(.001)
+                            await asyncio.sleep(0.001)
                             continue
                 if sent:
                     data = data[sent:]
                 else:
                     logging.exception(
-                        f"{self.name}: Error writing data, closing serial connection"
+                        f"{self.name}: Error writing data, closing serial connection",
                     )
                     fut.set_exception(SerialException("Serial Device Closed"))
                     self.send_task = None

@@ -7,9 +7,10 @@
 
 
 if __name__ == "__main__":
-    import sys
     import importlib
     import pathlib
+    import sys
+
     pkg_parent = pathlib.Path(__file__).parent.parent
     sys.path.pop(0)
     sys.path.insert(0, str(pkg_parent))
