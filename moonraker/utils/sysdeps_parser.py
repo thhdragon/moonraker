@@ -11,7 +11,7 @@ import logging
 
 from typing import Tuple, Dict, List, Any
 
-def _get_distro_info() -> Dict[str, Any]:
+def _get_distro_info() -> dict[str, Any]:
     try:
         # try importing the distro module first.  It can detect
         # old/obscure releases that do not have the standard
@@ -27,7 +27,7 @@ def _get_distro_info() -> Dict[str, Any]:
         )
     # fall back to manual parsing of /etc/os-release
     release_file = pathlib.Path("/etc/os-release")
-    release_info: Dict[str, str] = {}
+    release_info: dict[str, str] = {}
     with release_file.open("r") as f:
         lexer = shlex.shlex(f, posix=True)
         lexer.whitespace_split = True
@@ -41,7 +41,7 @@ def _get_distro_info() -> Dict[str, Any]:
         aliases=release_info.get("ID_LIKE", "").split()
     )
 
-def _convert_version(version: str) -> Tuple[str | int, ...]:
+def _convert_version(version: str) -> tuple[str | int, ...]:
     version = version.strip()
     ver_match = re.match(r"\d+(\.\d+)*((?:-|\.).+)?", version)
     if ver_match is not None:
@@ -52,12 +52,12 @@ def _convert_version(version: str) -> Tuple[str | int, ...]:
     return (version,)
 
 class SysDepsParser:
-    def __init__(self, distro_info: Dict[str, Any] | None = None) -> None:
+    def __init__(self, distro_info: dict[str, Any] | None = None) -> None:
         if distro_info is None:
             distro_info = _get_distro_info()
         self.distro_id: str = distro_info.get("distro_id", "")
-        self.aliases: List[str] = distro_info.get("aliases", [])
-        self.distro_version: Tuple[int | str, ...] = tuple()
+        self.aliases: list[str] = distro_info.get("aliases", [])
+        self.distro_version: tuple[int | str, ...] = tuple()
         version = distro_info.get("distro_version")
         if version:
             self.distro_version = _convert_version(version)
@@ -108,7 +108,7 @@ class SysDepsParser:
                 logging.info(f"Invalid comparison, must be 3 parts: {full_spec}")
                 return None
             elif req_var == "distro_id":
-                left_op: str | Tuple[int | str, ...] = self.distro_id
+                left_op: str | tuple[int | str, ...] = self.distro_id
                 right_op = dep_parts[2].strip().strip("\"'")
             elif req_var == "vendor":
                 left_op = self.vendor
@@ -148,7 +148,7 @@ class SysDepsParser:
             return pkg_name
         return None
 
-    def parse_dependencies(self, sys_deps: Dict[str, List[str]]) -> List[str]:
+    def parse_dependencies(self, sys_deps: dict[str, list[str]]) -> list[str]:
         if not self.distro_id:
             logging.info(
                 "Failed to detect current distro ID, cannot parse dependencies"
@@ -163,7 +163,7 @@ class SysDepsParser:
                         f"for linux distro '{distro_id}'"
                     )
                     continue
-                processed_deps: List[str] = []
+                processed_deps: list[str] = []
                 for dep in sys_deps[distro_id]:
                     parsed_dep = self._parse_spec(dep)
                     if parsed_dep is not None:

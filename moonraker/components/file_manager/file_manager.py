@@ -34,13 +34,11 @@ from typing import (
     Dict,
     List,
     Set,
-    Coroutine,
-    Awaitable,
-    Callable,
     TypeVar,
     Type,
     cast,
 )
+from collections.abc import Coroutine, Awaitable, Callable
 
 if TYPE_CHECKING:
     from inotify_simple import Event as InotifyEvent
@@ -67,9 +65,9 @@ class FileManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.event_loop = self.server.get_event_loop()
-        self.reserved_paths: Dict[str, Tuple[pathlib.Path, bool]] = {}
-        self.full_access_roots: Set[str] = set()
-        self.file_paths: Dict[str, str] = {}
+        self.reserved_paths: dict[str, tuple[pathlib.Path, bool]] = {}
+        self.full_access_roots: set[str] = set()
+        self.file_paths: dict[str, str] = {}
         app_args = self.server.get_app_args()
         self.datapath = pathlib.Path(app_args["data_path"])
         srcdir = str(source_info.source_path())
@@ -82,7 +80,7 @@ class FileManager:
         self.add_reserved_path("backup", self.datapath.joinpath("backup"), False)
         self.gcode_metadata = MetadataStorage(config, db)
         self.sync_lock = NotifySyncLock(config)
-        avail_observers: Dict[str, Type[BaseFileSystemObserver]] = {
+        avail_observers: dict[str, type[BaseFileSystemObserver]] = {
             "none": BaseFileSystemObserver,
             "inotify": InotifyObserver
         }
@@ -101,8 +99,8 @@ class FileManager:
         self.fs_observer = obs_class(
             config, self, self.gcode_metadata, self.sync_lock
         )
-        self.scheduled_notifications: Dict[str, asyncio.TimerHandle] = {}
-        self.fixed_path_args: Dict[str, Any] = {}
+        self.scheduled_notifications: dict[str, asyncio.TimerHandle] = {}
+        self.fixed_path_args: dict[str, Any] = {}
         self.queue_gcodes: bool = config.getboolean('queue_gcode_uploads', False)
         self.check_klipper_path = config.getboolean("check_klipper_config_path", True)
 
@@ -181,7 +179,7 @@ class FileManager:
 
     def _update_fixed_paths(self) -> None:
         kinfo = self.server.get_klippy_info()
-        paths: Dict[str, Any] = \
+        paths: dict[str, Any] = \
             {k: kinfo.get(k) for k in
              ['klipper_path', 'python_path',
               'log_file', 'config_file']}
@@ -211,7 +209,7 @@ class FileManager:
 
         # Validate config file
         if self.check_klipper_path:
-            cfg_file: Optional[str] = paths.get("config_file")
+            cfg_file: str | None = paths.get("config_file")
             cfg_parent = self.file_paths.get("config")
             if cfg_file is not None and cfg_parent is not None:
                 cfg_path = pathlib.Path(cfg_file).expanduser()
@@ -271,7 +269,7 @@ class FileManager:
 
     def register_directory(self,
                            root: str,
-                           path: Optional[str],
+                           path: str | None,
                            full_access: bool = False
                            ) -> bool:
         if path is None:
@@ -362,10 +360,10 @@ class FileManager:
     def get_directory(self, root: str = "gcodes") -> str:
         return self.file_paths.get(root, "")
 
-    def get_registered_dirs(self) -> List[str]:
+    def get_registered_dirs(self) -> list[str]:
         return list(self.file_paths.keys())
 
-    def get_fixed_path_args(self) -> Dict[str, Any]:
+    def get_fixed_path_args(self) -> dict[str, Any]:
         return dict(self.fixed_path_args)
 
     def get_relative_path(self, root: str, full_path: str) -> str:
@@ -387,7 +385,7 @@ class FileManager:
         self,
         root: str,
         filename: str,
-        modified: Optional[float] = None
+        modified: float | None = None
     ) -> bool:
         if root not in self.file_paths:
             return False
@@ -415,16 +413,16 @@ class FileManager:
 
     async def _handle_filelist_request(self,
                                        web_request: WebRequest
-                                       ) -> List[Dict[str, Any]]:
+                                       ) -> list[dict[str, Any]]:
         root = web_request.get_str('root', "gcodes")
         flist = self.get_file_list(root, list_format=True)
-        return cast(List[Dict[str, Any]], flist)
+        return cast(list[dict[str, Any]], flist)
 
     async def _handle_metadata_request(self,
                                        web_request: WebRequest
-                                       ) -> Dict[str, Any]:
+                                       ) -> dict[str, Any]:
         requested_file: str = web_request.get_str('filename')
-        metadata: Optional[Dict[str, Any]]
+        metadata: dict[str, Any] | None
         metadata = self.gcode_metadata.get(requested_file, None)
         if metadata is None:
             raise self.server.error(
@@ -434,7 +432,7 @@ class FileManager:
 
     async def _handle_metascan_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         async with self.sync_lock:
             requested_file: str = web_request.get_str('filename')
             gcpath = pathlib.Path(self.file_paths["gcodes"]).joinpath(requested_file)
@@ -449,7 +447,7 @@ class FileManager:
             path_info = self.get_path_info(gcpath, "gcodes")
             evt = self.gcode_metadata.parse_metadata(requested_file, path_info)
             await evt.wait()
-            metadata: Optional[Dict[str, Any]]
+            metadata: dict[str, Any] | None
             metadata = self.gcode_metadata.get(requested_file, None)
             if metadata is None:
                 raise self.server.error(
@@ -459,8 +457,8 @@ class FileManager:
 
     async def _handle_list_roots(
         self, web_request: WebRequest
-    ) -> List[Dict[str, Any]]:
-        root_list: List[Dict[str, Any]] = []
+    ) -> list[dict[str, Any]]:
+        root_list: list[dict[str, Any]] = []
         for name, path in self.file_paths.items():
             perms = "rw" if name in self.full_access_roots else "r"
             root_list.append({
@@ -472,17 +470,17 @@ class FileManager:
 
     async def _handle_list_thumbs(
         self, web_request: WebRequest
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         requested_file: str = web_request.get_str("filename")
-        metadata: Optional[Dict[str, Any]]
+        metadata: dict[str, Any] | None
         metadata = self.gcode_metadata.get(requested_file, None)
         if metadata is None:
             return []
         if "thumbnails" not in metadata:
             return []
-        thumblist: List[Dict[str, Any]] = metadata["thumbnails"]
+        thumblist: list[dict[str, Any]] = metadata["thumbnails"]
         for info in thumblist:
-            relpath: Optional[str] = info.pop("relative_path", None)
+            relpath: str | None = info.pop("relative_path", None)
             if relpath is None:
                 continue
             thumbpath = pathlib.Path(requested_file).parent.joinpath(relpath)
@@ -491,7 +489,7 @@ class FileManager:
 
     async def _handle_directory_request(self,
                                         web_request: WebRequest
-                                        ) -> Dict[str, Any]:
+                                        ) -> dict[str, Any]:
         directory = web_request.get_str('path', "gcodes")
         root, dir_path = self._convert_request_path(directory)
         req_type = web_request.get_request_type()
@@ -563,7 +561,7 @@ class FileManager:
                 raise self.server.error("File currently in use", 403)
         return not is_printing
 
-    def _convert_request_path(self, request_path: str) -> Tuple[str, str]:
+    def _convert_request_path(self, request_path: str) -> tuple[str, str]:
         # Parse the root, relative path, and disk path from a remote request
         parts = os.path.normpath(request_path).strip("/").split("/", 1)
         if not parts:
@@ -582,7 +580,7 @@ class FileManager:
 
     async def _handle_file_move_copy(self,
                                      web_request: WebRequest
-                                     ) -> Dict[str, Any]:
+                                     ) -> dict[str, Any]:
         source: str = web_request.get_str("source")
         destination: str = web_request.get_str("dest")
         ep = web_request.get_endpoint()
@@ -599,7 +597,7 @@ class FileManager:
             # make sure the destination is not in use
             if os.path.exists(dest_path):
                 self._handle_operation_check(dest_path)
-            src_info: Tuple[Optional[str], ...] = (None, None)
+            src_info: tuple[str | None, ...] = (None, None)
             if ep == "/server/files/move":
                 if source_root not in self.full_access_roots:
                     raise self.server.error(
@@ -646,7 +644,7 @@ class FileManager:
 
     async def _handle_zip_files(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         async with self.sync_lock:
             store_only = web_request.get_boolean("store_only", False)
             suffix = time.strftime("%Y%m%d-%H%M%S", time.localtime())
@@ -688,7 +686,7 @@ class FileManager:
 
     def _zip_files(
         self,
-        item_list: List[str],
+        item_list: list[str],
         destination: StrOrPath,
         store_only: bool = False
     ) -> None:
@@ -696,7 +694,7 @@ class FileManager:
             destination = pathlib.Path(destination).expanduser().resolve()
         tmpdir = pathlib.Path(tempfile.gettempdir())
         temp_dest = tmpdir.joinpath(destination.name)
-        processed: Set[Tuple[int, int]] = set()
+        processed: set[tuple[int, int]] = set()
         cptype = zipfile.ZIP_STORED if store_only else zipfile.ZIP_DEFLATED
         with zipfile.ZipFile(str(temp_dest), "w", compression=cptype) as zf:
             for item in item_list:
@@ -742,12 +740,12 @@ class FileManager:
                         path: str,
                         root: str,
                         is_extended: bool = False
-                        ) -> Dict[str, Any]:
+                        ) -> dict[str, Any]:
         if not os.path.isdir(path):
             raise self.server.error(
                 f"Directory does not exist ({path})")
         self.check_reserved_path(path, False)
-        flist: Dict[str, Any] = {'dirs': [], 'files': []}
+        flist: dict[str, Any] = {'dirs': [], 'files': []}
         for fname in os.listdir(path):
             full_path = os.path.join(path, fname)
             if not os.path.exists(full_path):
@@ -766,7 +764,7 @@ class FileManager:
                     is_extended
                 ):
                     rel_path = self.get_relative_path(root, full_path)
-                    metadata: Dict[str, Any] = self.gcode_metadata.get(
+                    metadata: dict[str, Any] = self.gcode_metadata.get(
                         rel_path, {})
                     path_info.update(metadata)
                 flist['files'].append(path_info)
@@ -780,7 +778,7 @@ class FileManager:
 
     def get_path_info(
         self, path: StrOrPath, root: str, raise_error: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if isinstance(path, str):
             path = pathlib.Path(path)
         real_path = path.resolve()
@@ -818,8 +816,8 @@ class FileManager:
             f"moonraker.upload-{loop_time}.mru")
 
     async def finalize_upload(self,
-                              form_args: Dict[str, Any]
-                              ) -> Dict[str, Any]:
+                              form_args: dict[str, Any]
+                              ) -> dict[str, Any]:
         # lookup root file path
         async with self.sync_lock:
             try:
@@ -842,8 +840,8 @@ class FileManager:
             return result
 
     def _parse_upload_args(self,
-                           upload_args: Dict[str, Any]
-                           ) -> Dict[str, Any]:
+                           upload_args: dict[str, Any]
+                           ) -> dict[str, Any]:
         if 'filename' not in upload_args:
             raise self.server.error(
                 "No file name specified in upload form")
@@ -894,8 +892,8 @@ class FileManager:
         }
 
     async def _finish_gcode_upload(
-        self, upload_info: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, upload_info: dict[str, Any]
+    ) -> dict[str, Any]:
         # Verify that the operation can be done if attempting to upload a gcode
         can_start: bool = False
         try:
@@ -911,7 +909,7 @@ class FileManager:
         started: bool = False
         queued: bool = False
         if upload_info['start_print']:
-            user: Optional[UserInfo] = upload_info.get("user")
+            user: UserInfo | None = upload_info.get("user")
             if can_start:
                 kapis: APIComp = self.server.lookup_component('klippy_apis')
                 try:
@@ -935,8 +933,8 @@ class FileManager:
         return result
 
     async def _finish_standard_upload(
-        self, upload_info: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, upload_info: dict[str, Any]
+    ) -> dict[str, Any]:
         await self._process_uploaded_file(upload_info)
         dest_path: str = upload_info["dest_path"]
         root: str = upload_info["root"]
@@ -946,12 +944,12 @@ class FileManager:
         )
 
     async def _process_uploaded_file(self,
-                                     upload_info: Dict[str, Any]
-                                     ) -> Dict[str, Any]:
+                                     upload_info: dict[str, Any]
+                                     ) -> dict[str, Any]:
         try:
             if upload_info['dir_path']:
                 cur_path = self.file_paths[upload_info['root']]
-                dirs: List[str]
+                dirs: list[str]
                 dirs = upload_info['dir_path'].strip('/').split('/')
                 for subdir in dirs:
                     cur_path = os.path.join(cur_path, subdir)
@@ -980,9 +978,9 @@ class FileManager:
     def get_file_list(self,
                       root: str,
                       list_format: bool = False
-                      ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+                      ) -> dict[str, Any] | list[dict[str, Any]]:
         # Use os.walk find files in sd path and subdirs
-        filelist: Dict[str, Any] = {}
+        filelist: dict[str, Any] = {}
         path = self.file_paths.get(root, None)
         if path is None or not os.path.isdir(path):
             msg = f"Failed to build file list, invalid path: {root}: {path}"
@@ -992,7 +990,7 @@ class FileManager:
         st = os.stat(path)
         visited_dirs = {(st.st_dev, st.st_ino)}
         for dir_path, dir_names, files in os.walk(path, followlinks=True):
-            scan_dirs: List[str] = []
+            scan_dirs: list[str] = []
             # Filter out directories that have already been visited. This
             # prevents infinite recursion "followlinks" is set to True
             for dname in dir_names:
@@ -1017,15 +1015,15 @@ class FileManager:
                 finfo = self.get_path_info(full_path, root)
                 filelist[fname] = finfo
         if list_format:
-            flist: List[Dict[str, Any]] = []
+            flist: list[dict[str, Any]] = []
             for fname in sorted(filelist, key=str.lower):
-                fdict: Dict[str, Any] = {'path': fname}
+                fdict: dict[str, Any] = {'path': fname}
                 fdict.update(filelist[fname])
                 flist.append(fdict)
             return flist
         return filelist
 
-    def get_file_metadata(self, filename: str) -> Dict[str, Any]:
+    def get_file_metadata(self, filename: str) -> dict[str, Any]:
         if filename[0] == '/':
             filename = filename[1:]
 
@@ -1039,7 +1037,7 @@ class FileManager:
     def list_dir(self,
                  directory: str,
                  simple_format: bool = False
-                 ) -> Union[Dict[str, Any], List[str]]:
+                 ) -> dict[str, Any] | list[str]:
         # List a directory relative to its root.
         if directory[0] == "/":
             directory = directory[1:]
@@ -1071,11 +1069,11 @@ class FileManager:
 
     async def _handle_file_delete(self,
                                   web_request: WebRequest
-                                  ) -> Dict[str, Any]:
+                                  ) -> dict[str, Any]:
         file_path: str = web_request.get_str("path")
         return await self.delete_file(file_path)
 
-    async def delete_file(self, path: str) -> Dict[str, Any]:
+    async def delete_file(self, path: str) -> dict[str, Any]:
         async with self.sync_lock:
             root, full_path = self._convert_request_path(path)
             self.check_reserved_path(full_path, True)
@@ -1099,14 +1097,14 @@ class FileManager:
         action: str,
         root: str,
         full_path: str,
-        source_root: Optional[str] = None,
-        source_path: Optional[str] = None,
+        source_root: str | None = None,
+        source_path: str | None = None,
         immediate: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         rel_path = self.get_relative_path(root, full_path)
         path_info = self.get_path_info(full_path, root, raise_error=False)
         path_info.update({"path": rel_path, "root": root})
-        notify_info: Dict[str, Any] = {
+        notify_info: dict[str, Any] = {
             "action": action,
             "item": path_info
         }
@@ -1123,7 +1121,7 @@ class FileManager:
             self.scheduled_notifications[key] = handle
         return notify_info
 
-    def _do_notify(self, key: str, notify_info: Dict[str, Any]) -> None:
+    def _do_notify(self, key: str, notify_info: dict[str, Any]) -> None:
         self.scheduled_notifications.pop(key, None)
         self.server.send_event("file_manager:filelist_changed", notify_info)
 
@@ -1144,12 +1142,12 @@ class NotifySyncLock(asyncio.Lock):
         super().__init__()
         self.server = config.get_server()
         self.action: str = ""
-        self.dest_path: Optional[pathlib.Path] = None
+        self.dest_path: pathlib.Path | None = None
         self.check_pending = False
-        self.move_copy_fut: Optional[asyncio.Future] = None
-        self.sync_waiters: List[asyncio.Future] = []
-        self.pending_paths: Set[pathlib.Path] = set()
-        self.acquired_paths: Set[pathlib.Path] = set()
+        self.move_copy_fut: asyncio.Future | None = None
+        self.sync_waiters: list[asyncio.Future] = []
+        self.pending_paths: set[pathlib.Path] = set()
+        self.acquired_paths: set[pathlib.Path] = set()
 
     def setup(
         self, action: str, path: StrOrPath, move_copy: bool = False
@@ -1191,7 +1189,7 @@ class NotifySyncLock(asyncio.Lock):
             try:
                 assert mcfut is not None
                 await asyncio.wait_for(asyncio.shield(mcfut), timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 if timeout > 2.:
                     break
                 has_pending = current_path in self.pending_paths
@@ -1239,7 +1237,7 @@ class NotifySyncLock(asyncio.Lock):
 
     def check_in_request(
         self, action: str, inotify_path: StrOrPath
-    ) -> Optional[asyncio.Future]:
+    ) -> asyncio.Future | None:
         # Called by the inotify observer to check if request synchronization
         # is necessary.  If so, this method will return a future the inotify
         # observer can await.
@@ -1247,7 +1245,7 @@ class NotifySyncLock(asyncio.Lock):
             return None
         if isinstance(inotify_path, str):
             inotify_path = pathlib.Path(inotify_path)
-        waiter: Optional[asyncio.Future] = None
+        waiter: asyncio.Future | None = None
         if self.check_pending:
             # The final path of move/copy requests aren't known until the request
             # complete.  It may be the destination path received from the request
@@ -1325,7 +1323,7 @@ class BaseFileSystemObserver:
         prev_path: str,
         new_path: str,
         is_dir: bool = False
-    ) -> Union[bool, Awaitable]:
+    ) -> bool | Awaitable:
         if new_root == "gcodes":
             if prev_root == "gcodes":
                 # moved within the gcodes root, move metadata
@@ -1377,13 +1375,13 @@ class BaseFileSystemObserver:
 
     def _scan_directory_metadata(
         self, start_path: pathlib.Path
-    ) -> Optional[Awaitable]:
+    ) -> Awaitable | None:
         # Use os.walk find files in sd path and subdirs
-        mevts: List[Coroutine] = []
+        mevts: list[Coroutine] = []
         st = start_path.stat()
         visited_dirs = {(st.st_dev, st.st_ino)}
         for parent, dirs, files in os.walk(start_path, followlinks=True):
-            scan_dirs: List[str] = []
+            scan_dirs: list[str] = []
             # Filter out directories that have already been visited. This
             # prevents infinite recursion "followlinks" is set to True
             parent_dir = pathlib.Path(parent)
@@ -1410,7 +1408,7 @@ class BaseFileSystemObserver:
             return asyncio.gather(*mevts)
         return None
 
-    def on_item_copy(self, root: str, item_path: StrOrPath) -> Optional[Awaitable]:
+    def on_item_copy(self, root: str, item_path: StrOrPath) -> Awaitable | None:
         if self.has_fast_observe:
             return None
         if isinstance(item_path, str):
@@ -1430,7 +1428,7 @@ class BaseFileSystemObserver:
         dest_root: str,
         src_path: StrOrPath,
         dest_path: StrOrPath
-    ) -> Optional[Awaitable]:
+    ) -> Awaitable | None:
         if self.has_fast_observe:
             return None
         if isinstance(src_path, str):
@@ -1481,12 +1479,12 @@ class InotifyNode:
         self.event_loop = iobsvr.event_loop
         self.name = name
         self.parent_node = parent
-        self.child_nodes: Dict[str, InotifyNode] = {}
+        self.child_nodes: dict[str, InotifyNode] = {}
         self.watch_desc = self.iobsvr.add_watch(self)
-        self.pending_node_events: Dict[str, asyncio.Handle] = {}
-        self.pending_deleted_children: Set[Tuple[str, bool]] = set()
-        self.pending_file_events: Dict[str, str] = {}
-        self.queued_move_notificatons: List[List[str]] = []
+        self.pending_node_events: dict[str, asyncio.Handle] = {}
+        self.pending_deleted_children: set[tuple[str, bool]] = set()
+        self.pending_file_events: dict[str, str] = {}
+        self.queued_move_notificatons: list[list[str]] = []
         self.is_processing_metadata = False
 
     async def _finish_create_node(self) -> None:
@@ -1501,7 +1499,7 @@ class InotifyNode:
         root = self.get_root()
         # Scan child nodes for unwatched directories and metadata
         self.is_processing_metadata = True
-        mevts: List[asyncio.Event] = self.scan_node()
+        mevts: list[asyncio.Event] = self.scan_node()
         if mevts:
             mfuts = [e.wait() for e in mevts]
             await asyncio.gather(*mfuts)
@@ -1533,13 +1531,13 @@ class InotifyNode:
         self.pending_deleted_children.clear()
 
     def scan_node(self,
-                  visited_dirs: Set[Tuple[int, int]] = set()
-                  ) -> List[asyncio.Event]:
+                  visited_dirs: set[tuple[int, int]] = set()
+                  ) -> list[asyncio.Event]:
         dir_path = self.get_path()
         st = os.stat(dir_path)
         if st in visited_dirs:
             return []
-        metadata_events: List[asyncio.Event] = []
+        metadata_events: list[asyncio.Event] = []
         visited_dirs.add((st.st_dev, st.st_ino))
         for fname in os.listdir(dir_path):
             item_path = os.path.join(dir_path, fname)
@@ -1643,16 +1641,16 @@ class InotifyNode:
         self.child_nodes[node.name] = node
         node.parent_node = self
 
-    def get_child_node(self, name: str) -> Optional[InotifyNode]:
+    def get_child_node(self, name: str) -> InotifyNode | None:
         return self.child_nodes.get(name, None)
 
-    def pop_child_node(self, name: str) -> Optional[InotifyNode]:
+    def pop_child_node(self, name: str) -> InotifyNode | None:
         return self.child_nodes.pop(name, None)
 
     def create_child_node(self,
                           name: str,
                           notify: bool = True
-                          ) -> Optional[InotifyNode]:
+                          ) -> InotifyNode | None:
         self.flush_delete()
         if name in self.child_nodes:
             return self.child_nodes[name]
@@ -1746,12 +1744,12 @@ class InotifyNode:
         self.pending_deleted_children.clear()
         self.pending_file_events.clear()
 
-    def search_pending_event(self, name: str) -> Optional[InotifyNode]:
+    def search_pending_event(self, name: str) -> InotifyNode | None:
         if name in self.pending_node_events:
             return self
         return self.parent_node.search_pending_event(name)
 
-    def find_pending_node(self) -> Optional[InotifyNode]:
+    def find_pending_node(self) -> InotifyNode | None:
         if (
             self.is_processing_metadata or
             "create_node" in self.pending_node_events
@@ -1759,7 +1757,7 @@ class InotifyNode:
             return self
         return self.parent_node.find_pending_node()
 
-    def queue_move_notification(self, args: List[str]) -> None:
+    def queue_move_notification(self, args: list[str]) -> None:
         if (
             self.is_processing_metadata or
             "create_node" in self.pending_node_events
@@ -1789,7 +1787,7 @@ class InotifyRootNode(InotifyNode):
     def get_root(self) -> str:
         return self.root_name
 
-    def search_pending_event(self, name) -> Optional[InotifyNode]:
+    def search_pending_event(self, name) -> InotifyNode | None:
         if name in self.pending_node_events:
             return self
         return None
@@ -1797,7 +1795,7 @@ class InotifyRootNode(InotifyNode):
     def is_processing(self) -> bool:
         return self.is_processing_metadata
 
-    def find_pending_node(self) -> Optional[InotifyNode]:
+    def find_pending_node(self) -> InotifyNode | None:
         if (
             self.is_processing_metadata or
             "create_node" in self.pending_node_events
@@ -1820,14 +1818,14 @@ class InotifyObserver(BaseFileSystemObserver):
         self.inotify = INotify(nonblocking=True)
         self.event_loop.add_reader(
             self.inotify.fileno(), self._handle_inotify_read)
-        self.watched_roots: Dict[str, InotifyRootNode] = {}
-        self.watched_nodes: Dict[int, InotifyNode] = {}
-        self.pending_moves: Dict[
-            int, Tuple[InotifyNode, str, asyncio.Handle]] = {}
+        self.watched_roots: dict[str, InotifyRootNode] = {}
+        self.watched_nodes: dict[int, InotifyNode] = {}
+        self.pending_moves: dict[
+            int, tuple[InotifyNode, str, asyncio.Handle]] = {}
         self.initialized: bool = False
-        self.processing_gcode_files: Set[str] = set()
-        self.pending_coroutines: List[Coroutine] = []
-        self._gc_notify_task: Optional[asyncio.Task] = None
+        self.processing_gcode_files: set[str] = set()
+        self.pending_coroutines: list[Coroutine] = []
+        self._gc_notify_task: asyncio.Task | None = None
 
     @property
     def has_fast_observe(self) -> bool:
@@ -1851,10 +1849,10 @@ class InotifyObserver(BaseFileSystemObserver):
         dest_root: str,
         src_path: StrOrPath,
         dest_path: StrOrPath
-    ) -> Optional[Awaitable]:
+    ) -> Awaitable | None:
         return None
 
-    def on_item_copy(self, root: str, item_path: StrOrPath) -> Optional[Awaitable]:
+    def on_item_copy(self, root: str, item_path: StrOrPath) -> Awaitable | None:
         return None
 
     def add_root_watch(self, root: str, root_path: str) -> None:
@@ -1911,7 +1909,7 @@ class InotifyObserver(BaseFileSystemObserver):
         self.initialized = True
 
     async def _notify_root_updated(self,
-                                   mevts: List[asyncio.Event],
+                                   mevts: list[asyncio.Event],
                                    root: str,
                                    root_path: str
                                    ) -> None:
@@ -2170,8 +2168,8 @@ class InotifyObserver(BaseFileSystemObserver):
         prev_root: str,
         file_path: str,
         prev_path: str,
-        pending_node: Optional[InotifyNode],
-        move_result: Union[bool, Awaitable]
+        pending_node: InotifyNode | None,
+        move_result: bool | Awaitable
     ) -> None:
         if not isinstance(move_result, bool):
             await move_result
@@ -2237,12 +2235,12 @@ class InotifyObserver(BaseFileSystemObserver):
                                 action: str,
                                 root: str,
                                 full_path: str,
-                                source_root: Optional[str] = None,
-                                source_path: Optional[str] = None
+                                source_root: str | None = None,
+                                source_path: str | None = None
                                 ) -> None:
         rel_path = self.file_manager.get_relative_path(root, full_path)
         sync_fut = self.sync_lock.check_in_request(action, full_path)
-        file_info: Dict[str, Any] = {'size': 0, 'modified': 0, "permissions": ""}
+        file_info: dict[str, Any] = {'size': 0, 'modified': 0, "permissions": ""}
         if os.path.exists(full_path):
             try:
                 file_info = self.file_manager.get_path_info(full_path, root)
@@ -2272,8 +2270,8 @@ class InotifyObserver(BaseFileSystemObserver):
 
     async def _finish_notify(
         self,
-        result: Dict[str, Any],
-        sync_fut: Optional[asyncio.Future],
+        result: dict[str, Any],
+        sync_fut: asyncio.Future | None,
         notify_key: str
     ) -> None:
         if sync_fut is not None:
@@ -2327,16 +2325,16 @@ class MetadataStorage:
         # 1000 gcode files we are using < 1MiB of additional memory.
         # That said, in the future all components that access metadata should
         # be refactored to do so asynchronously.
-        self.metadata: Dict[str, Any] = self.mddb.as_dict()
-        self.pending_requests: Dict[
-            str, Tuple[Dict[str, Any], asyncio.Event]] = {}
+        self.metadata: dict[str, Any] = self.mddb.as_dict()
+        self.pending_requests: dict[
+            str, tuple[dict[str, Any], asyncio.Event]] = {}
         self.busy: bool = False
-        self.processors: Dict[str, Dict[str, Any]] = {}
+        self.processors: dict[str, dict[str, Any]] = {}
 
     def prune_storage(self) -> None:
         # Check for removed gcode files while moonraker was shutdown
         if self.gc_path:
-            del_keys: List[str] = []
+            del_keys: list[str] = []
             for fname in list(self.metadata.keys()):
                 fpath = os.path.join(self.gc_path, fname)
                 if not os.path.isfile(fpath):
@@ -2370,11 +2368,11 @@ class MetadataStorage:
 
     def get(self,
             key: str,
-            default: Optional[_T] = None
-            ) -> Union[_T, Dict[str, Any]]:
+            default: _T | None = None
+            ) -> _T | dict[str, Any]:
         return deepcopy(self.metadata.get(key, default))
 
-    def insert(self, key: str, value: Dict[str, Any]) -> None:
+    def insert(self, key: str, value: dict[str, Any]) -> None:
         val = deepcopy(value)
         self.metadata[key] = val
         self.mddb[key] = val
@@ -2386,7 +2384,7 @@ class MetadataStorage:
         return fname in self.pending_requests
 
     def register_gcode_processor(
-        self, name: str, config: Dict[str, Any] | None
+        self, name: str, config: dict[str, Any] | None
     ) -> None:
         if config is None:
             self.processors.pop(name, None)
@@ -2404,22 +2402,22 @@ class MetadataStorage:
 
     def _has_valid_data(self,
                         fname: str,
-                        path_info: Dict[str, Any]
+                        path_info: dict[str, Any]
                         ) -> bool:
         if path_info.get('ufp_path', None) is not None:
             # UFP files always need processing
             return False
-        mdata: Dict[str, Any]
+        mdata: dict[str, Any]
         mdata = self.metadata.get(fname, {'size': "", 'modified': 0})
         for field in ['size', 'modified']:
             if mdata[field] != path_info.get(field, None):
                 return False
         return True
 
-    def remove_directory_metadata(self, dir_name: str) -> Optional[Awaitable]:
+    def remove_directory_metadata(self, dir_name: str) -> Awaitable | None:
         if dir_name[-1] != "/":
             dir_name += "/"
-        del_items: Dict[str, Any] = {}
+        del_items: dict[str, Any] = {}
         for fname in list(self.metadata.keys()):
             if fname.startswith(dir_name):
                 md = self.metadata.pop(fname, None)
@@ -2433,22 +2431,22 @@ class MetadataStorage:
             return eventloop.run_in_thread(self._remove_thumbs, del_items)
         return None
 
-    def remove_file_metadata(self, fname: str) -> Optional[Awaitable]:
-        md: Optional[Dict[str, Any]] = self.metadata.pop(fname, None)
+    def remove_file_metadata(self, fname: str) -> Awaitable | None:
+        md: dict[str, Any] | None = self.metadata.pop(fname, None)
         if md is None:
             return None
         self.mddb.pop(fname, None)
         eventloop = self.server.get_event_loop()
         return eventloop.run_in_thread(self._remove_thumbs, {fname: md})
 
-    def _remove_thumbs(self, records: Dict[str, Dict[str, Any]]) -> None:
+    def _remove_thumbs(self, records: dict[str, dict[str, Any]]) -> None:
         for fname, metadata in records.items():
             # Delete associated thumbnails
             fdir = os.path.dirname(os.path.join(self.gc_path, fname))
             if "thumbnails" in metadata:
-                thumb: Dict[str, Any]
+                thumb: dict[str, Any]
                 for thumb in metadata["thumbnails"]:
-                    path: Optional[str] = thumb.get("relative_path", None)
+                    path: str | None = thumb.get("relative_path", None)
                     if path is None:
                         continue
                     thumb_path = os.path.join(fdir, path)
@@ -2462,11 +2460,11 @@ class MetadataStorage:
     def move_directory_metadata(self, prev_dir: str, new_dir: str) -> None:
         if prev_dir[-1] != "/":
             prev_dir += "/"
-        moved: List[Tuple[str, str, Dict[str, Any]]] = []
+        moved: list[tuple[str, str, dict[str, Any]]] = []
         for prev_fname in list(self.metadata.keys()):
             if prev_fname.startswith(prev_dir):
                 new_fname = os.path.join(new_dir, prev_fname[len(prev_dir):])
-                md: Optional[Dict[str, Any]]
+                md: dict[str, Any] | None
                 md = self.metadata.pop(prev_fname, None)
                 if md is None:
                     continue
@@ -2481,8 +2479,8 @@ class MetadataStorage:
 
     def move_file_metadata(
         self, prev_fname: str, new_fname: str
-    ) -> Union[bool, Awaitable]:
-        metadata: Optional[Dict[str, Any]]
+    ) -> bool | Awaitable:
+        metadata: dict[str, Any] | None
         metadata = self.metadata.pop(prev_fname, None)
         if metadata is None:
             # If this move overwrites an existing file it is necessary
@@ -2497,16 +2495,16 @@ class MetadataStorage:
         return self._move_thumbnails([(prev_fname, new_fname, metadata)])
 
     async def _move_thumbnails(
-        self, records: List[Tuple[str, str, Dict[str, Any]]]
+        self, records: list[tuple[str, str, dict[str, Any]]]
     ) -> None:
         eventloop = self.server.get_event_loop()
         for (prev_fname, new_fname, metadata) in records:
             prev_dir = os.path.dirname(os.path.join(self.gc_path, prev_fname))
             new_dir = os.path.dirname(os.path.join(self.gc_path, new_fname))
             if "thumbnails" in metadata:
-                thumb: Dict[str, Any]
+                thumb: dict[str, Any]
                 for thumb in metadata["thumbnails"]:
-                    path: Optional[str] = thumb.get("relative_path", None)
+                    path: str | None = thumb.get("relative_path", None)
                     if path is None:
                         continue
                     thumb_path = os.path.join(prev_dir, path)
@@ -2531,7 +2529,7 @@ class MetadataStorage:
 
     def parse_metadata(self,
                        fname: str,
-                       path_info: Dict[str, Any]
+                       path_info: dict[str, Any]
                        ) -> asyncio.Event:
         if fname in self.pending_requests:
             return self.pending_requests[fname][1]
@@ -2559,7 +2557,7 @@ class MetadataStorage:
             if self._has_valid_data(fname, path_info):
                 mevt.set()
                 continue
-            ufp_path: Optional[str] = path_info.get('ufp_path', None)
+            ufp_path: str | None = path_info.get('ufp_path', None)
             retries = 3
             while retries:
                 try:
@@ -2589,11 +2587,11 @@ class MetadataStorage:
 
     async def _run_extract_metadata(self,
                                     filename: str,
-                                    ufp_path: Optional[str]
+                                    ufp_path: str | None
                                     ) -> None:
         # Escape single quotes in the file name so that it may be
         # properly loaded
-        config: Dict[str, Any] = {
+        config: dict[str, Any] = {
             "filename": filename,
             "gcode_dir": self.gc_path,
             "check_objects": self.enable_object_proc,
@@ -2625,12 +2623,12 @@ class MetadataStorage:
                     os.remove(md_cfg)
             await eventloop.run_in_thread(_rm_md_config)
         try:
-            decoded_resp: Dict[str, Any] = jsonw.loads(result.strip())
+            decoded_resp: dict[str, Any] = jsonw.loads(result.strip())
         except Exception:
             logging.debug(f"Invalid metadata response:\n{result}")
             raise
         path: str = decoded_resp['file']
-        metadata: Dict[str, Any] = decoded_resp['metadata']
+        metadata: dict[str, Any] = decoded_resp['metadata']
         if not metadata:
             # This indicates an error, do not add metadata for this
             raise self.server.error("Unable to extract metadata")
@@ -2638,7 +2636,7 @@ class MetadataStorage:
         self.metadata[path] = metadata
         self.mddb[path] = metadata
 
-    def _create_metadata_cfg(self, config: Dict[str, Any]) -> str:
+    def _create_metadata_cfg(self, config: dict[str, Any]) -> str:
         with tempfile.NamedTemporaryFile(
             prefix="metacfg-", suffix=".json", delete=False
         ) as f:

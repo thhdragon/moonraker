@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
     from ..klippy_connection import KlippyConnection
 
-BASE_CONFIG: Dict[str, Dict[str, str]] = {
+BASE_CONFIG: dict[str, dict[str, str]] = {
     "moonraker": {
         "origin": "https://github.com/arksine/moonraker.git",
         "requirements": "scripts/moonraker-requirements.txt",
@@ -53,7 +53,7 @@ class AppType(ExtendedEnum):
     EXECUTABLE = 6
 
     @classmethod
-    def detect(cls, app_path: Union[str, pathlib.Path, None] = None):
+    def detect(cls, app_path: str | pathlib.Path | None = None):
         # If app path is None, detect Moonraker
         if isinstance(app_path, str):
             app_path = pathlib.Path(app_path).expanduser()
@@ -65,13 +65,13 @@ class AppType(ExtendedEnum):
             return AppType.NONE
 
     @classmethod
-    def valid_types(cls) -> List[AppType]:
+    def valid_types(cls) -> list[AppType]:
         all_types = list(cls)
         all_types.remove(AppType.NONE)
         return all_types
 
     @property
-    def supported_channels(self) -> List[Channel]:
+    def supported_channels(self) -> list[Channel]:
         if self == AppType.NONE:
             return []
         elif self in [AppType.WEB, AppType.ZIP, AppType.EXECUTABLE]:

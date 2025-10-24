@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 class JobQueue:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.queued_jobs: Dict[str, QueuedJob] = {}
+        self.queued_jobs: dict[str, QueuedJob] = {}
         self.lock = asyncio.Lock()
         self.pause_requested: bool = False
         self.load_on_start = config.getboolean("load_on_startup", False)
@@ -42,7 +42,7 @@ class JobQueue:
                 " must be above 0.0")
         self.job_transition_gcode = config.get(
             "job_transition_gcode", "").strip()
-        self.pop_queue_handle: Optional[asyncio.TimerHandle] = None
+        self.pop_queue_handle: asyncio.TimerHandle | None = None
 
         self.server.register_event_handler(
             "server:klippy_ready", self._handle_ready)
@@ -167,10 +167,10 @@ class JobQueue:
         return True
 
     async def queue_job(self,
-                        filenames: Union[str, List[str]],
+                        filenames: str | list[str],
                         check_exists: bool = True,
                         reset: bool = False,
-                        user: Optional[UserInfo] = None
+                        user: UserInfo | None = None
                         ) -> None:
         async with self.lock:
             # Make sure that the file exists
@@ -193,7 +193,7 @@ class JobQueue:
                     self._set_queue_state("ready")
 
     async def delete_job(self,
-                         job_ids: Union[str, List[str]],
+                         job_ids: str | list[str],
                          all: bool = False
                          ) -> None:
         async with self.lock:
@@ -236,7 +236,7 @@ class JobQueue:
                 else:
                     self._set_queue_state("ready" if self.automatic else "paused")
 
-    def _job_map_to_list(self) -> List[Dict[str, Any]]:
+    def _job_map_to_list(self) -> list[dict[str, Any]]:
         cur_time = time.time()
         return [job.as_dict(cur_time) for
                 job in self.queued_jobs.values()]
@@ -253,7 +253,7 @@ class JobQueue:
             self._send_queue_event()
 
     def _send_queue_event(self, action: str = "state_changed"):
-        updated_queue: Optional[List[Dict[str, Any]]] = None
+        updated_queue: list[dict[str, Any]] | None = None
         if action != "state_changed":
             updated_queue = self._job_map_to_list()
         event_loop = self.server.get_event_loop()
@@ -267,7 +267,7 @@ class JobQueue:
 
     async def _handle_job_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         req_type = web_request.get_request_type()
         if req_type == RequestType.POST:
             files = web_request.get_list('filenames')
@@ -290,7 +290,7 @@ class JobQueue:
 
     async def _handle_pause_queue(self,
                                   web_request: WebRequest
-                                  ) -> Dict[str, Any]:
+                                  ) -> dict[str, Any]:
         await self.pause_queue()
         return {
             'queued_jobs': self._job_map_to_list(),
@@ -299,7 +299,7 @@ class JobQueue:
 
     async def _handle_start_queue(self,
                                   web_request: WebRequest
-                                  ) -> Dict[str, Any]:
+                                  ) -> dict[str, Any]:
         await self.start_queue()
         return {
             'queued_jobs': self._job_map_to_list(),
@@ -308,13 +308,13 @@ class JobQueue:
 
     async def _handle_queue_status(self,
                                    web_request: WebRequest
-                                   ) -> Dict[str, Any]:
+                                   ) -> dict[str, Any]:
         return {
             'queued_jobs': self._job_map_to_list(),
             'queue_state': self.queue_state
         }
 
-    async def _handle_jump(self, web_request: WebRequest) -> Dict[str, Any]:
+    async def _handle_jump(self, web_request: WebRequest) -> dict[str, Any]:
         job_id: str = web_request.get("job_id")
         async with self.lock:
             job = self.queued_jobs.pop(job_id, None)
@@ -332,7 +332,7 @@ class JobQueue:
         await self.pause_queue()
 
 class QueuedJob:
-    def __init__(self, filename: str, user: Optional[UserInfo] = None) -> None:
+    def __init__(self, filename: str, user: UserInfo | None = None) -> None:
         self.filename = filename
         self.job_id = f"{id(self):016X}"
         self.time_added = time.time()
@@ -342,10 +342,10 @@ class QueuedJob:
         return self.filename
 
     @property
-    def user(self) -> Optional[UserInfo]:
+    def user(self) -> UserInfo | None:
         return self._user
 
-    def as_dict(self, cur_time: float) -> Dict[str, Any]:
+    def as_dict(self, cur_time: float) -> dict[str, Any]:
         return {
             'filename': self.filename,
             'job_id': self.job_id,

@@ -23,9 +23,9 @@ from typing import (
     Optional,
     Type,
     TYPE_CHECKING,
-    Union,
-    Callable
+    Union
 )
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
@@ -37,7 +37,7 @@ SENSOR_UPDATE_TIME = 1.0
 SENSOR_EVENT_NAME = "sensors:sensor_update"
 
 def _set_result(
-    name: str, value: Union[int, float], store: Dict[str, Union[int, float]]
+    name: str, value: int | float, store: dict[str, int | float]
 ) -> None:
     if not isinstance(value, (int, float)):
         store[name] = float(value)
@@ -48,19 +48,19 @@ def _set_result(
 class BaseSensor:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.error_state: Optional[str] = None
+        self.error_state: str | None = None
         self.id = config.get_name().split(maxsplit=1)[-1]
         self.type = config.get("type")
         self.name = config.get("name", self.id)
-        self.last_measurements: Dict[str, Union[int, float]] = {}
-        self.last_value: Dict[str, Union[int, float]] = {}
+        self.last_measurements: dict[str, int | float] = {}
+        self.last_value: dict[str, int | float] = {}
         store_size = config.getint("sensor_store_size", 1200)
-        self.values: DefaultDict[str, Deque[Union[int, float]]] = defaultdict(
+        self.values: defaultdict[str, deque[int | float]] = defaultdict(
             lambda: deque(maxlen=store_size)
         )
-        self.param_info: List[Dict[str, str]] = []
+        self.param_info: list[dict[str, str]] = []
         history: History = self.server.lookup_component("history")
-        self.field_info: Dict[str, List[HistoryFieldData]] = {}
+        self.field_info: dict[str, list[HistoryFieldData]] = {}
         all_opts = list(config.get_options().keys())
         cfg_name = config.get_name()
         param_prefix = "parameter_"
@@ -75,8 +75,8 @@ class BaseSensor:
             if not opt.startswith(hist_field_prefix):
                 continue
             name = opt[len(hist_field_prefix):]
-            field_cfg: Dict[str, str] = config.getdict(opt)
-            ident: Optional[str] = field_cfg.pop("parameter", None)
+            field_cfg: dict[str, str] = config.getdict(opt)
+            ident: str | None = field_cfg.pop("parameter", None)
             if ident is None:
                 raise config.error(
                     f"[{cfg_name}]: option '{opt}', key 'parameter' must be"
@@ -87,7 +87,7 @@ class BaseSensor:
             excl_paused: str = field_cfg.pop("exclude_paused", "false").lower()
             report_total: str = field_cfg.pop("report_total", "false").lower()
             report_max: str = field_cfg.pop("report_maximum", "false").lower()
-            precision: Optional[str] = field_cfg.pop("precision", None)
+            precision: str | None = field_cfg.pop("precision", None)
             try:
                 fdata = HistoryFieldData(
                     name,
@@ -135,8 +135,8 @@ class BaseSensor:
         logging.info("Registered sensor '%s'", self.name)
         return True
 
-    def get_sensor_info(self, extended: bool = False) -> Dict[str, Any]:
-        ret: Dict[str, Any] = {
+    def get_sensor_info(self, extended: bool = False) -> dict[str, Any]:
+        ret: dict[str, Any] = {
             "id": self.id,
             "friendly_name": self.name,
             "type": self.type,
@@ -144,7 +144,7 @@ class BaseSensor:
         }
         if extended:
             ret["parameter_info"] = self.param_info
-            history_fields: List[Dict[str, Any]] = []
+            history_fields: list[dict[str, Any]] = []
             for parameter, field_list in self.field_info.items():
                 for field_data in field_list:
                     field_config = field_data.get_configuration()
@@ -153,7 +153,7 @@ class BaseSensor:
             ret["history_fields"] = history_fields
         return ret
 
-    def get_sensor_measurements(self) -> Dict[str, List[Union[int, float]]]:
+    def get_sensor_measurements(self) -> dict[str, list[int | float]]:
         return {key: list(values) for key, values in self.values.items()}
 
     def get_name(self) -> str:
@@ -169,13 +169,13 @@ class MQTTSensor(BaseSensor):
         self.mqtt: MQTTClient = self.server.load_component(config, "mqtt")
         self.state_topic: str = config.get("state_topic")
         self.state_response = config.gettemplate("state_response_template")
-        self.qos: Optional[int] = config.getint("qos", None, minval=0, maxval=2)
+        self.qos: int | None = config.getint("qos", None, minval=0, maxval=2)
         self.server.register_event_handler(
             "mqtt:disconnected", self._on_mqtt_disconnected
         )
 
     def _on_state_update(self, payload: bytes) -> None:
-        measurements: Dict[str, Union[int, float]] = {}
+        measurements: dict[str, int | float] = {}
         context = {
             "payload": payload.decode(),
             "set_result": partial(_set_result, store=measurements)
@@ -216,11 +216,11 @@ class MQTTSensor(BaseSensor):
 
 
 class Sensors:
-    __sensor_types: Dict[str, Type[BaseSensor]] = {"MQTT": MQTTSensor}
+    __sensor_types: dict[str, type[BaseSensor]] = {"MQTT": MQTTSensor}
 
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.sensors: Dict[str, BaseSensor] = {}
+        self.sensors: dict[str, BaseSensor] = {}
 
         # Register timer to update sensor values in store
         self.sensors_update_timer = self.server.get_event_loop().register_timer(
@@ -256,7 +256,7 @@ class Sensors:
                     raise cfg.error(f"Invalid section name: {cfg.get_name()}")
                 logging.info(f"Configuring sensor: {name}")
                 sensor_type: str = cfg.get("type")
-                sensor_class: Optional[Type[BaseSensor]] = self.__sensor_types.get(
+                sensor_class: type[BaseSensor] | None = self.__sensor_types.get(
                     sensor_type.upper(), None
                 )
                 if sensor_class is None:
@@ -274,7 +274,7 @@ class Sensors:
         """
         Iterate through the sensors and store the last updated value.
         """
-        changed_data: Dict[str, Dict[str, Union[int, float]]] = {}
+        changed_data: dict[str, dict[str, int | float]] = {}
         for sensor_name, sensor in self.sensors.items():
             base_value = sensor.last_value
             sensor._update_sensor_value(eventtime=eventtime)
@@ -301,7 +301,7 @@ class Sensors:
 
     async def _handle_sensor_list_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Dict[str, Any]]:
+    ) -> dict[str, dict[str, Any]]:
         extended = web_request.get_boolean("extended", False)
         return {
             "sensors": {
@@ -312,7 +312,7 @@ class Sensors:
 
     async def _handle_sensor_info_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         sensor_name: str = web_request.get_str("sensor")
         extended = web_request.get_boolean("extended", False)
         if sensor_name not in self.sensors:
@@ -322,7 +322,7 @@ class Sensors:
 
     async def _handle_sensor_measurements_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Dict[str, Any]]:
+    ) -> dict[str, dict[str, Any]]:
         sensor_name: str = web_request.get_str("sensor", "")
         if sensor_name:
             sensor = self.sensors.get(sensor_name, None)

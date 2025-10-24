@@ -11,7 +11,7 @@ from typing import Dict, Optional
 class KlippyProcess:
     def __init__(self,
                  base_cmd: str,
-                 path_args: Dict[str, pathlib.Path],
+                 path_args: dict[str, pathlib.Path],
                  ) -> None:
         self.base_cmd = base_cmd
         self.config_path = path_args['printer.cfg']
@@ -19,7 +19,7 @@ class KlippyProcess:
         self.dict_path = path_args["klipper.dict"]
         self.pty_path = path_args["klippy_pty_path"]
         self.uds_path = path_args["klippy_uds_path"]
-        self.proc: Optional[subprocess.Popen] = None
+        self.proc: subprocess.Popen | None = None
         self.fd: int = -1
 
     def start(self):
@@ -72,7 +72,7 @@ class KlippyProcess:
                 self.proc.kill()
             self.proc = None
 
-    def get_paths(self) -> Dict[str, pathlib.Path]:
+    def get_paths(self) -> dict[str, pathlib.Path]:
         return {
             "printer.cfg": self.config_path,
             "klipper.dict": self.dict_path,

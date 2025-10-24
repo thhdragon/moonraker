@@ -43,12 +43,12 @@ class TD1Connection:
         )
         self.serial_task: asyncio.Task
         # Values to return back for td1_data endpoint
-        self._td: Optional[float] = None
-        self._color: Optional[str] = None
+        self._td: float | None = None
+        self._color: str | None = None
         self._scan_time: str = datetime.datetime.now(
-            tz=datetime.timezone.utc
+            tz=datetime.UTC
         ).isoformat() + "Z"
-        self._error: Optional[str] = None
+        self._error: str | None = None
         self.done_initializing: bool = False
 
     async def initialize(self) -> None:
@@ -58,7 +58,7 @@ class TD1Connection:
             if self.serial.connected:
                 break
 
-    async def readline_with_timeout(self, timeout: float = 5.) -> Optional[bytes]:
+    async def readline_with_timeout(self, timeout: float = 5.) -> bytes | None:
         with contextlib.suppress(asyncio.TimeoutError):
             return await asyncio.wait_for(self.serial.reader.readline(), timeout)
         return None
@@ -86,7 +86,7 @@ class TD1Connection:
                 self._td = float(parts[4])
                 self._color = parts[5].strip()
                 self._scan_time = datetime.datetime.now(
-                    tz=datetime.timezone.utc
+                    tz=datetime.UTC
                 ).isoformat() + "Z"
         except Exception as e:
             self.logger.error(f"Parse error from {self.serial_number}: {e}")
@@ -106,7 +106,7 @@ class TD1Connection:
             if ack is None:
                 self.logger.debug(f"{self.serial_number}: Sending retrieve file")
                 await self.serial.send(b'retrieve file\n')
-                await self.serial.send(f"{file_name}\n".encode('utf-8'))
+                await self.serial.send(f"{file_name}\n".encode())
             line = await self.readline_with_timeout()
             if line is not None:
                 ack = line.decode('utf-8').strip()
@@ -156,7 +156,7 @@ class TD1Connection:
         self.serial.set_read_callback(None, force=True)
         with contextlib.suppress(asyncio.TimeoutError):
             await asyncio.wait_for(self.serial_task, 1.)
-        await self.serial.send('change settings\n'.encode('utf-8'))
+        await self.serial.send(b'change settings\n')
         ack = await self.serial.reader.readuntil(b'\n')
         ack_str = ack.decode('utf-8').strip()
         if ack_str == 'ready':
@@ -164,7 +164,7 @@ class TD1Connection:
         ack = await self.serial.reader.readuntil(b'\n')
         ack_str = ack.decode('utf-8').strip()
 
-    def get_data(self) -> Dict[str, Dict[str, Any]]:
+    def get_data(self) -> dict[str, dict[str, Any]]:
         if not self.done_initializing:
             # Return empty dictionary until check_error_file has compeleted
             return {}
@@ -187,9 +187,9 @@ class TD1:
         self._vid: int = 0xE4B2
         self._pid: int = 0x0045
         self._enabled: bool = True
-        self._watch_task: Optional[asyncio.Task] = None
-        self._start_task: Optional[asyncio.Task] = None
-        self.td1_conns: Dict[str, TD1Connection] = {}
+        self._watch_task: asyncio.Task | None = None
+        self._start_task: asyncio.Task | None = None
+        self.td1_conns: dict[str, TD1Connection] = {}
         self._register_endpoints()
 
     def _register_endpoints(self) -> None:
@@ -253,8 +253,8 @@ class TD1:
                 if conn is not None:
                     await conn.close()
 
-    def _find_td1_devices(self) -> List[Tuple[str, str]]:
-        found: List[Tuple[str, str]] = []
+    def _find_td1_devices(self) -> list[tuple[str, str]]:
+        found: list[tuple[str, str]] = []
         for port in serial.tools.list_ports.comports():
             if port.vid == self._vid and port.pid == self._pid:
                 if port.serial_number:
@@ -278,8 +278,8 @@ class TD1:
             self.logger.error(f"Task canceled error {e}")
             raise
 
-    async def _handle_get_data(self, web_request: WebRequest) -> Dict[str, Any]:
-        latest_data: Dict[str, Any] = {}
+    async def _handle_get_data(self, web_request: WebRequest) -> dict[str, Any]:
+        latest_data: dict[str, Any] = {}
         for task in self.td1_conns.values():
             latest_data.update(task.get_data())
         return {
@@ -287,7 +287,7 @@ class TD1:
             "devices": latest_data
         }
 
-    async def _handle_reboot(self, web_request: WebRequest) -> Dict[str, str]:
+    async def _handle_reboot(self, web_request: WebRequest) -> dict[str, str]:
         """
         Reboots TD1 device by serial when requested
         """

@@ -16,12 +16,12 @@ from .base_deploy import BaseDeploy
 from typing import (
     TYPE_CHECKING,
     Any,
-    Awaitable,
     Optional,
     Union,
     Dict,
     List,
 )
+from collections.abc import Awaitable
 
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from .update_manager import CommandHelper
     from dbus_fast import Variant
     from dbus_fast.aio import ProxyInterface
-    JsonType = Union[List[Any], Dict[str, Any]]
+    JsonType = Union[list[Any], dict[str, Any]]
 
 
 class PackageDeploy(BaseDeploy):
@@ -39,9 +39,9 @@ class PackageDeploy(BaseDeploy):
         super().__init__(config, "system", "", "")
         self.cmd_helper.set_package_updater(self)
         self.use_packagekit = config.getboolean("enable_packagekit", True)
-        self.available_packages: List[str] = []
+        self.available_packages: list[str] = []
 
-    async def initialize(self) -> Dict[str, Any]:
+    async def initialize(self) -> dict[str, Any]:
         storage = await super().initialize()
         self.available_packages = storage.get('packages', [])
         provider: BasePackageProvider
@@ -74,7 +74,7 @@ class PackageDeploy(BaseDeploy):
         self.provider = provider  # type: ignore
         return storage
 
-    async def _get_fallback_provider(self) -> Optional[BasePackageProvider]:
+    async def _get_fallback_provider(self) -> BasePackageProvider | None:
         # Currently only the API Fallback provider is available
         shell_cmd: SCMDComp
         shell_cmd = self.server.lookup_component("shell_command")
@@ -108,7 +108,7 @@ class PackageDeploy(BaseDeploy):
         # Update Persistent Storage
         self._save_state()
 
-    def get_persistent_data(self) -> Dict[str, Any]:
+    def get_persistent_data(self) -> dict[str, Any]:
         storage = super().get_persistent_data()
         storage['packages'] = self.available_packages
         return storage
@@ -138,12 +138,12 @@ class PackageDeploy(BaseDeploy):
             await self.provider.refresh_packages(notify)
 
     async def install_packages(self,
-                               package_list: List[str],
+                               package_list: list[str],
                                **kwargs
                                ) -> None:
         await self.provider.install_packages(package_list, **kwargs)
 
-    def get_update_status(self) -> Dict[str, Any]:
+    def get_update_status(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "configured_type": "system",
@@ -162,11 +162,11 @@ class BasePackageProvider:
     async def refresh_packages(self, notify: bool = False) -> None:
         raise self.server.error("Cannot refresh packages, no provider set")
 
-    async def get_packages(self) -> List[str]:
+    async def get_packages(self) -> list[str]:
         raise self.server.error("Cannot retrieve packages, no provider set")
 
     async def install_packages(self,
-                               package_list: List[str],
+                               package_list: list[str],
                                **kwargs
                                ) -> None:
         raise self.server.error("Cannot install packages, no provider set")
@@ -181,7 +181,7 @@ class AptCliProvider(BasePackageProvider):
         await self.cmd_helper.run_cmd(
             f"{self.APT_CMD} update", timeout=600., notify=notify)
 
-    async def get_packages(self) -> List[str]:
+    async def get_packages(self) -> list[str]:
         shell_cmd = self.cmd_helper.get_shell_command()
         res = await shell_cmd.exec_cmd("apt list --upgradable", timeout=60.)
         pkg_list = [p.strip() for p in res.split("\n") if p.strip()]
@@ -190,7 +190,7 @@ class AptCliProvider(BasePackageProvider):
             return [p.split("/", maxsplit=1)[0] for p in pkg_list]
         return []
 
-    async def resolve_packages(self, package_list: List[str]) -> List[str]:
+    async def resolve_packages(self, package_list: list[str]) -> list[str]:
         self.cmd_helper.notify_update_response("Resolving packages...")
         search_regex = "|".join([f"^{pkg}$" for pkg in package_list])
         cmd = f"apt-cache search --names-only \"{search_regex}\""
@@ -202,7 +202,7 @@ class AptCliProvider(BasePackageProvider):
         return [avail for avail in package_list if avail in resolved]
 
     async def install_packages(self,
-                               package_list: List[str],
+                               package_list: list[str],
                                **kwargs
                                ) -> None:
         timeout: float = kwargs.get('timeout', 300.)
@@ -229,7 +229,7 @@ class PackageKitProvider(BasePackageProvider):
         super().__init__(cmd_helper)
         dbus_mgr: DbusManager = self.server.lookup_component("dbus_manager")
         self.dbus_mgr = dbus_mgr
-        self.pkgkit: Optional[ProxyInterface] = None
+        self.pkgkit: ProxyInterface | None = None
 
     async def initialize(self) -> None:
         if not self.dbus_mgr.is_connected():
@@ -254,14 +254,14 @@ class PackageKitProvider(BasePackageProvider):
     async def refresh_packages(self, notify: bool = False) -> None:
         await self.run_transaction("refresh_cache", False, notify=notify)
 
-    async def get_packages(self) -> List[str]:
+    async def get_packages(self) -> list[str]:
         flags = PkEnum.Filter.NONE
         pkgs = await self.run_transaction("get_updates", flags.value)
         pkg_ids = [info['package_id'] for info in pkgs if 'package_id' in info]
         return [pkg_id.split(";")[0] for pkg_id in pkg_ids]
 
     async def install_packages(self,
-                               package_list: List[str],
+                               package_list: list[str],
                                **kwargs
                                ) -> None:
         notify: bool = kwargs.get('notify', False)
@@ -338,9 +338,9 @@ class PackageKitTransaction:
         self.allow_cancel = True
         self.uid = 0
         # Transaction data tracking
-        self.tfut: Optional[asyncio.Future] = None
+        self.tfut: asyncio.Future | None = None
         self.last_progress_notify_time: float = 0.
-        self.result: List[Dict[str, Any]] = []
+        self.result: list[dict[str, Any]] = []
         self.err_msg: str = ""
 
     def run(self,
@@ -458,8 +458,8 @@ class PackageKitTransaction:
 
     def _on_properties_changed(self,
                                iface_name: str,
-                               changed_props: Dict[str, Variant],
-                               invalid_props: Dict[str, Variant]
+                               changed_props: dict[str, Variant],
+                               invalid_props: dict[str, Variant]
                                ) -> None:
         for name, var in changed_props.items():
             formatted = re.sub(r"(\w)([A-Z])", r"\g<1>_\g<2>", name).lower()

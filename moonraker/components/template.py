@@ -87,7 +87,7 @@ class JinjaTemplate(RenderableTemplate):
     def __str__(self) -> str:
         return self.orig_source
 
-    def render(self, context: Dict[str, Any] = {}) -> str:
+    def render(self, context: dict[str, Any] = {}) -> str:
         if self.is_async:
             raise self.server.error(
                 "Cannot render async templates with the render() method"
@@ -100,7 +100,7 @@ class JinjaTemplate(RenderableTemplate):
                 raise self.server.error(msg, 500) from e
             raise self.server.config_error(msg) from e
 
-    async def render_async(self, context: Dict[str, Any] = {}) -> str:
+    async def render_async(self, context: dict[str, Any] = {}) -> str:
         try:
             ret = await self.template.render_async(context)
         except asyncio.CancelledError:

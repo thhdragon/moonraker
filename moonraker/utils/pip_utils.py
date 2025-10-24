@@ -24,9 +24,9 @@ from typing import (
     Dict,
     List,
     Tuple,
-    Callable,
     IO
 )
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from ..server import Server
@@ -41,8 +41,8 @@ class PipException(Exception):
 # Synchronous Subprocess Helpers
 def _run_subprocess_with_response(
     cmd: str,
-    timeout: Optional[float] = None,
-    env: Optional[Dict[str, str]] = None
+    timeout: float | None = None,
+    env: dict[str, str] | None = None
 ) -> str:
     prog = shlex.split(cmd)
     proc = subprocess.run(
@@ -63,12 +63,12 @@ def _process_subproc_output(
 
 def _run_subprocess(
     cmd: str,
-    timeout: Optional[float] = None,
-    env: Optional[Dict[str, str]] = None,
-    response_cb: Optional[Callable[[str], None]] = None
+    timeout: float | None = None,
+    env: dict[str, str] | None = None,
+    response_cb: Callable[[str], None] | None = None
 ) -> None:
     prog = shlex.split(cmd)
-    params: Dict[str, Any] = {"errors": "ignore", "encoding": "utf-8"}
+    params: dict[str, Any] = {"errors": "ignore", "encoding": "utf-8"}
     if response_cb is not None:
         params = {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT}
     with subprocess.Popen(prog, text=True, env=env, **params) as process:
@@ -92,11 +92,11 @@ class PipVersionInfo:
     python_version_string: str
 
     @property
-    def pip_version(self) -> Tuple[int, ...]:
+    def pip_version(self) -> tuple[int, ...]:
         return tuple(int(part) for part in self.pip_version_string.split("."))
 
     @property
-    def python_version(self) -> Tuple[int, ...]:
+    def python_version(self) -> tuple[int, ...]:
         return tuple(int(part) for part in self.python_version_string.split("."))
 
     @property
@@ -104,7 +104,7 @@ class PipVersionInfo:
         return self.pip_version < self.max_pip_version
 
     @property
-    def max_pip_version(self) -> Tuple[int, ...]:
+    def max_pip_version(self) -> tuple[int, ...]:
         python_version = self.python_version
         if python_version < (3, 7):
             return (20, 3, 4)
@@ -121,7 +121,7 @@ class PipVersionInfo:
 
 class PipExecutor:
     def __init__(
-        self, pip_cmd: str, response_handler: Optional[Callable[[str], None]] = None
+        self, pip_cmd: str, response_handler: Callable[[str], None] | None = None
     ) -> None:
         self.pip_cmd = pip_cmd
         self.response_hdlr = response_handler
@@ -129,16 +129,16 @@ class PipExecutor:
     def call_pip_with_response(
         self,
         args: str,
-        timeout: Optional[float] = None,
-        env: Optional[Dict[str, str]] = None
+        timeout: float | None = None,
+        env: dict[str, str] | None = None
     ) -> str:
         return _run_subprocess_with_response(f"{self.pip_cmd} {args}", timeout, env)
 
     def call_pip(
         self,
         args: str,
-        timeout: Optional[float] = None,
-        env: Optional[Dict[str, str]] = None
+        timeout: float | None = None,
+        env: dict[str, str] | None = None
     ) -> None:
         _run_subprocess(f"{self.pip_cmd} {args}", timeout, env, self.response_hdlr)
 
@@ -156,11 +156,11 @@ class PipExecutor:
 
     def install_packages(
         self,
-        packages: Union[pathlib.Path, List[str]],
-        sys_env_vars: Optional[Dict[str, Any]] = None
+        packages: pathlib.Path | list[str],
+        sys_env_vars: dict[str, Any] | None = None
     ) -> None:
         args = prepare_install_args(packages)
-        env: Optional[Dict[str, str]] = None
+        env: dict[str, str] | None = None
         if sys_env_vars is not None:
             env = dict(os.environ)
             env.update(sys_env_vars)
@@ -184,7 +184,7 @@ class AsyncPipExecutor:
         self,
         pip_cmd: str,
         server: Server,
-        notify_callback: Optional[Callable[[bytes], None]] = None
+        notify_callback: Callable[[bytes], None] | None = None
     ) -> None:
         self.pip_cmd = pip_cmd
         self.server = server
@@ -198,9 +198,9 @@ class AsyncPipExecutor:
         args: str,
         timeout: float = 30.,
         attempts: int = 3,
-        sys_env_vars: Optional[Dict[str, Any]] = None
+        sys_env_vars: dict[str, Any] | None = None
     ) -> str:
-        env: Optional[Dict[str, str]] = None
+        env: dict[str, str] | None = None
         if sys_env_vars is not None:
             env = dict(os.environ)
             env.update(sys_env_vars)
@@ -215,9 +215,9 @@ class AsyncPipExecutor:
         args: str,
         timeout: float = 30.,
         attempts: int = 3,
-        sys_env_vars: Optional[Dict[str, Any]] = None
+        sys_env_vars: dict[str, Any] | None = None
     ) -> None:
-        env: Optional[Dict[str, str]] = None
+        env: dict[str, str] | None = None
         if sys_env_vars is not None:
             env = dict(os.environ)
             env.update(sys_env_vars)
@@ -248,12 +248,12 @@ class AsyncPipExecutor:
 
     async def install_packages(
         self,
-        packages: Union[pathlib.Path, List[str]],
-        sys_env_vars: Optional[Dict[str, Any]] = None
+        packages: pathlib.Path | list[str],
+        sys_env_vars: dict[str, Any] | None = None
     ) -> None:
         # Update python dependencies
         args = prepare_install_args(packages)
-        env: Optional[Dict[str, str]] = None
+        env: dict[str, str] | None = None
         if sys_env_vars is not None:
             env = dict(os.environ)
             env.update(sys_env_vars)
@@ -273,11 +273,11 @@ class AsyncPipExecutor:
         if not py_exec.exists():
             raise self.server.error("Failed to create new virtualenv", 500)
 
-def read_requirements_file(requirements_path: pathlib.Path) -> List[str]:
+def read_requirements_file(requirements_path: pathlib.Path) -> list[str]:
     if not requirements_path.is_file():
         raise FileNotFoundError(f"Requirements file {requirements_path} not found")
     data = requirements_path.read_text()
-    modules: List[str] = []
+    modules: list[str] = []
     for line in data.split("\n"):
         line = line.strip()
         if not line or line[0] in "#-":
@@ -298,7 +298,7 @@ def parse_pip_version(pip_response: str) -> PipVersionInfo:
     pyver_str: str = match.group(2).strip()
     return PipVersionInfo(pipver_str, pyver_str)
 
-def prepare_install_args(packages: Union[pathlib.Path, List[str]]) -> str:
+def prepare_install_args(packages: pathlib.Path | list[str]) -> str:
     if isinstance(packages, pathlib.Path):
         if not packages.is_file():
             raise FileNotFoundError(

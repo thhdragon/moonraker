@@ -22,13 +22,12 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Optional,
-    Callable,
-    Coroutine,
     Tuple,
     Union,
     Dict,
     List,
 )
+from collections.abc import Callable, Coroutine
 
 if TYPE_CHECKING:
     from ..server import Server
@@ -48,9 +47,9 @@ CLIENT_TYPES = ["web", "mobile", "desktop", "display", "bot", "agent", "other"]
 class WebsocketManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.clients: Dict[int, BaseRemoteConnection] = {}
-        self.bridge_connections: Dict[int, BridgeSocket] = {}
-        self.closed_event: Optional[asyncio.Event] = None
+        self.clients: dict[int, BaseRemoteConnection] = {}
+        self.bridge_connections: dict[int, BridgeSocket] = {}
+        self.closed_event: asyncio.Event | None = None
         app: MoonrakerApp = self.server.lookup_component("application")
         app.register_websocket_handler("/websocket", WebSocket)
         app.register_websocket_handler("/klippysocket", BridgeSocket)
@@ -66,8 +65,8 @@ class WebsocketManager:
     def register_notification(
         self,
         event_name: str,
-        notify_name: Optional[str] = None,
-        event_type: Optional[str] = None
+        notify_name: str | None = None,
+        event_type: str | None = None
     ) -> None:
         if notify_name is None:
             notify_name = event_name.split(':')[-1]
@@ -80,12 +79,12 @@ class WebsocketManager:
                 self.notify_clients(notify_name, args)
         self.server.register_event_handler(event_name, notify_handler)
 
-    async def _handle_id_request(self, web_request: WebRequest) -> Dict[str, int]:
+    async def _handle_id_request(self, web_request: WebRequest) -> dict[str, int]:
         sc = web_request.get_client_connection()
         assert sc is not None
         return {'websocket_id': sc.uid}
 
-    async def _handle_identify(self, web_request: WebRequest) -> Dict[str, int]:
+    async def _handle_identify(self, web_request: WebRequest) -> dict[str, int]:
         sc = web_request.get_client_connection()
         assert sc is not None
         if sc.identified:
@@ -124,7 +123,7 @@ class WebsocketManager:
         self.server.send_event("websockets:client_identified", sc)
         return {'connection_id': sc.uid}
 
-    def _process_logout(self, user: Dict[str, Any]) -> None:
+    def _process_logout(self, user: dict[str, Any]) -> None:
         if "username" not in user:
             return
         name = user["username"]
@@ -134,10 +133,10 @@ class WebsocketManager:
     def has_socket(self, ws_id: int) -> bool:
         return ws_id in self.clients
 
-    def get_client(self, uid: int) -> Optional[BaseRemoteConnection]:
+    def get_client(self, uid: int) -> BaseRemoteConnection | None:
         return self.clients.get(uid, None)
 
-    def get_client_ws(self, ws_id: int) -> Optional[WebSocket]:
+    def get_client_ws(self, ws_id: int) -> WebSocket | None:
         sc = self.clients.get(ws_id, None)
         if sc is None or not isinstance(sc, WebSocket):
             return None
@@ -145,26 +144,26 @@ class WebsocketManager:
 
     def get_clients_by_type(
         self, client_type: str
-    ) -> List[BaseRemoteConnection]:
+    ) -> list[BaseRemoteConnection]:
         if not client_type:
             return []
-        ret: List[BaseRemoteConnection] = []
+        ret: list[BaseRemoteConnection] = []
         for sc in self.clients.values():
             if sc.client_data.get("type", "") == client_type.lower():
                 ret.append(sc)
         return ret
 
-    def get_clients_by_name(self, name: str) -> List[BaseRemoteConnection]:
+    def get_clients_by_name(self, name: str) -> list[BaseRemoteConnection]:
         if not name:
             return []
-        ret: List[BaseRemoteConnection] = []
+        ret: list[BaseRemoteConnection] = []
         for sc in self.clients.values():
             if sc.client_data.get("name", "").lower() == name.lower():
                 ret.append(sc)
         return ret
 
-    def get_unidentified_clients(self) -> List[BaseRemoteConnection]:
-        ret: List[BaseRemoteConnection] = []
+    def get_unidentified_clients(self) -> list[BaseRemoteConnection]:
+        ret: list[BaseRemoteConnection] = []
         for sc in self.clients.values():
             if not sc.client_data:
                 ret.append(sc)
@@ -203,10 +202,10 @@ class WebsocketManager:
     def notify_clients(
         self,
         name: str,
-        data: Union[List, Tuple] = [],
-        mask: List[int] = []
+        data: list | tuple = [],
+        mask: list[int] = []
     ) -> None:
-        msg: Dict[str, Any] = {'jsonrpc': "2.0", 'method': "notify_" + name}
+        msg: dict[str, Any] = {'jsonrpc': "2.0", 'method': "notify_" + name}
         if data:
             msg['params'] = data
         for sc in list(self.clients.values()):
@@ -227,7 +226,7 @@ class WebsocketManager:
             sc.close_socket(1001, "Server Shutdown")
         try:
             await asyncio.wait_for(self.closed_event.wait(), 2.)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
         self.closed_event = None
 
@@ -241,7 +240,7 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
         self.cors_allowed: bool = False
 
     @property
-    def ip_addr(self) -> Optional[IPAddress]:
+    def ip_addr(self) -> IPAddress | None:
         return self._ip_addr
 
     @property
@@ -268,7 +267,7 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
                      f"Host Name: {self.hostname}")
         self.wsm.add_client(self)
 
-    def on_message(self, message: Union[bytes, str]) -> None:
+    def on_message(self, message: bytes | str) -> None:
         self.eventloop.register_callback(self._process_message, message)
 
     def on_pong(self, data: bytes) -> None:
@@ -295,7 +294,7 @@ class WebSocket(WebSocketHandler, BaseRemoteConnection):
             extensions.remove_agent(self)
         self.wsm.remove_client(self)
 
-    async def write_to_socket(self, message: Union[bytes, str]) -> None:
+    async def write_to_socket(self, message: bytes | str) -> None:
         try:
             await self.write_message(message)
         except WebSocketClosedError:
@@ -351,13 +350,13 @@ class BridgeSocket(WebSocketHandler):
         self._ip_addr = parse_ip_address(self.request.remote_ip or "")
         self.last_pong_time: float = self.eventloop.get_loop_time()
         self.is_closed = False
-        self.klippy_writer: Optional[asyncio.StreamWriter] = None
-        self.klippy_write_buf: List[bytes] = []
+        self.klippy_writer: asyncio.StreamWriter | None = None
+        self.klippy_write_buf: list[bytes] = []
         self.klippy_queue_busy: bool = False
         self.cors_allowed: bool = False
 
     @property
-    def ip_addr(self) -> Optional[IPAddress]:
+    def ip_addr(self) -> IPAddress | None:
         return self._ip_addr
 
     @property
@@ -381,7 +380,7 @@ class BridgeSocket(WebSocketHandler):
                      f"Host Name: {self.hostname}")
         self.wsm.add_bridge_connection(self)
 
-    def on_message(self, message: Union[bytes, str]) -> None:
+    def on_message(self, message: bytes | str) -> None:
         if isinstance(message, str):
             message = message.encode(encoding="utf-8")
         self.klippy_write_buf.append(message)

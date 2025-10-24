@@ -10,7 +10,7 @@ import subprocess
 import shlex
 import json
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -48,9 +48,9 @@ def pdm_build_initialize(context: Context) -> None:
     rinfo_data: str = ""
     if context.root.joinpath(".git").exists():
         build_ver: str = context.config.metadata['version']
-        build_time = datetime.now(timezone.utc)
-        urls: Dict[str, str] = context.config.metadata['urls']
-        release_info: Dict[str, Any] = {
+        build_time = datetime.now(UTC)
+        urls: dict[str, str] = context.config.metadata['urls']
+        release_info: dict[str, Any] = {
             "project_name": proj_name,
             "package_name": __package_name__,
             "urls": {key.lower(): val for key, val in urls.items()},
@@ -62,7 +62,7 @@ def pdm_build_initialize(context: Context) -> None:
         if __dependencies__:
             deps = pathlib.Path(context.root).joinpath(__dependencies__)
             if deps.is_file():
-                dep_info: Dict[str, Any] = json.loads(deps.read_bytes())
+                dep_info: dict[str, Any] = json.loads(deps.read_bytes())
                 release_info["system_dependencies"] = dep_info
         # Write the release info to both the package and the data path
         rinfo_data = json.dumps(release_info, indent=4)

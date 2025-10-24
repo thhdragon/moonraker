@@ -154,7 +154,7 @@ async def test_no_uds(base_server: Server):
 @pytest.mark.run_paths(klippy_uds="fake_uds")
 @pytest.mark.asyncio
 async def test_no_uds_access(base_server: Server,
-                             path_args: Dict[str, pathlib.Path]):
+                             path_args: dict[str, pathlib.Path]):
     attempts = [1, 2, 3]
     uds_path = path_args['klippy_uds_path']
     uds_path.write_text("test")

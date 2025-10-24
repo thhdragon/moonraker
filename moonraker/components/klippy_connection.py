@@ -20,16 +20,14 @@ from ..common import KlippyState, RequestType
 from typing import (
     TYPE_CHECKING,
     Any,
-    Awaitable,
     Optional,
-    Callable,
-    Coroutine,
     Dict,
     List,
     Set,
     Tuple,
     Union
 )
+from collections.abc import Awaitable, Callable, Coroutine
 if TYPE_CHECKING:
     from ..common import WebRequest, APITransport, BaseRemoteConnection
     from ..confighelper import ConfigHelper
@@ -38,8 +36,8 @@ if TYPE_CHECKING:
     from .machine import Machine
     from .job_state import JobState
     from .database import MoonrakerDatabase as Database
-    FlexCallback = Callable[..., Optional[Coroutine]]
-    Subscription = Dict[str, Optional[List[str]]]
+    FlexCallback = Callable[..., Coroutine | None]
+    Subscription = dict[str, list[str] | None]
 
 # These endpoints are reserved for klippy/moonraker communication only and are
 # not exposed via http or the websocket
@@ -69,36 +67,36 @@ class KlippyConnection:
         self.uds_address = config.getpath(
             "klippy_uds_address", pathlib.Path("/tmp/klippy_uds")
         )
-        self.writer: Optional[asyncio.StreamWriter] = None
+        self.writer: asyncio.StreamWriter | None = None
         self.connection_mutex: asyncio.Lock = asyncio.Lock()
         self.event_loop = self.server.get_event_loop()
         self.log_no_access = True
         # Connection State
-        self.connection_task: Optional[asyncio.Task] = None
+        self.connection_task: asyncio.Task | None = None
         self.closing: bool = False
         self.subscription_lock = asyncio.Lock()
-        self._klippy_info: Dict[str, Any] = {}
+        self._klippy_info: dict[str, Any] = {}
         self._klippy_identified: bool = False
         self._klippy_initializing: bool = False
         self._klippy_started: bool = False
         self._methods_registered: bool = False
         self._klipper_version: str = ""
-        self._missing_reqs: Set[str] = set()
-        self._peer_cred: Dict[str, int] = {}
-        self._service_info: Dict[str, Any] = {}
+        self._missing_reqs: set[str] = set()
+        self._peer_cred: dict[str, int] = {}
+        self._service_info: dict[str, Any] = {}
         self._path = pathlib.Path("~/klipper").expanduser()
         self._executable = pathlib.Path("~/klippy-env/bin/python").expanduser()
         self.init_attempts: int = 0
         self._state: KlippyState = KlippyState.DISCONNECTED
         self._state.set_message("Klippy Disconnected")
-        self.subscriptions: Dict[APITransport, Subscription] = {}
-        self.subscription_cache: Dict[str, Dict[str, Any]] = {}
+        self.subscriptions: dict[APITransport, Subscription] = {}
+        self.subscription_cache: dict[str, dict[str, Any]] = {}
         # Setup remote methods accessible to Klippy.  Note that all
         # registered remote methods should be of the notification type,
         # they do not return a response to Klippy after execution
-        self.pending_requests: Dict[int, KlippyRequest] = {}
-        self.remote_methods: Dict[str, FlexCallback] = {}
-        self.klippy_reg_methods: List[str] = []
+        self.pending_requests: dict[int, KlippyRequest] = {}
+        self.remote_methods: dict[str, FlexCallback] = {}
+        self.klippy_reg_methods: list[str] = []
         self.register_remote_method(
             'process_gcode_response', self._process_gcode_response,
             need_klippy_reg=False)
@@ -121,19 +119,19 @@ class KlippyConnection:
         return self._state.message
 
     @property
-    def klippy_info(self) -> Dict[str, Any]:
+    def klippy_info(self) -> dict[str, Any]:
         return self._klippy_info
 
     @property
-    def missing_requirements(self) -> List[str]:
+    def missing_requirements(self) -> list[str]:
         return list(self._missing_reqs)
 
     @property
-    def peer_credentials(self) -> Dict[str, int]:
+    def peer_credentials(self) -> dict[str, int]:
         return dict(self._peer_cred)
 
     @property
-    def service_info(self) -> Dict[str, Any]:
+    def service_info(self) -> dict[str, Any]:
         return self._service_info
 
     @property
@@ -153,7 +151,7 @@ class KlippyConnection:
     def load_saved_state(self) -> None:
         db: Database = self.server.lookup_component("database")
         sync_provider = db.get_provider_wrapper()
-        kc_info: Dict[str, Any]
+        kc_info: dict[str, Any]
         kc_info = sync_provider.get_item("moonraker", "klippy_connection", {})
         self._path = pathlib.Path(kc_info.get("path", str(self._path)))
         self._executable = pathlib.Path(kc_info.get("executable", str(self.executable)))
@@ -247,7 +245,7 @@ class KlippyConnection:
 
     def register_method_from_agent(
         self, connection: BaseRemoteConnection, method_name: str
-    ) -> Optional[Awaitable]:
+    ) -> Awaitable | None:
         if connection.client_data["type"] != "agent":
             raise self.server.error(
                 "Only connections of the 'agent' type can register methods"
@@ -320,7 +318,7 @@ class KlippyConnection:
 
     async def open_klippy_connection(
         self, primary: bool = False
-    ) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         if not primary and not self.is_connected():
             raise ServerError("Klippy Unix Connection Not Available", 503)
         return await asyncio.open_unix_connection(
@@ -414,7 +412,7 @@ class KlippyConnection:
 
     async def _check_ready(self) -> None:
         send_id = not self._klippy_identified
-        result: Dict[str, Any]
+        result: dict[str, Any]
         try:
             result = await self.klippy_apis.get_klippy_info(send_id)
         except ServerError as e:
@@ -430,9 +428,9 @@ class KlippyConnection:
             self._klipper_version = version
             msg = f"Klipper Version: {version}"
             self.server.add_log_rollover_item("klipper_version", msg)
-        klipper_pid: Optional[int] = result.get("process_id")
+        klipper_pid: int | None = result.get("process_id")
         if klipper_pid is not None:
-            cur_pid: Optional[int] = self._peer_cred.get("process_id")
+            cur_pid: int | None = self._peer_cred.get("process_id")
             if cur_pid is None or klipper_pid != cur_pid:
                 self._peer_cred = dict(
                     process_id=klipper_pid,
@@ -524,7 +522,7 @@ class KlippyConnection:
                         "Configuration for [virtual_sdcard] not found,"
                         " unable to set SD Card path")
 
-    def _process_command(self, cmd: Dict[str, Any]) -> None:
+    def _process_command(self, cmd: dict[str, Any]) -> None:
         method = cmd.get('method', None)
         if method is not None:
             # This is a remote method called from klippy
@@ -537,7 +535,7 @@ class KlippyConnection:
             return
         # This is a response to a request, process
         req_id = cmd.get('id', None)
-        request: Optional[KlippyRequest]
+        request: KlippyRequest | None
         request = self.pending_requests.pop(req_id, None)
         if request is None:
             logging.info(
@@ -550,7 +548,7 @@ class KlippyConnection:
                 result = "ok"
             request.set_result(result)
         else:
-            err: Union[str, Dict[str, str]]
+            err: str | dict[str, str]
             err = cmd.get('error', "Malformed Klippy Response")
             if isinstance(err, dict):
                 err = err.get("message", "Malformed Klippy Response")
@@ -568,12 +566,12 @@ class KlippyConnection:
         self.server.send_event("server:gcode_response", response)
 
     def _process_status_update(
-        self, eventtime: float, status: Dict[str, Dict[str, Any]]
+        self, eventtime: float, status: dict[str, dict[str, Any]]
     ) -> None:
         for field, item in status.items():
             self.subscription_cache.setdefault(field, {}).update(item)
         if 'webhooks' in status:
-            wh: Dict[str, str] = status['webhooks']
+            wh: dict[str, str] = status['webhooks']
             state_message: str = self._state.message
             if "state_message" in wh:
                 state_message = wh["state_message"]
@@ -592,10 +590,10 @@ class KlippyConnection:
                     self.server.send_event("server:klippy_shutdown")
                 self._state = new_state
         for conn, sub in self.subscriptions.items():
-            conn_status: Dict[str, Any] = {}
+            conn_status: dict[str, Any] = {}
             for name, fields in sub.items():
                 if name in status:
-                    val: Dict[str, Any] = dict(status[name])
+                    val: dict[str, Any] = dict(status[name])
                     if fields is not None:
                         val = {k: v for k, v in val.items() if k in fields}
                     if val:
@@ -616,7 +614,7 @@ class KlippyConnection:
                         "klippy_connection:gcode_received", script)
             return await self._request_standard(web_request)
 
-    async def _request_subscripton(self, web_request: WebRequest) -> Dict[str, Any]:
+    async def _request_subscripton(self, web_request: WebRequest) -> dict[str, Any]:
         async with self.subscription_lock:
             args = web_request.get_args()
             conn = web_request.get_subscribable()
@@ -646,9 +644,9 @@ class KlippyConnection:
             result = await self._request_standard(web_request, 20.0)
 
             # prune the status response
-            pruned_status: Dict[str, Dict[str, Any]] = {}
-            status_diff: Dict[str, Dict[str, Any]] = {}
-            all_status: Dict[str, Dict[str, Any]] = result['status']
+            pruned_status: dict[str, dict[str, Any]] = {}
+            status_diff: dict[str, dict[str, Any]] = {}
+            all_status: dict[str, dict[str, Any]] = result['status']
             for obj, fields in all_status.items():
                 # Diff the current cache, then update the cache
                 if obj in self.subscription_cache:
@@ -662,7 +660,7 @@ class KlippyConnection:
                     # Make a shallow copy so we can pop off fields we want to
                     # exclude from the cache without modifying the return value
                     fields_to_cache = dict(fields)
-                    removed: List[str] = []
+                    removed: list[str] = []
                     for excluded_field in CACHE_EXCLUSIONS[obj]:
                         if excluded_field in fields_to_cache:
                             removed.append(excluded_field)
@@ -702,7 +700,7 @@ class KlippyConnection:
             return result
 
     async def _request_standard(
-        self, web_request: WebRequest, timeout: Optional[float] = None
+        self, web_request: WebRequest, timeout: float | None = None
     ) -> Any:
         rpc_method = web_request.get_endpoint()
         args = web_request.get_args()
@@ -731,7 +729,7 @@ class KlippyConnection:
         stats = job_state.get_last_stats()
         return stats.get("state", "") == "printing"
 
-    def get_subscription_cache(self) -> Dict[str, Dict[str, Any]]:
+    def get_subscription_cache(self) -> dict[str, dict[str, Any]]:
         return self.subscription_cache
 
     async def rollover_log(self) -> None:
@@ -740,7 +738,7 @@ class KlippyConnection:
                 "Unable to detect Klipper Service, cannot perform "
                 "manual rollover"
             )
-        logfile: Optional[str] = self._klippy_info.get("log_file", None)
+        logfile: str | None = self._klippy_info.get("log_file", None)
         if logfile is None:
             raise self.server.error(
                 "Unable to detect path to Klipper log file"
@@ -811,19 +809,19 @@ class KlippyConnection:
 
 # Basic KlippyRequest class, easily converted to dict for json encoding
 class KlippyRequest:
-    def __init__(self, rpc_method: str, params: Dict[str, Any]) -> None:
+    def __init__(self, rpc_method: str, params: dict[str, Any]) -> None:
         self.id = id(self)
         self.rpc_method = rpc_method
         self.params = params
         self._fut = asyncio.get_running_loop().create_future()
 
-    async def wait(self, timeout: Optional[float] = None) -> Any:
+    async def wait(self, timeout: float | None = None) -> Any:
         start_time = time.time()
         to = timeout or 60.
         while True:
             try:
                 return await asyncio.wait_for(asyncio.shield(self._fut), to)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 if timeout is not None:
                     self._fut.cancel()
                     raise ServerError("Klippy request timed out", 500) from None
@@ -841,7 +839,7 @@ class KlippyRequest:
         if not self._fut.done():
             self._fut.set_result(result)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             'id': self.id,
             'method': self.rpc_method,

@@ -20,11 +20,11 @@ from .utils import json_wrapper as jsonw
 from typing import (
     TYPE_CHECKING,
     Optional,
-    Awaitable,
     Dict,
     List,
     Any,
 )
+from collections.abc import Awaitable
 
 if TYPE_CHECKING:
     from .server import Server
@@ -73,10 +73,10 @@ class LocalQueueHandler(logging.handlers.QueueHandler):
 
 # Timed Rotating File Handler, based on Klipper's implementation
 class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
-    def __init__(self, app_args: Dict[str, Any], **kwargs) -> None:
+    def __init__(self, app_args: dict[str, Any], **kwargs) -> None:
         super().__init__(app_args['log_file'], **kwargs)
         self.app_args = app_args
-        self.rollover_info: Dict[str, str] = {}
+        self.rollover_info: dict[str, str] = {}
 
     def set_rollover_info(self, name: str, item: str) -> None:
         self.rollover_info[name] = item
@@ -115,7 +115,7 @@ class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
 
 class LogManager:
     def __init__(
-        self, app_args: Dict[str, Any], startup_warnings: List[str]
+        self, app_args: dict[str, Any], startup_warnings: list[str]
     ) -> None:
         root_logger = logging.getLogger()
         while root_logger.hasHandlers():
@@ -131,8 +131,8 @@ class LogManager:
         app_args_str = f"platform: {platform.platform(terse=True)}\n"
         app_args_str += "\n".join([f"{k}: {v}" for k, v in app_args.items()])
         sys.stdout.write(f"\nApplication Info:\n{app_args_str}\n")
-        self.file_hdlr: Optional[MoonrakerLoggingHandler] = None
-        self.listener: Optional[logging.handlers.QueueListener] = None
+        self.file_hdlr: MoonrakerLoggingHandler | None = None
+        self.listener: logging.handlers.QueueListener | None = None
         log_file: str = app_args.get('log_file', "")
         if log_file:
             try:
@@ -183,10 +183,10 @@ class LogManager:
 
     async def _handle_log_rollover(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         log_apps = ["moonraker", "klipper"]
         app = web_request.get_str("application", None)
-        result: Dict[str, Any] = {"rolled_over": [], "failed": {}}
+        result: dict[str, Any] = {"rolled_over": [], "failed": {}}
         if app is not None:
             if app not in log_apps:
                 raise self.server.error(f"Unknown application {app}")

@@ -9,7 +9,8 @@ import sys
 import shlex
 import tempfile
 import subprocess
-from typing import Iterator, Dict, AsyncIterator, Any
+from typing import Dict, Any
+from collections.abc import Iterator, AsyncIterator
 from moonraker.server import Server
 from moonraker.eventloop import EventLoop
 from moonraker import utils
@@ -26,7 +27,7 @@ def pytest_addoption(parser: pytest.Parser, pluginmanager):
 
 def interpolate_config(source_path: pathlib.Path,
                        dest_path: pathlib.Path,
-                       keys: Dict[str, Any]
+                       keys: dict[str, Any]
                        ) -> None:
     def interp(match):
         return str(keys[match.group(1)])
@@ -34,7 +35,7 @@ def interpolate_config(source_path: pathlib.Path,
     dest_path.write_text(sub_data)
 
 @pytest.fixture(scope="session", autouse=True)
-def ssl_certs() -> Iterator[Dict[str, pathlib.Path]]:
+def ssl_certs() -> Iterator[dict[str, pathlib.Path]]:
     with tempfile.TemporaryDirectory(prefix="moonraker-certs-") as tmpdir:
         tmp_path = pathlib.Path(tmpdir)
         cert_path = tmp_path.joinpath("certificate.pem")
@@ -60,11 +61,11 @@ def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
 
 
 @pytest.fixture(scope="session")
-def session_args(ssl_certs: Dict[str, pathlib.Path]
-                 ) -> Iterator[Dict[str, pathlib.Path]]:
-    mconf_asset = ASSETS.joinpath(f"moonraker/base_server.conf")
-    secrets_asset = ASSETS.joinpath(f"moonraker/secrets.ini")
-    pcfg_asset = ASSETS.joinpath(f"klipper/base_printer.cfg")
+def session_args(ssl_certs: dict[str, pathlib.Path]
+                 ) -> Iterator[dict[str, pathlib.Path]]:
+    mconf_asset = ASSETS.joinpath("moonraker/base_server.conf")
+    secrets_asset = ASSETS.joinpath("moonraker/secrets.ini")
+    pcfg_asset = ASSETS.joinpath("klipper/base_printer.cfg")
     with tempfile.TemporaryDirectory(prefix="moonraker-test") as tmpdir:
         tmp_path = pathlib.Path(tmpdir)
         secrets_dest = tmp_path.joinpath("secrets.ini")
@@ -101,7 +102,7 @@ def session_args(ssl_certs: Dict[str, pathlib.Path]
         yield dest_paths
 
 @pytest.fixture(scope="session")
-def klippy_session(session_args: Dict[str, pathlib.Path],
+def klippy_session(session_args: dict[str, pathlib.Path],
                    pytestconfig: pytest.Config) -> Iterator[KlippyProcess]:
     pytestconfig.stash[need_klippy_restart] = False
     kpath = pytestconfig.getoption('klipper_path', "~/klipper")
@@ -126,11 +127,11 @@ def klippy(klippy_session: KlippyProcess,
 
 @pytest.fixture(scope="class")
 def path_args(request: pytest.FixtureRequest,
-              session_args: Dict[str, pathlib.Path],
+              session_args: dict[str, pathlib.Path],
               pytestconfig: pytest.Config
-              ) -> Iterator[Dict[str, pathlib.Path]]:
+              ) -> Iterator[dict[str, pathlib.Path]]:
     path_marker = request.node.get_closest_marker("run_paths")
-    paths: Dict[str, Any] = {
+    paths: dict[str, Any] = {
         "moonraker_conf": "base_server.conf",
         "secrets": "secrets.ini",
         "printer_cfg": "base_printer.cfg",
@@ -192,7 +193,7 @@ def path_args(request: pytest.FixtureRequest,
         interpolate_config(mconf_asset, mconf_dest, session_args)
 
 @pytest.fixture(scope="class")
-def base_server(path_args: Dict[str, pathlib.Path],
+def base_server(path_args: dict[str, pathlib.Path],
                 event_loop: asyncio.AbstractEventLoop
                 ) -> Iterator[Server]:
     evtloop = EventLoop()

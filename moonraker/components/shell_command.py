@@ -15,15 +15,13 @@ from ..utils import ServerError
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
-    Awaitable,
     List,
     Optional,
-    Callable,
-    Coroutine,
     Dict,
     Set,
     cast
 )
+from collections.abc import Awaitable, Callable, Coroutine
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     OutputCallback = Optional[Callable[[bytes], None]]
@@ -32,9 +30,9 @@ class ShellCommandError(ServerError):
     def __init__(
         self,
         message: str,
-        return_code: Optional[int],
-        stdout: Optional[bytes] = b"",
-        stderr: Optional[bytes] = b"",
+        return_code: int | None,
+        stdout: bytes | None = b"",
+        stderr: bytes | None = b"",
         status_code: int = 500
     ) -> None:
         super().__init__(message, status_code=status_code)
@@ -52,12 +50,12 @@ class ShellCommandProtocol(asyncio.subprocess.SubprocessStreamProtocol):
         log_stderr: bool = False
     ) -> None:
         self._loop = loop
-        self._pipe_fds: List[int] = []
+        self._pipe_fds: list[int] = []
         super().__init__(limit, loop)
         self.std_out_cb = std_out_cb
         self.std_err_cb = std_err_cb
         self.log_stderr = log_stderr
-        self.pending_data: List[bytes] = [b"", b""]
+        self.pending_data: list[bytes] = [b"", b""]
 
     def connection_made(
         self, transport: asyncio.transports.BaseTransport
@@ -131,9 +129,9 @@ class ShellCommand:
         cmd: str,
         std_out_callback: OutputCallback,
         std_err_callback: OutputCallback,
-        env: Optional[Dict[str, str]] = None,
+        env: dict[str, str] | None = None,
         log_stderr: bool = False,
-        cwd: Optional[str] = None
+        cwd: str | None = None
     ) -> None:
         self.factory = factory
         self.name = cmd
@@ -144,9 +142,9 @@ class ShellCommand:
         self.log_stderr = log_stderr
         self.env = env
         self.cwd = cwd
-        self.proc: Optional[asyncio.subprocess.Process] = None
+        self.proc: asyncio.subprocess.Process | None = None
         self.cancelled = False
-        self.return_code: Optional[int] = None
+        self.return_code: int | None = None
         self.run_lock = asyncio.Lock()
 
     async def cancel(self, sig_idx: int = 1) -> None:
@@ -162,7 +160,7 @@ class ShellCommand:
                     self.proc.send_signal(sig)
                     ret = self.proc.wait()
                     await asyncio.wait_for(ret, timeout=2.)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 except ProcessLookupError:
                     pass
@@ -173,7 +171,7 @@ class ShellCommand:
             if not exit_success:
                 logging.info(f"WARNING: {self.name} did not cleanly exit")
 
-    def get_return_code(self) -> Optional[int]:
+    def get_return_code(self) -> int | None:
         return self.return_code
 
     def _reset_command_data(self) -> None:
@@ -186,8 +184,8 @@ class ShellCommand:
         verbose: bool = True,
         log_complete: bool = True,
         sig_idx: int = 1,
-        proc_input: Optional[str] = None,
-        success_codes: Optional[List[int]] = None
+        proc_input: str | None = None,
+        success_codes: list[int] | None = None
     ) -> bool:
         async with self.run_lock:
             self.factory.add_running_command(self)
@@ -215,7 +213,7 @@ class ShellCommand:
                 else:
                     ret = self.proc.wait()
                 await asyncio.wait_for(ret, timeout=timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 complete = False
                 await self.cancel(sig_idx)
             else:
@@ -231,13 +229,13 @@ class ShellCommand:
         attempts: int = 1,
         log_complete: bool = True,
         sig_idx: int = 1,
-        proc_input: Optional[str] = None,
-        success_codes: Optional[List[int]] = None
+        proc_input: str | None = None,
+        success_codes: list[int] | None = None
     ) -> str:
         async with self.run_lock:
             self.factory.add_running_command(self)
             attempts = max(1, attempts)
-            stdin: Optional[bytes] = None
+            stdin: bytes | None = None
             stdout = stderr = b""
             if proc_input is not None:
                 stdin = proc_input.encode()
@@ -251,7 +249,7 @@ class ShellCommand:
                         ret = self.proc.communicate(input=stdin)
                         stdout, stderr = await asyncio.wait_for(
                             ret, timeout=timeout)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         complete = False
                         timed_out = True
                         await self.cancel(sig_idx)
@@ -292,7 +290,7 @@ class ShellCommand:
                 std_err_cb=self.std_err_cb, log_stderr=self.log_stderr
             )
         try:
-            stdpipe: Optional[int] = None
+            stdpipe: int | None = None
             if has_input:
                 stdpipe = asyncio.subprocess.PIPE
             if self.std_err_cb is not None or self.log_stderr:
@@ -323,7 +321,7 @@ class ShellCommand:
         self,
         complete: bool,
         log_complete: bool,
-        success_codes: Optional[List[int]] = None
+        success_codes: list[int] | None = None
     ) -> bool:
         assert self.proc is not None
         if success_codes is None:
@@ -347,7 +345,7 @@ class ShellCommandFactory:
     error = ShellCommandError
     def __init__(self, config: ConfigHelper) -> None:
         self.eventloop = config.get_server().get_event_loop()
-        self.running_commands: Set[ShellCommand] = set()
+        self.running_commands: set[ShellCommand] = set()
 
     def add_running_command(self, cmd: ShellCommand) -> None:
         self.running_commands.add(cmd)
@@ -363,9 +361,9 @@ class ShellCommandFactory:
         cmd: str,
         callback: OutputCallback = None,
         std_err_callback: OutputCallback = None,
-        env: Optional[Dict[str, str]] = None,
+        env: dict[str, str] | None = None,
         log_stderr: bool = False,
-        cwd: Optional[str] = None
+        cwd: str | None = None
     ) -> ShellCommand:
         return ShellCommand(
             self, cmd, callback, std_err_callback, env, log_stderr, cwd
@@ -380,12 +378,12 @@ class ShellCommandFactory:
         attempts: int = 1,
         verbose: bool = True,
         sig_idx: int = 1,
-        proc_input: Optional[str] = None,
+        proc_input: str | None = None,
         log_complete: bool = True,
         log_stderr: bool = False,
-        env: Optional[Dict[str, str]] = None,
-        cwd: Optional[str] = None,
-        success_codes: Optional[List[int]] = None
+        env: dict[str, str] | None = None,
+        cwd: str | None = None,
+        success_codes: list[int] | None = None
     ) -> Awaitable[None]:
         """
         Runs a command and processes responses as they are received. Optional
@@ -414,12 +412,12 @@ class ShellCommandFactory:
         timeout: float = 2.,
         attempts: int = 1,
         sig_idx: int = 1,
-        proc_input: Optional[str] = None,
+        proc_input: str | None = None,
         log_complete: bool = True,
         log_stderr: bool = False,
-        env: Optional[Dict[str, str]] = None,
-        cwd: Optional[str] = None,
-        success_codes: Optional[List[int]] = None
+        env: dict[str, str] | None = None,
+        cwd: str | None = None,
+        success_codes: list[int] | None = None
     ) -> Awaitable[str]:
         """
         Executes a command and returns UTF-8 decoded stdout upon completion.

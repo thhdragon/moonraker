@@ -31,9 +31,9 @@ UNIX_BUFFER_LIMIT = 20 * 1024 * 1024
 class ExtensionManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.agents: Dict[str, BaseRemoteConnection] = {}
-        self.agent_methods: Dict[int, List[str]] = {}
-        self.uds_server: Optional[asyncio.AbstractServer] = None
+        self.agents: dict[str, BaseRemoteConnection] = {}
+        self.agent_methods: dict[int, list[str]] = {}
+        self.uds_server: asyncio.AbstractServer | None = None
         self.server.register_endpoint(
             "/connection/register_remote_method", RequestType.POST,
             self._register_agent_method,
@@ -64,7 +64,7 @@ class ExtensionManager:
             )
         self.agents[name] = connection
         data = connection.client_data
-        evt: Dict[str, Any] = {
+        evt: dict[str, Any] = {
             "agent": name, "event": "connected", "data": data
         }
         connection.send_notification("agent_event", [evt])
@@ -77,7 +77,7 @@ class ExtensionManager:
             for method in registered_methods:
                 klippy.unregister_method(method)
             del self.agents[name]
-            evt: Dict[str, Any] = {"agent": name, "event": "disconnected"}
+            evt: dict[str, Any] = {"agent": name, "event": "disconnected"}
             connection.send_notification("agent_event", [evt])
 
     async def _handle_agent_event(self, web_request: WebRequest) -> str:
@@ -92,9 +92,9 @@ class ExtensionManager:
         evt_name = web_request.get_str("event")
         if evt_name in ["connected", "disconnected"]:
             raise self.server.error(f"Event '{evt_name}' is reserved")
-        data: Optional[Union[List, Dict[str, Any]]]
+        data: list | dict[str, Any] | None
         data = web_request.get("data", None)
-        evt: Dict[str, Any] = {"agent": name, "event": evt_name}
+        evt: dict[str, Any] = {"agent": name, "event": evt_name}
         if data is not None:
             evt["data"] = data
         conn.send_notification("agent_event", [evt])
@@ -112,15 +112,15 @@ class ExtensionManager:
 
     async def _handle_list_extensions(
         self, web_request: WebRequest
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        agents: List[Dict[str, Any]]
+    ) -> dict[str, list[dict[str, Any]]]:
+        agents: list[dict[str, Any]]
         agents = [agt.client_data for agt in self.agents.values()]
         return {"agents": agents}
 
     async def _handle_call_agent(self, web_request: WebRequest) -> Any:
         agent = web_request.get_str("agent")
         method: str = web_request.get_str("method")
-        args: Optional[Union[List, Dict[str, Any]]]
+        args: list | dict[str, Any] | None
         args = web_request.get("arguments", None)
         if args is not None and not isinstance(args, (list, dict)):
             raise self.server.error(
@@ -163,7 +163,7 @@ class UnixSocketClient(BaseRemoteConnection):
         server: Server,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
-        peercred: Dict[str, int]
+        peercred: dict[str, int]
     ) -> None:
         self.on_create(server)
         self.writer = writer
@@ -201,7 +201,7 @@ class UnixSocketClient(BaseRemoteConnection):
         logging.debug("Unix Socket Disconnection From _read_messages()")
         await self._on_close(reason="Read Exit")
 
-    async def write_to_socket(self, message: Union[bytes, str]) -> None:
+    async def write_to_socket(self, message: bytes | str) -> None:
         if isinstance(message, str):
             data = message.encode() + b"\x03"
         else:
@@ -217,8 +217,8 @@ class UnixSocketClient(BaseRemoteConnection):
 
     async def _on_close(
         self,
-        code: Optional[int] = None,
-        reason: Optional[str] = None
+        code: int | None = None,
+        reason: str | None = None
     ) -> None:
         if self.is_closed:
             return

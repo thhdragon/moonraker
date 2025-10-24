@@ -50,8 +50,8 @@ class CopyIgnore:
     def __init__(self, root_dir: str) -> None:
         self.root_dir = root_dir
 
-    def __call__(self, dir_path: str, dir_items: List[str]) -> List[str]:
-        ignored: List[str] = []
+    def __call__(self, dir_path: str, dir_items: list[str]) -> list[str]:
+        ignored: list[str] = []
         for item in dir_items:
             if item in SKIP_FILES:
                 ignored.append(item)
@@ -65,9 +65,9 @@ class CopyIgnore:
 def search_install_script(data: str,
                           regex: str,
                           exclude: str
-                          ) -> List[str]:
-    items: Set[str] = set()
-    lines: List[str] = re.findall(regex, data)
+                          ) -> list[str]:
+    items: set[str] = set()
+    lines: list[str] = re.findall(regex, data)
     for line in lines:
         items.update(line.strip().split())
     try:
@@ -78,24 +78,24 @@ def search_install_script(data: str,
 
 def generate_dependency_info(repo_path: str, app_name: str) -> None:
     inst_scripts = INSTALL_SCRIPTS[app_name]
-    package_info: Dict[str, Any] = {}
+    package_info: dict[str, Any] = {}
     for distro, script_name in inst_scripts.items():
         script_path = os.path.join(repo_path, "scripts", script_name)
         script = pathlib.Path(script_path)
         if not script.exists():
             continue
         data = script.read_text()
-        packages: List[str] = search_install_script(
+        packages: list[str] = search_install_script(
             data, r'PKGLIST="(.*)"', "${PKGLIST}")
         package_info[distro] = {'packages': sorted(packages)}
         if distro == "arch":
-            aur_packages: List[str] = search_install_script(
+            aur_packages: list[str] = search_install_script(
                 data, r'AURLIST="(.*)"', "${AURLIST}")
             package_info[distro]['aur_packages'] = sorted(aur_packages)
     req_file_name = os.path.join(repo_path, "scripts",
                                  f"{app_name}-requirements.txt")
     req_file = pathlib.Path(req_file_name)
-    python_reqs: List[str] = []
+    python_reqs: list[str] = []
     if req_file.exists():
         req_data = req_file.read_text()
         lines = [line.strip() for line in req_data.split('\n')
@@ -120,7 +120,7 @@ def clean_repo(path: str) -> None:
     if retcode != 0:
         print(f"Error running git clean: {path}")
 
-def get_releases() -> List[Dict[str, Any]]:
+def get_releases() -> list[dict[str, Any]]:
     print("Fetching Release List...")
     prog = ('curl', '-H', "Accept: application/vnd.github.v3+json",
             RELEASE_URL)
@@ -138,12 +138,12 @@ def get_releases() -> List[Dict[str, Any]]:
 
 def get_last_release_info(moonraker_version: str,
                           is_beta: bool,
-                          releases: List[Dict[str, Any]]
-                          ) -> Dict[str, Any]:
+                          releases: list[dict[str, Any]]
+                          ) -> dict[str, Any]:
     print("Searching for previous release assets...")
     cur_tag, commit_count = moonraker_version.split('-', 2)[:2]
     release_assets = []
-    matched_tag: Optional[str] = None
+    matched_tag: str | None = None
     for release in releases:
         if int(commit_count) != 0:
             # This is build is not being done against a fresh release,
@@ -169,7 +169,7 @@ def get_last_release_info(moonraker_version: str,
     else:
         print(f"Found release: {matched_tag}")
 
-    asset_url: Optional[str] = None
+    asset_url: str | None = None
     content_type: str = ""
     for asset in release_assets:
         if asset['name'] == "RELEASE_INFO":
@@ -194,8 +194,8 @@ def get_last_release_info(moonraker_version: str,
     return json.loads(resp)
 
 def get_commit_log(path: str,
-                   release_info: Dict[str, Any]
-                   ) -> List[Dict[str, Any]]:
+                   release_info: dict[str, Any]
+                   ) -> list[dict[str, Any]]:
     print(f"Preparing commit log for {path.split('/')[-1]}")
     start_sha = release_info.get('commit_hash', None)
     prog = ['git', '-C', path, 'log', f'--format={GIT_LOG_FMT}',
@@ -210,7 +210,7 @@ def get_commit_log(path: str,
     if retcode != 0:
         return []
     resp = response.decode().strip()
-    commit_log: List[Dict[str, Any]] = []
+    commit_log: list[dict[str, Any]] = []
     for log_entry in resp.split('\x1E'):
         log_entry = log_entry.strip()
         if not log_entry:
@@ -235,8 +235,8 @@ def get_commit_hash(path: str) -> str:
 def generate_version_info(path: str,
                           source_dir: str,
                           channel: str,
-                          release_tag: Optional[str] = None
-                          ) -> Dict[str, Any]:
+                          release_tag: str | None = None
+                          ) -> dict[str, Any]:
     print(f"Generating version info: {source_dir}")
     clean_repo(path)
     owner_repo = OWNER_REPOS[source_dir]
@@ -305,7 +305,7 @@ def main() -> None:
         print(f"Invalid output path: {opath}")
         sys.exit(-1)
     releases = get_releases()
-    all_info: Dict[str, Dict[str, Any]] = {}
+    all_info: dict[str, dict[str, Any]] = {}
     try:
         print("Generating Moonraker Zip Distribution...")
         all_info['moonraker'] = generate_version_info(

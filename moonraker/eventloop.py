@@ -15,14 +15,13 @@ import time
 import logging
 from typing import (
     TYPE_CHECKING,
-    Awaitable,
-    Callable,
     Optional,
     Tuple,
     TypeVar,
     Union,
     Set
 )
+from collections.abc import Awaitable, Callable
 
 _uvl_var = os.getenv("MOONRAKER_ENABLE_UVLOOP", "y").lower()
 _uvl_enabled = False
@@ -35,8 +34,8 @@ if _uvl_var in ["y", "yes", "true"]:
 if TYPE_CHECKING:
     from asyncio import AbstractEventLoop
     _T = TypeVar("_T")
-    FlexCallback = Callable[..., Optional[Awaitable]]
-    TimerCallback = Callable[[float], Union[float, Awaitable[float]]]
+    FlexCallback = Callable[..., Awaitable | None]
+    TimerCallback = Callable[[float], float | Awaitable[float]]
 
 class EventLoop:
     UVLOOP_ENABLED = _uvl_enabled
@@ -50,7 +49,7 @@ class EventLoop:
 
     def reset(self) -> None:
         self.aioloop = asyncio.get_running_loop()
-        self.bg_tasks: Set[asyncio.Task] = set()
+        self.bg_tasks: set[asyncio.Task] = set()
         self.add_signal_handler = self.aioloop.add_signal_handler
         self.remove_signal_handler = self.aioloop.remove_signal_handler
         self.add_reader = self.aioloop.add_reader
@@ -121,7 +120,7 @@ class EventLoop:
         return self.aioloop.run_in_executor(None, callback, *args)
 
     async def create_socket_connection(
-        self, address: Tuple[str, int], timeout: Optional[float] = None
+        self, address: tuple[str, int], timeout: float | None = None
     ) -> socket.socket:
         host, port = address
         """
@@ -145,7 +144,7 @@ class EventLoop:
                 # Break explicitly a reference cycle
                 err = None
                 return sock
-            except (socket.error, asyncio.TimeoutError) as _:
+            except (TimeoutError, OSError) as _:
                 err = _
                 if sock is not None:
                     loop.remove_writer(sock.fileno())
@@ -157,7 +156,7 @@ class EventLoop:
                 # Break explicitly a reference cycle
                 err = None
         else:
-            raise socket.error("getaddrinfo returns an empty list")
+            raise OSError("getaddrinfo returns an empty list")
 
     def close(self):
         self.aioloop.close()
@@ -169,8 +168,8 @@ class FlexTimer:
                  ) -> None:
         self.eventloop = eventloop
         self.callback = callback
-        self.timer_handle: Optional[asyncio.TimerHandle] = None
-        self.timer_task: Optional[asyncio.Task] = None
+        self.timer_handle: asyncio.TimerHandle | None = None
+        self.timer_task: asyncio.Task | None = None
         self.running: bool = False
 
     def in_callback(self) -> bool:

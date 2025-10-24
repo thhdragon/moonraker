@@ -46,16 +46,16 @@ class NetDeploy(AppDeploy):
             self._configure_managed_services(config)
         self.repo = config.get('repo').strip().strip("/")
         self.owner, self.project_name = self.repo.split("/", 1)
-        self.asset_name: Optional[str] = None
-        self.persistent_files: List[str] = []
-        self.warnings: List[str] = []
-        self.anomalies: List[str] = []
+        self.asset_name: str | None = None
+        self.persistent_files: list[str] = []
+        self.warnings: list[str] = []
+        self.anomalies: list[str] = []
         self.version: str = "?"
         self.remote_version: str = "?"
         self.rollback_version: str = "?"
         self.rollback_repo: str = "?"
         self.last_error: str = "?"
-        self._dl_info: Tuple[str, str, int] = ("?", "?", 0)
+        self._dl_info: tuple[str, str, int] = ("?", "?", 0)
         self._is_fallback: bool = False
         self._is_prerelease: bool = False
         self._path_writable: bool = False
@@ -111,7 +111,7 @@ class NetDeploy(AppDeploy):
             if rinfo.is_file():
                 try:
                     data = await eventloop.run_in_thread(rinfo.read_text)
-                    uinfo: Dict[str, str] = jsonw.loads(data)
+                    uinfo: dict[str, str] = jsonw.loads(data)
                     project_name = uinfo["project_name"]
                     owner = uinfo["project_owner"]
                     self.version = uinfo["version"]
@@ -169,7 +169,7 @@ class NetDeploy(AppDeploy):
             if manifest.is_file():
                 try:
                     mtext = await eventloop.run_in_thread(manifest.read_text)
-                    mdata: Dict[str, Any] = jsonw.loads(mtext)
+                    mdata: dict[str, Any] = jsonw.loads(mtext)
                     proj_name: str = mdata["name"].lower()
                 except Exception:
                     self.log_exc(f"Failed to load json from {manifest}")
@@ -190,7 +190,7 @@ class NetDeploy(AppDeploy):
                     return True
         return False
 
-    async def initialize(self) -> Dict[str, Any]:
+    async def initialize(self) -> dict[str, Any]:
         storage = await super().initialize()
         fm: FileManager = self.server.lookup_component("file_manager")
         self._path_writable = not fm.check_reserved_path(
@@ -207,13 +207,13 @@ class NetDeploy(AppDeploy):
             'rollback_repo', self.repo if self._is_valid else "?"
         )
         self.last_error = storage.get('last_error', "")
-        dl_info: List[Any] = storage.get('dl_info', ["?", "?", 0])
-        self.dl_info = cast(Tuple[str, str, int], tuple(dl_info))
+        dl_info: list[Any] = storage.get('dl_info', ["?", "?", 0])
+        self.dl_info = cast(tuple[str, str, int], tuple(dl_info))
         if not self.needs_refresh():
             self._log_app_info()
         return storage
 
-    def get_persistent_data(self) -> Dict[str, Any]:
+    def get_persistent_data(self) -> dict[str, Any]:
         storage = super().get_persistent_data()
         storage.update({
             "version": self.version,
@@ -235,8 +235,8 @@ class NetDeploy(AppDeploy):
         self._save_state()
 
     async def _fetch_github_version(
-        self, repo: Optional[str] = None, tag: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, repo: str | None = None, tag: str | None = None
+    ) -> dict[str, Any]:
         if repo is None:
             if not self._is_valid:
                 self.log_info("Invalid Installation, aborting remote refresh")
@@ -252,7 +252,7 @@ class NetDeploy(AppDeploy):
         resp = await client.github_api_request(
             resource, attempts=3, retry_pause_time=.5
         )
-        release: Union[List[Any], Dict[str, Any]] = {}
+        release: list[Any] | dict[str, Any] = {}
         if resp.status_code == 304:
             if resp.content:
                 # Not modified, however we need to restore state from
@@ -267,7 +267,7 @@ class NetDeploy(AppDeploy):
             return {}
         else:
             release = resp.json()
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         if isinstance(release, list):
             if release:
                 result = release[0]
@@ -281,8 +281,8 @@ class NetDeploy(AppDeploy):
         if not result:
             return
         self.remote_version = result.get('name', "?")
-        assets: List[Dict[str, Any]] = result.get("assets", [{}])
-        release_asset: Dict[str, Any] = assets[0] if assets else {}
+        assets: list[dict[str, Any]] = result.get("assets", [{}])
+        release_asset: dict[str, Any] = assets[0] if assets else {}
         if self.asset_name is not None:
             for asset in assets:
                 if asset.get("name", "") == self.asset_name:
@@ -384,14 +384,14 @@ class NetDeploy(AppDeploy):
         # If the new version does not match the version in release_info.json,
         # update it.
         data = await eventloop.run_in_thread(rinfo.read_text)
-        uinfo: Dict[str, Any] = jsonw.loads(data)
+        uinfo: dict[str, Any] = jsonw.loads(data)
         if uinfo["version"] != new_ver:
             uinfo["version"] = new_ver
             await eventloop.run_in_thread(rinfo.write_bytes, jsonw.dumps(uinfo))
 
     async def update(
         self,
-        rollback_info: Optional[Tuple[str, str, int]] = None,
+        rollback_info: tuple[str, str, int] | None = None,
         is_recover: bool = False,
         force_dep_update: bool = False
     ) -> bool:
@@ -422,7 +422,7 @@ class NetDeploy(AppDeploy):
         event_loop = self.server.get_event_loop()
         self.notify_status(start_msg)
         self.notify_status("Downloading Release...")
-        dep_info: Optional[Dict[str, Any]] = None
+        dep_info: dict[str, Any] | None = None
         if self.type in (AppType.ZIP, AppType.EXECUTABLE):
             dep_info = await self._collect_dependency_info()
         td = await self.cmd_helper.create_tempdir(self.name, "app")
@@ -478,14 +478,14 @@ class NetDeploy(AppDeploy):
         )
         if not result:
             raise self.server.error("Failed to retrieve release asset data")
-        release_asset: Dict[str, Any] = result.get('assets', [{}])[0]
+        release_asset: dict[str, Any] = result.get('assets', [{}])[0]
         dl_url: str = release_asset.get('browser_download_url', "?")
         content_type: str = release_asset.get('content_type', "?")
         size: int = release_asset.get('size', 0)
         dl_info = (dl_url, content_type, size)
         return await self.update(dl_info)
 
-    def get_update_status(self) -> Dict[str, Any]:
+    def get_update_status(self) -> dict[str, Any]:
         status = super().get_update_status()
         anomalies = self.anomalies if self.report_anomalies else []
         status.update({

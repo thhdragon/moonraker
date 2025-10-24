@@ -14,12 +14,12 @@ import xml.etree.ElementTree as etree
 from ..common import RequestType
 from typing import (
     TYPE_CHECKING,
-    Awaitable,
     List,
     Dict,
     Any,
     Optional
 )
+from collections.abc import Awaitable
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
@@ -41,13 +41,13 @@ class Announcements:
         )
         self.request_lock = asyncio.Lock()
         self.dev_mode = config.getboolean("dev_mode", False)
-        self.subscriptions: Dict[str, RssFeed] = {
+        self.subscriptions: dict[str, RssFeed] = {
             "moonraker": RssFeed("moonraker", self.entry_mgr, self.dev_mode),
             "klipper": RssFeed("klipper", self.entry_mgr, self.dev_mode)
         }
-        self.stored_feeds: List[str] = []
-        sub_list: List[str] = config.getlist("subscriptions", [])
-        self.configured_feeds: List[str] = ["moonraker", "klipper"]
+        self.stored_feeds: list[str] = []
+        sub_list: list[str] = config.getlist("subscriptions", [])
+        self.configured_feeds: list[str] = ["moonraker", "klipper"]
         for sub in sub_list:
             sub = sub.lower()
             if sub in self.subscriptions:
@@ -89,7 +89,7 @@ class Announcements:
 
     async def component_init(self) -> None:
         db: MoonrakerDatabase = self.server.lookup_component("database")
-        stored_feeds: List[str] = await db.get_item(
+        stored_feeds: list[str] = await db.get_item(
             "moonraker", "announcements.stored_feeds", []
         )
         self.stored_feeds = stored_feeds
@@ -106,7 +106,7 @@ class Announcements:
 
     async def _handle_update_timer(self, eventtime: float) -> float:
         changed = False
-        entries: List[Dict[str, Any]] = []
+        entries: list[dict[str, Any]] = []
         async with self.request_lock:
             for sub in self.subscriptions.values():
                 ret = await sub.update_entries()
@@ -120,10 +120,10 @@ class Announcements:
 
     async def _handle_dismiss_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         async with self.request_lock:
             entry_id: str = web_request.get_str("entry_id")
-            wake_time: Optional[int] = web_request.get_int("wake_time", None)
+            wake_time: int | None = web_request.get_int("wake_time", None)
             await self.entry_mgr.dismiss_entry(entry_id, wake_time)
             return {
                 "entry_id": entry_id
@@ -131,7 +131,7 @@ class Announcements:
 
     async def _list_announcements(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         async with self.request_lock:
             incl_dsm = web_request.get_boolean("include_dismissed", True)
             entries = await self.entry_mgr.list_entries(incl_dsm)
@@ -142,7 +142,7 @@ class Announcements:
 
     async def _handle_update_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         subs = web_request.get_list("subscriptions", list(self.subscriptions.keys()))
         for sub in subs:
             if sub not in self.subscriptions:
@@ -165,12 +165,12 @@ class Announcements:
 
     async def _handle_list_feeds(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return {"feeds": list(self.subscriptions.keys())}
 
     async def _handle_feed_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         req_type = web_request.get_request_type()
         name: str = web_request.get("name")
         name = name.lower()
@@ -219,7 +219,7 @@ class Announcements:
 
     def add_internal_announcement(
         self, title: str, desc: str, url: str, priority: str, feed: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         date = datetime.datetime.utcnow()
         entry_id: str = f"{feed}/{date.isoformat(timespec='seconds')}"
         entry = {
@@ -253,13 +253,13 @@ class Announcements:
                 "announcements:entries_updated", {"entries": entries}
             )
     async def dismiss_announcement(
-        self, entry_id, wake_time: Optional[int] = None
+        self, entry_id, wake_time: int | None = None
     ) -> None:
         await self.entry_mgr.dismiss_entry(entry_id, wake_time)
 
     async def get_announcements(
         self, include_dismissed: bool = False
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         return await self.entry_mgr.list_entries(include_dismissed)
 
     def register_feed(self, name: str) -> None:
@@ -281,9 +281,9 @@ class EntryManager:
         database = self.server.lookup_component("database")
         database.register_local_namespace("announcements")
         self.announce_db = database.wrap_namespace("announcements")
-        self.entry_id_map: Dict[str, str] = {}
+        self.entry_id_map: dict[str, str] = {}
         self.next_key = 0
-        self.dismiss_handles: Dict[str, asyncio.TimerHandle] = {}
+        self.dismiss_handles: dict[str, asyncio.TimerHandle] = {}
 
     async def initialize(self) -> None:
         last_key = ""
@@ -294,7 +294,7 @@ class EntryManager:
             aid = entry["entry_id"]
             self.entry_id_map[aid] = key
             if entry["dismissed"]:
-                wake_time: Optional[float] = entry.get("dismiss_wake")
+                wake_time: float | None = entry.get("dismiss_wake")
                 if wake_time is not None:
                     time_diff = wake_time - curtime
                     if time_diff - 10. < 0.:
@@ -312,8 +312,8 @@ class EntryManager:
 
     async def list_entries(
         self, include_dismissed: bool = True
-    ) -> List[Dict[str, Any]]:
-        vals: List[Dict[str, Any]] = await self.announce_db.values()
+    ) -> list[dict[str, Any]]:
+        vals: list[dict[str, Any]] = await self.announce_db.values()
         vals = sorted(vals, key=lambda x: x["date"], reverse=True)
         if include_dismissed:
             return vals
@@ -322,7 +322,7 @@ class EntryManager:
     def has_entry(self, entry_id: str) -> bool:
         return entry_id in self.entry_id_map
 
-    def add_entry(self, entry: Dict[str, Any]) -> Awaitable[None]:
+    def add_entry(self, entry: dict[str, Any]) -> Awaitable[None]:
         aid = entry["entry_id"]
         key = f"{self.next_key:06X}"
         self.next_key += 1
@@ -336,7 +336,7 @@ class EntryManager:
         return self.announce_db.pop(key, None)
 
     async def dismiss_entry(
-        self, entry_id: str, wake_time: Optional[int] = None
+        self, entry_id: str, wake_time: int | None = None
     ) -> None:
         key = self.entry_id_map.get(entry_id)
         if key is None:
@@ -375,8 +375,8 @@ class EntryManager:
             "announcements:dismiss_wake", {"entry_id": entry["entry_id"]}
         )
 
-    def prune_by_prefix(self, prefix: str, valid_ids: List[str]) -> bool:
-        del_keys: List[str] = []
+    def prune_by_prefix(self, prefix: str, valid_ids: list[str]) -> bool:
+        del_keys: list[str] = []
         for entry_id in list(self.entry_id_map.keys()):
             if not entry_id.startswith(prefix) or entry_id in valid_ids:
                 continue
@@ -391,7 +391,7 @@ class EntryManager:
 
     async def prune_by_feed(self, feed: str) -> bool:
         entries = await self.list_entries()
-        del_keys: List[str] = []
+        del_keys: list[str] = []
         for entry in entries:
             if entry["feed"].lower() == feed:
                 key = self.entry_id_map.pop(entry["entry_id"], None)
@@ -419,8 +419,8 @@ class RssFeed:
         self.xml_file = f"{self.name}.xml"
         self.asset_url = f"{MOONLIGHT_URL}/assets/{self.xml_file}"
         self.last_modified: int = 0
-        self.etag: Optional[str] = None
-        self.dev_xml_path: Optional[pathlib.Path] = None
+        self.etag: str | None = None
+        self.dev_xml_path: pathlib.Path | None = None
         if dev_mode:
             data_path = pathlib.Path(self.server.get_app_arg("data_path"))
             dev_folder = data_path.joinpath("development/announcements")
@@ -507,7 +507,7 @@ class RssFeed:
         if not prefix:
             logging.info(f"Feed {self.name}: No prefix found")
         items = channel.findall("item")
-        valid_ids: List[str] = []
+        valid_ids: list[str] = []
         changed: bool = False
         for item in items:
             guid = item.findtext("guid")
@@ -530,7 +530,7 @@ class RssFeed:
                 dt = email.utils.parsedate_to_datetime(rfc_date)
             except Exception:
                 dt = datetime.datetime.utcnow()
-            entry: Dict[str, Any] = {
+            entry: dict[str, Any] = {
                 "entry_id": guid,
                 "url": item.findtext("link"),
                 "title": item.findtext("title"),

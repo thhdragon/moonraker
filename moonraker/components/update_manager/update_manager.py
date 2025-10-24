@@ -26,7 +26,6 @@ from typing import (
     TYPE_CHECKING,
     TypeVar,
     Any,
-    Callable,
     Optional,
     Set,
     Type,
@@ -35,6 +34,7 @@ from typing import (
     List,
     cast
 )
+from collections.abc import Callable
 if TYPE_CHECKING:
     from ...server import Server
     from ...confighelper import ConfigHelper
@@ -46,15 +46,15 @@ if TYPE_CHECKING:
     from ..machine import Machine
     from ..http_client import HttpClient
     from ...eventloop import FlexTimer
-    JsonType = Union[List[Any], Dict[str, Any]]
+    JsonType = Union[list[Any], dict[str, Any]]
     _T = TypeVar("_T")
 
 # Check To see if Updates are necessary each hour
 UPDATE_REFRESH_INTERVAL = 3600.
 
 def get_deploy_class(
-    app_type: Union[AppType, str], default: _T
-) -> Union[Type[BaseDeploy], _T]:
+    app_type: AppType | str, default: _T
+) -> type[BaseDeploy] | _T:
     key = AppType.from_string(app_type) if isinstance(app_type, str) else app_type
     _deployers = {
         AppType.WEB: NetDeploy,
@@ -89,7 +89,7 @@ class UpdateManager:
 
         self.cmd_helper = CommandHelper(config, self.get_updaters)
         BaseDeploy.set_command_helper(self.cmd_helper)
-        self.updaters: Dict[str, BaseDeploy] = {}
+        self.updaters: dict[str, BaseDeploy] = {}
         if config.getboolean('enable_system_updates', True):
             self.updaters['system'] = PackageDeploy(config)
         mcfg = self.app_config["moonraker"]
@@ -140,10 +140,10 @@ class UpdateManager:
 
         self.cmd_request_lock = asyncio.Lock()
         self.initial_refresh_complete: bool = False
-        self.klippy_identified_evt: Optional[asyncio.Event] = None
+        self.klippy_identified_evt: asyncio.Event | None = None
 
         # Auto Status Refresh
-        self.refresh_timer: Optional[FlexTimer] = None
+        self.refresh_timer: FlexTimer | None = None
         if auto_refresh_enabled:
             self.refresh_timer = self.event_loop.register_timer(
                 self._handle_auto_refresh)
@@ -185,7 +185,7 @@ class UpdateManager:
         self.server.register_event_handler(
             "server:klippy_identified", self._set_klipper_repo)
 
-    def get_updaters(self) -> Dict[str, BaseDeploy]:
+    def get_updaters(self) -> dict[str, BaseDeploy]:
         return self.updaters
 
     async def component_init(self) -> None:
@@ -206,7 +206,7 @@ class UpdateManager:
                 self._handle_auto_refresh, self.event_loop.get_loop_time()
             )
 
-    def register_updater(self, name: str, config: Dict[str, str]) -> None:
+    def register_updater(self, name: str, config: dict[str, str]) -> None:
         if name in self.updaters:
             raise self.server.error(f"Updater {name} already registered")
         cfg = self.app_config.read_supplemental_dict({name: config})
@@ -361,7 +361,7 @@ class UpdateManager:
                         try:
                             await asyncio.wait_for(
                                 self.klippy_identified_evt.wait(), 120.)
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             self.cmd_helper.notify_update_response(
                                 "Klippy reconnect timed out...")
                         else:
@@ -389,7 +389,7 @@ class UpdateManager:
 
     async def _handle_status_request(self,
                                      web_request: WebRequest
-                                     ) -> Dict[str, Any]:
+                                     ) -> dict[str, Any]:
         check_refresh = web_request.get_boolean('refresh', False)
         # Override a request to refresh if:
         #   - An update is in progress
@@ -417,7 +417,7 @@ class UpdateManager:
                 logging.debug("update_manager: refresh bypassed due to spam")
                 check_refresh = False
                 self.cmd_request_lock.release()
-        vinfo: Dict[str, Any] = {}
+        vinfo: dict[str, Any] = {}
         try:
             for name, updater in list(self.updaters.items()):
                 if check_refresh:
@@ -440,8 +440,8 @@ class UpdateManager:
 
     async def _handle_refresh_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
-        name: Optional[str] = web_request.get_str("name", None)
+    ) -> dict[str, Any]:
+        name: str | None = web_request.get_str("name", None)
         if name is not None and name not in self.updaters:
             raise self.server.error(f"No updater registered for '{name}'")
         machine: Machine = self.server.lookup_component("machine")
@@ -455,7 +455,7 @@ class UpdateManager:
                 "Server is busy, cannot perform refresh", 503
             )
         async with self.cmd_request_lock:
-            vinfo: Dict[str, Any] = {}
+            vinfo: dict[str, Any] = {}
             for updater_name, updater in list(self.updaters.items()):
                 if name is None or updater_name == name:
                     await updater.refresh()
@@ -527,7 +527,7 @@ class CommandHelper:
     def __init__(
         self,
         config: ConfigHelper,
-        get_updater_cb: Callable[[], Dict[str, BaseDeploy]]
+        get_updater_cb: Callable[[], dict[str, BaseDeploy]]
     ) -> None:
         self.server = config.get_server()
         self.get_updaters = get_updater_cb
@@ -536,7 +536,7 @@ class CommandHelper:
         config.getboolean('enable_repo_debug', False, deprecate=True)
         if self.server.is_debug_enabled():
             logging.warning("UPDATE MANAGER: REPO DEBUG ENABLED")
-        self.pkg_updater: Optional[PackageDeploy] = None
+        self.pkg_updater: PackageDeploy | None = None
 
         # database management
         db: DBComp = self.server.lookup_component('database')
@@ -549,16 +549,16 @@ class CommandHelper:
         self.refresh_interval = refresh_interval * 60 * 60
 
         # GitHub API Rate Limit Tracking
-        self.gh_rate_limit: Optional[int] = None
-        self.gh_limit_remaining: Optional[int] = None
-        self.gh_limit_reset_time: Optional[float] = None
+        self.gh_rate_limit: int | None = None
+        self.gh_limit_remaining: int | None = None
+        self.gh_limit_reset_time: float | None = None
 
         # Update In Progress Tracking
-        self.cur_update_app: Optional[str] = None
-        self.cur_update_id: Optional[int] = None
+        self.cur_update_app: str | None = None
+        self.cur_update_id: int | None = None
         self.full_update: bool = False
         self.full_complete: bool = False
-        self.pending_service_restarts: Set[str] = set()
+        self.pending_service_restarts: set[str] = set()
 
     def get_server(self) -> Server:
         return self.server
@@ -621,8 +621,8 @@ class CommandHelper:
         timeout: float = 20.,
         notify: bool = False,
         attempts: int = 1,
-        env: Optional[Dict[str, str]] = None,
-        cwd: Optional[str] = None,
+        env: dict[str, str] | None = None,
+        cwd: str | None = None,
         sig_idx: int = 1,
         log_stderr: bool = False
     ) -> None:
@@ -634,7 +634,7 @@ class CommandHelper:
         )
 
     def notify_update_refreshed(self) -> None:
-        vinfo: Dict[str, Any] = {}
+        vinfo: dict[str, Any] = {}
         for name, updater in self.get_updaters().items():
             vinfo[name] = updater.get_update_status()
         uinfo = self.get_rate_limit_stats()
@@ -643,7 +643,7 @@ class CommandHelper:
         self.server.send_event("update_manager:update_refreshed", uinfo)
 
     def notify_update_response(
-        self, resp: Union[str, bytes], is_complete: bool = False
+        self, resp: str | bytes, is_complete: bool = False
     ) -> None:
         if self.cur_update_app is None:
             return
@@ -662,13 +662,13 @@ class CommandHelper:
             "update_manager:update_response", notification)
 
     async def install_packages(
-        self, package_list: List[str], **kwargs
+        self, package_list: list[str], **kwargs
     ) -> None:
         if self.pkg_updater is None:
             return
         await self.pkg_updater.install_packages(package_list, **kwargs)
 
-    def get_rate_limit_stats(self) -> Dict[str, Any]:
+    def get_rate_limit_stats(self) -> dict[str, Any]:
         return self.http_client.github_api_stats()
 
     def on_download_progress(
@@ -682,7 +682,7 @@ class CommandHelper:
             f"Downloading {self.cur_update_app}: {totals} [{progress}%]")
 
     async def create_tempdir(
-        self, suffix: Optional[str] = None, prefix: Optional[str] = None
+        self, suffix: str | None = None, prefix: str | None = None
     ) -> tempfile.TemporaryDirectory[str]:
         def _createdir(sfx, pfx):
             return tempfile.TemporaryDirectory(suffix=sfx, prefix=pfx)
@@ -704,7 +704,7 @@ class InstanceTracker:
         pid = os.getpid()
         return f"{cur_name}:{cur_uuid}:{pid}"
 
-    async def _read_instance_ids(self) -> List[str]:
+    async def _read_instance_ids(self) -> list[str]:
         if not self.inst_file_path.exists():
             return []
         eventloop = self.server.get_event_loop()

@@ -18,15 +18,15 @@ class MockGpiod:
         self.version = version
         self.Chip = MockChipWrapper(self)
         self.LineEvent = MockLineEvent
-        self.chips: Dict[str, MockChip] = {}
+        self.chips: dict[str, MockChip] = {}
 
     def version_string(self) -> str:
         return self.version
 
-    def version_tuple(self) -> Tuple[int, ...]:
+    def version_tuple(self) -> tuple[int, ...]:
         return tuple([int(v) for v in self.version.split(".")])
 
-    def get_chip(self, chip_name) -> Optional[MockChip]:
+    def get_chip(self, chip_name) -> MockChip | None:
         return self.chips.get(chip_name, None)
 
     def add_chip(self, chip: MockChip):
@@ -61,7 +61,7 @@ class MockChip:
         self.name = chip_name
         self.flags = flags
         self.mock_gpiod = mock_gpiod
-        self.requested_lines: Dict[str, MockLine] = {}
+        self.requested_lines: dict[str, MockLine] = {}
 
     def get_line(self, pin_id: str) -> MockLine:
         if pin_id in self.requested_lines:
@@ -97,16 +97,16 @@ class MockLine:
         self.is_event = False
         self.invert = False
         self.value = 0
-        self.read_pipe: Optional[int] = None
-        self.write_pipe: Optional[int] = None
+        self.read_pipe: int | None = None
+        self.write_pipe: int | None = None
         self.bias = "not_configured"
 
     def request(self,
                 consumer: str,
                 type: int,
                 flags: int = 0,
-                default_vals: Optional[List[int]] = None,
-                default_val: Optional[int] = None
+                default_vals: list[int] | None = None,
+                default_val: int | None = None
                 ) -> None:
         self.consumer_name = consumer
         version = self.mock_gpiod.version_tuple()

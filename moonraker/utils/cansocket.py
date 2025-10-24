@@ -28,30 +28,30 @@ class CanNode:
         self._cansocket = cansocket
 
     async def read(
-        self, n: int = -1, timeout: Optional[float] = 2
+        self, n: int = -1, timeout: float | None = 2
     ) -> bytes:
         return await asyncio.wait_for(self._reader.read(n), timeout)
 
     async def readexactly(
-        self, n: int, timeout: Optional[float] = 2
+        self, n: int, timeout: float | None = 2
     ) -> bytes:
         return await asyncio.wait_for(self._reader.readexactly(n), timeout)
 
     async def readuntil(
-        self, sep: bytes = b"\x03", timeout: Optional[float] = 2
+        self, sep: bytes = b"\x03", timeout: float | None = 2
     ) -> bytes:
         return await asyncio.wait_for(self._reader.readuntil(sep), timeout)
 
-    def write(self, payload: Union[bytes, bytearray]) -> None:
+    def write(self, payload: bytes | bytearray) -> None:
         if isinstance(payload, bytearray):
             payload = bytes(payload)
         self._cansocket.send(self.node_id, payload)
 
     async def write_with_response(
         self,
-        payload: Union[bytearray, bytes],
+        payload: bytearray | bytes,
         resp_length: int,
-        timeout: Optional[float] = 2.
+        timeout: float | None = 2.
     ) -> bytes:
         self.write(payload)
         return await self.readexactly(resp_length, timeout)
@@ -65,10 +65,10 @@ class CanNode:
 class CanSocket:
     def __init__(self, interface: str):
         self._loop = asyncio.get_running_loop()
-        self.nodes: Dict[int, CanNode] = {}
+        self.nodes: dict[int, CanNode] = {}
         self.cansock = socket.socket(socket.PF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
         self.input_buffer = b""
-        self.output_packets: List[bytes] = []
+        self.output_packets: list[bytes] = []
         self.input_busy = False
         self.send_task: asyncio.Task | None = None
         self.closed = True
@@ -95,7 +95,7 @@ class CanSocket:
     def _handle_can_response(self) -> None:
         try:
             data = self.cansock.recv(4096)
-        except socket.error as e:
+        except OSError as e:
             # If bad file descriptor allow connection to be
             # closed by the data check
             if e.errno == errno.EBADF:
@@ -148,7 +148,7 @@ class CanSocket:
             packet = self.output_packets.pop(0)
             try:
                 await self._loop.sock_sendall(self.cansock, packet)
-            except socket.error:
+            except OSError:
                 logging.info("Socket Write Error, closing")
                 self.close()
                 break
@@ -163,19 +163,19 @@ class CanSocket:
         self._loop.remove_reader(self.cansock.fileno())
         self.cansock.close()
 
-async def query_klipper_uuids(can_socket: CanSocket) -> List[Dict[str, str]]:
+async def query_klipper_uuids(can_socket: CanSocket) -> list[dict[str, str]]:
     loop = asyncio.get_running_loop()
     admin_node = can_socket.register_node(KLIPPER_ADMIN_ID)
     payload = bytes([CMD_QUERY_UNASSIGNED])
     admin_node.write(payload)
     curtime = loop.time()
     endtime = curtime + 2.
-    uuids: List[Dict[str, str]] = []
+    uuids: list[dict[str, str]] = []
     while curtime < endtime:
         timeout = max(.1, endtime - curtime)
         try:
             resp = await admin_node.read(8, timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             continue
         finally:
             curtime = loop.time()

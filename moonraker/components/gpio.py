@@ -16,17 +16,16 @@ from ..utils import KERNEL_VERSION
 from typing import (
     TYPE_CHECKING,
     Any,
-    Awaitable,
-    Callable,
     Dict,
     Optional
 )
+from collections.abc import Awaitable, Callable
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..eventloop import EventLoop
 
-GpioEventCallback = Callable[[float, float, int], Optional[Awaitable[None]]]
+GpioEventCallback = Callable[[float, float, int], Awaitable[None] | None]
 
 GPIO_PATTERN = r"""
     (?P<bias>[~^])?
@@ -35,7 +34,7 @@ GPIO_PATTERN = r"""
     (?P<pin_name>gpio(?P<pin_id>[0-9]+))
 """
 
-BIAS_FLAG_TO_DESC: Dict[str, str] = {
+BIAS_FLAG_TO_DESC: dict[str, str] = {
     "^": "pull_up",
     "~": "pull_down",
     "*": "disable" if KERNEL_VERSION >= (5, 5) else "default"
@@ -44,7 +43,7 @@ BIAS_FLAG_TO_DESC: Dict[str, str] = {
 class GpioFactory:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.reserved_gpios: Dict[str, GpioBase] = {}
+        self.reserved_gpios: dict[str, GpioBase] = {}
 
     def setup_gpio_out(self, pin_name: str, initial_value: int = 0) -> GpioOutputPin:
         initial_value = int(not not initial_value)
@@ -76,7 +75,7 @@ class GpioFactory:
         self.reserved_gpios[full_name] = gpio_event
         return gpio_event
 
-    def _request_gpio(self, pin_params: Dict[str, Any]) -> periphery.GPIO:
+    def _request_gpio(self, pin_params: dict[str, Any]) -> periphery.GPIO:
         full_name = pin_params["full_name"]
         if full_name in self.reserved_gpios:
             raise self.server.error(f"GPIO {full_name} already reserved")
@@ -102,8 +101,8 @@ class GpioFactory:
 
     def _parse_pin(
         self, pin_desc: str, initial_value: int = 0, req_type: str = "out"
-    ) -> Dict[str, Any]:
-        params: Dict[str, Any] = {
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
             "orig": pin_desc,
             "inverted": False,
             "request_type": req_type,
@@ -115,7 +114,7 @@ class GpioFactory:
                 f"Invalid pin format {pin_desc}. Refer to the configuration "
                 "documentation for details on the pin format."
             )
-        bias_flag: Optional[str] = pin_match.group("bias")
+        bias_flag: str | None = pin_match.group("bias")
         params["inverted"] = pin_match.group("inverted") is not None
         if req_type == "event":
             params["direction"] = "in"
@@ -142,7 +141,7 @@ class GpioFactory:
 
 class GpioBase:
     def __init__(
-        self, gpio: periphery.GPIO, pin_params: Dict[str, Any]
+        self, gpio: periphery.GPIO, pin_params: dict[str, Any]
     ) -> None:
         self.orig: str = pin_params["orig"]
         self.name: str = pin_params["full_name"]
@@ -179,26 +178,26 @@ class GpioEvent(GpioBase):
         self,
         event_loop: EventLoop,
         gpio: periphery.GPIO,
-        pin_params: Dict[str, Any],
+        pin_params: dict[str, Any],
         callback: GpioEventCallback
     ) -> None:
         super().__init__(gpio, pin_params)
         self.event_loop = event_loop
         self.callback = callback
-        self.on_error: Optional[Callable[[str], None]] = None
+        self.on_error: Callable[[str], None] | None = None
         self.debounce_period: float = 0
         self.last_event_time: float = 0.
         self.error_count = 0
         self.last_error_reset = 0.
         self.started = False
-        self.debounce_task: Optional[asyncio.Task] = None
+        self.debounce_task: asyncio.Task | None = None
         os.set_blocking(self.gpio.fd, False)
 
     def fileno(self) -> int:
         return self.gpio.fd
 
     def setup_debounce(
-        self, debounce_period: float, err_callback: Optional[Callable[[str], None]]
+        self, debounce_period: float, err_callback: Callable[[str], None] | None
     ) -> None:
         self.debounce_period = max(debounce_period, 0)
         self.on_error = err_callback

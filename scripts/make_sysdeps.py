@@ -12,7 +12,7 @@ import re
 from typing import List, Dict
 
 def make_sysdeps(input: str, output: str, distro: str, truncate: bool) -> None:
-    sysdeps: Dict[str, List[str]] = {}
+    sysdeps: dict[str, list[str]] = {}
     outpath = pathlib.Path(output).expanduser().resolve()
     if outpath.is_file() and not truncate:
         sysdeps = json.loads(outpath.read_bytes())
@@ -20,9 +20,9 @@ def make_sysdeps(input: str, output: str, distro: str, truncate: bool) -> None:
     if not inst_path.is_file():
         raise Exception(f"Unable to locate install script: {inst_path}")
     data = inst_path.read_text()
-    plines: List[str] = re.findall(r'PKGLIST="(.*)"', data)
+    plines: list[str] = re.findall(r'PKGLIST="(.*)"', data)
     plines = [p.lstrip("${PKGLIST}").strip() for p in plines]
-    packages: List[str] = []
+    packages: list[str] = []
     for line in plines:
         packages.extend(line.split())
     sysdeps[distro] = packages

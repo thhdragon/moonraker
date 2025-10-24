@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 class JobState:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.last_print_stats: Dict[str, Any] = {}
+        self.last_print_stats: dict[str, Any] = {}
         self.last_event: JobEvent = JobEvent.STANDBY
         self.server.register_event_handler(
             "server:klippy_started", self._handle_started
@@ -43,7 +43,7 @@ class JobState:
         if state != KlippyState.READY:
             return
         kapis: KlippyAPI = self.server.lookup_component('klippy_apis')
-        sub: Dict[str, Optional[List[str]]] = {"print_stats": None}
+        sub: dict[str, list[str] | None] = {"print_stats": None}
         try:
             result = await kapis.subscribe_objects(sub, self._status_update)
         except self.server.error:
@@ -54,7 +54,7 @@ class JobState:
             state = self.last_print_stats["state"]
             logging.info(f"Job state initialized: {state}")
 
-    async def _status_update(self, data: Dict[str, Any], _: float) -> None:
+    async def _status_update(self, data: dict[str, Any], _: float) -> None:
         if 'print_stats' not in data:
             return
         ps = data['print_stats']
@@ -88,7 +88,7 @@ class JobState:
                 )
                 self._send_job_event(new_state, prev_ps, new_ps)
         if "info" in ps:
-            cur_layer: Optional[int] = ps["info"].get("current_layer")
+            cur_layer: int | None = ps["info"].get("current_layer")
             if cur_layer is not None:
                 total: int = ps["info"].get("total_layer", 0)
                 self.server.send_event(
@@ -97,7 +97,7 @@ class JobState:
         self.last_print_stats.update(ps)
 
     def _check_resumed(
-        self, prev_ps: Dict[str, Any], new_ps: Dict[str, Any]
+        self, prev_ps: dict[str, Any], new_ps: dict[str, Any]
     ) -> bool:
         return (
             prev_ps['state'] == "paused" and
@@ -109,7 +109,7 @@ class JobState:
         return state in ("standby", "complete", "cancelled", "error")
 
     def _send_job_event(
-        self, state: str, prev_ps: Dict[str, Any], new_ps: Dict[str, Any]
+        self, state: str, prev_ps: dict[str, Any], new_ps: dict[str, Any]
     ) -> None:
         if state == "started":
             logging.info(f"Job Started: {new_ps['filename']}")
@@ -125,7 +125,7 @@ class JobState:
             new_ps
         )
 
-    def get_last_stats(self) -> Dict[str, Any]:
+    def get_last_stats(self) -> dict[str, Any]:
         return dict(self.last_print_stats)
 
     def get_last_job_event(self) -> JobEvent:

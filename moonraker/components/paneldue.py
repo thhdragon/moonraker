@@ -21,15 +21,14 @@ from typing import (
     Optional,
     Dict,
     List,
-    Callable,
-    Coroutine,
 )
+from collections.abc import Callable, Coroutine
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from .klippy_connection import KlippyConnection
     from .klippy_apis import KlippyAPI as APIComp
     from .file_manager.file_manager import FileManager as FMComp
-    FlexCallback = Callable[..., Optional[Coroutine]]
+    FlexCallback = Callable[..., Coroutine | None]
 
 MIN_EST_TIME = 10.
 INITIALIZE_TIMEOUT = 10.
@@ -50,33 +49,33 @@ class PanelDue:
         self.kinematics: str = "none"
         self.machine_name = config.get('machine_name', "Klipper")
         self.firmware_name: str = "Repetier | Klipper"
-        self.last_message: Optional[str] = None
-        self.last_gcode_response: Optional[str] = None
+        self.last_message: str | None = None
+        self.last_gcode_response: str | None = None
         self.current_file: str = ""
-        self.file_metadata: Dict[str, Any] = {}
+        self.file_metadata: dict[str, Any] = {}
         self.enable_checksum = config.getboolean('enable_checksum', True)
-        self.debug_queue: Deque[str] = deque(maxlen=100)
+        self.debug_queue: deque[str] = deque(maxlen=100)
         self.enabled: bool = True
 
         # Initialize tracked state.
         kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
-        self.printer_state: Dict[str, Dict[str, Any]] = kconn.get_subscription_cache()
+        self.printer_state: dict[str, dict[str, Any]] = kconn.get_subscription_cache()
         self.extruder_count: int = 0
-        self.heaters: List[str] = []
+        self.heaters: list[str] = []
         self.is_ready: bool = False
         self.is_shutdown: bool = False
         self.initialized: bool = False
         self.cq_busy: bool = False
         self.gq_busy: bool = False
-        self.command_queue: List[Tuple[FlexCallback, Any, Any]] = []
-        self.gc_queue: List[str] = []
+        self.command_queue: list[tuple[FlexCallback, Any, Any]] = []
+        self.gc_queue: list[str] = []
         self.last_printer_state: str = 'O'
         self.last_update_time: float = 0.
 
         # Set up macros
         self.confirmed_gcode: str = ""
         self.mbox_sequence: int = 0
-        self.available_macros: Dict[str, str] = {}
+        self.available_macros: dict[str, str] = {}
         self.confirmed_macros = {
             "RESTART": "RESTART",
             "FIRMWARE_RESTART": "FIRMWARE_RESTART"}
@@ -112,7 +111,7 @@ class PanelDue:
 
         # These commands are directly executed on the server and do not to
         # make a request to Klippy
-        self.direct_gcodes: Dict[str, FlexCallback] = {
+        self.direct_gcodes: dict[str, FlexCallback] = {
             'M20': self._run_paneldue_M20,
             'M30': self._run_paneldue_M30,
             'M36': self._run_paneldue_M36,
@@ -121,7 +120,7 @@ class PanelDue:
 
         # These gcodes require special parsing or handling prior to being
         # sent via Klippy's "gcode/script" api command.
-        self.special_gcodes: Dict[str, Callable[[List[str]], str]] = {
+        self.special_gcodes: dict[str, Callable[[list[str]], str]] = {
             'M0': lambda args: "CANCEL_PRINT",
             'M23': self._prepare_M23,
             'M24': lambda args: "RESUME",
@@ -171,8 +170,8 @@ class PanelDue:
     async def _process_klippy_ready(self) -> None:
         # Request "info" and "configfile" status
         retries = 10
-        printer_info: Dict[str, Any] = {}
-        cfg_status: Dict[str, Any] = {}
+        printer_info: dict[str, Any] = {}
+        cfg_status: dict[str, Any] = {}
         while retries:
             try:
                 printer_info = await self.klippy_apis.get_klippy_info()
@@ -187,8 +186,8 @@ class PanelDue:
             break
 
         self.firmware_name = "Repetier | Klipper " + printer_info['software_version']
-        config: Dict[str, Any] = cfg_status.get('configfile', {}).get('config', {})
-        printer_cfg: Dict[str, Any] = config.get('printer', {})
+        config: dict[str, Any] = cfg_status.get('configfile', {}).get('config', {})
+        printer_cfg: dict[str, Any] = config.get('printer', {})
         self.kinematics = printer_cfg.get('kinematics', "none")
 
         logging.info(
@@ -198,7 +197,7 @@ class PanelDue:
             f"Printer Config: {config}\n")
 
         # Make subscription request
-        sub_args: Dict[str, Optional[List[str]]] = {
+        sub_args: dict[str, list[str] | None] = {
             "motion_report": None,
             "gcode_move": None,
             "toolhead": None,
@@ -255,7 +254,7 @@ class PanelDue:
             # Get line number
             line_index = line.find(' ')
             try:
-                line_no: Optional[int] = int(line[1:line_index])
+                line_no: int | None = int(line[1:line_index])
             except Exception:
                 line_index = -1
                 line_no = None
@@ -297,7 +296,7 @@ class PanelDue:
 
         # Check for commands that query state and require immediate response
         if cmd in self.direct_gcodes:
-            params: Dict[str, Any] = {}
+            params: dict[str, Any] = {}
             for p in parts[1:]:
                 if p[0] not in "PSR":
                     params["arg_p"] = p.strip(" \"\t\n")
@@ -380,17 +379,17 @@ class PanelDue:
             filename = "/" + filename
         return filename
 
-    def _prepare_M23(self, args: List[str]) -> str:
+    def _prepare_M23(self, args: list[str]) -> str:
         filename = self._clean_filename(args[0])
         return f"M23 {filename}"
 
-    def _prepare_M32(self, args: List[str]) -> str:
+    def _prepare_M32(self, args: list[str]) -> str:
         filename = self._clean_filename(args[0])
         # Escape existing double quotes in the file name
         filename = filename.replace("\"", "\\\"")
         return f"SDCARD_PRINT_FILE FILENAME=\"{filename}\""
 
-    def _prepare_M98(self, args: List[str]) -> str:
+    def _prepare_M98(self, args: list[str]) -> str:
         macro = args[0][1:].strip(" \"\t\n")
         name_start = macro.rfind('/') + 1
         macro = macro[name_start:]
@@ -402,12 +401,12 @@ class PanelDue:
             cmd = ""
         return cmd
 
-    def _prepare_M290(self, args: List[str]) -> str:
+    def _prepare_M290(self, args: list[str]) -> str:
         # args should in in the format Z0.02
         offset = args[0][1:].strip()
         return f"SET_GCODE_OFFSET Z_ADJUST={offset} MOVE=1"
 
-    def _prepare_M292(self, args: List[str]) -> str:
+    def _prepare_M292(self, args: list[str]) -> str:
         p_val = int(args[0][1])
         if p_val == 0:
             cmd = self.confirmed_gcode
@@ -421,7 +420,7 @@ class PanelDue:
         title = "Confirmation Dialog"
         msg = f"Please confirm your intent to run {name}."  \
             " Press OK to continue, or CANCEL to abort."
-        mbox: Dict[str, Any] = {}
+        mbox: dict[str, Any] = {}
         mbox['msgBox.mode'] = 3
         mbox['msgBox.msg'] = msg
         mbox['msgBox.seq'] = self.mbox_sequence
@@ -443,7 +442,7 @@ class PanelDue:
                     self.last_gcode_response = response
                     return
 
-    def write_response(self, response: Dict[str, Any]) -> None:
+    def write_response(self, response: dict[str, Any]) -> None:
         byte_resp = jsonw.dumps(response) + b"\r\n"
         self.ser_conn.send(byte_resp)
 
@@ -478,10 +477,10 @@ class PanelDue:
         return 'I'
 
     def _run_paneldue_M408(self,
-                           arg_r: Optional[int] = None,
+                           arg_r: int | None = None,
                            arg_s: int = 1
                            ) -> None:
-        response: Dict[str, Any] = {}
+        response: dict[str, Any] = {}
         sequence = arg_r
         response_type = arg_s
 
@@ -522,7 +521,7 @@ class PanelDue:
         )
 
         # Current position
-        pos: List[float]
+        pos: list[float]
         homed_pos: str
         sfactor: float
         pos = p_state.get("motion_report", {}).get('live_position', [0., 0., 0., 0.])
@@ -536,7 +535,7 @@ class PanelDue:
         sd_status = p_state.get('virtual_sdcard', {})
         print_stats = p_state.get('print_stats', {})
         fname: str = print_stats.get('filename', "")
-        sd_print_state: Optional[str] = print_stats.get('state')
+        sd_print_state: str | None = print_stats.get('state')
         if sd_print_state in ['printing', 'paused']:
             # We know a file has been loaded, initialize metadata
             if self.current_file != fname:
@@ -551,7 +550,7 @@ class PanelDue:
                     # file read estimate
                     times_left = [int(est_time - est_time * progress)]
                     # filament estimate
-                    est_total_fil: Optional[float]
+                    est_total_fil: float | None
                     est_total_fil = self.file_metadata.get('filament_total')
                     if est_total_fil:
                         cur_filament: float = print_stats.get(
@@ -559,7 +558,7 @@ class PanelDue:
                         fpct = min(1., cur_filament / est_total_fil)
                         times_left.append(int(est_time - est_time * fpct))
                     # object height estimate
-                    obj_height: Optional[float]
+                    obj_height: float | None
                     obj_height = self.file_metadata.get('object_height')
                     if obj_height:
                         cur_height: float = gcode_move.get(
@@ -578,7 +577,7 @@ class PanelDue:
             self.current_file = ""
             self.file_metadata = {}
 
-        fan_speed: Optional[float] = p_state.get('fan', {}).get('speed')
+        fan_speed: float | None = p_state.get('fan', {}).get('speed')
         if fan_speed is not None:
             response['fanPercent'] = [round(fan_speed * 100, 1)]
 
@@ -635,7 +634,7 @@ class PanelDue:
         # ie. "0:/"
         if path.startswith("0:/"):
             path = path[2:]
-        response: Dict[str, Any] = {'dir': path}
+        response: dict[str, Any] = {'dir': path}
         response['files'] = []
 
         if path == "/macros":
@@ -673,9 +672,9 @@ class PanelDue:
             path = "gcodes/" + path
         await self.file_manager.delete_file(path)
 
-    def _run_paneldue_M36(self, arg_p: Optional[str] = None) -> None:
-        response: Dict[str, Any] = {}
-        filename: Optional[str] = arg_p
+    def _run_paneldue_M36(self, arg_p: str | None = None) -> None:
+        response: dict[str, Any] = {}
+        filename: str | None = arg_p
         sd_status = self.printer_state.get('virtual_sdcard', {})
         print_stats = self.printer_state.get('print_stats', {})
         if filename is None:
@@ -702,26 +701,26 @@ class PanelDue:
         if not filename.startswith("gcodes/"):
             filename = "gcodes/" + filename
 
-        metadata: Dict[str, Any] = \
+        metadata: dict[str, Any] = \
             self.file_manager.get_file_metadata(filename)
         if metadata:
             response['err'] = 0
             response['size'] = metadata['size']
             # workaround for PanelDue replacing the first "T" found
             response['lastModified'] = "T" + time.ctime(metadata['modified'])
-            slicer: Optional[str] = metadata.get('slicer')
+            slicer: str | None = metadata.get('slicer')
             if slicer is not None:
                 response['generatedBy'] = slicer
-            height: Optional[float] = metadata.get('object_height')
+            height: float | None = metadata.get('object_height')
             if height is not None:
                 response['height'] = round(height, 2)
-            layer_height: Optional[float] = metadata.get('layer_height')
+            layer_height: float | None = metadata.get('layer_height')
             if layer_height is not None:
                 response['layerHeight'] = round(layer_height, 2)
-            filament: Optional[float] = metadata.get('filament_total')
+            filament: float | None = metadata.get('filament_total')
             if filament is not None:
                 response['filament'] = [round(filament, 1)]
-            est_time: Optional[float] = metadata.get('estimated_time')
+            est_time: float | None = metadata.get('estimated_time')
             if est_time is not None:
                 response['printTime'] = int(est_time + .5)
         else:

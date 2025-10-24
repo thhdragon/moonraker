@@ -20,8 +20,6 @@ from ..common import RequestType
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
-    Awaitable,
-    Callable,
     Deque,
     Any,
     List,
@@ -29,11 +27,12 @@ from typing import (
     Optional,
     Dict,
 )
+from collections.abc import Awaitable, Callable
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .websockets import WebsocketManager
-    STAT_CALLBACK = Callable[[int], Optional[Awaitable]]
+    STAT_CALLBACK = Callable[[int], Awaitable | None]
 
 VC_GEN_CMD_FILE = "/usr/bin/vcgencmd"
 VCIO_PATH = "/dev/vcio"
@@ -72,7 +71,7 @@ class ProcStats:
         self.watchdog = Watchdog(self)
         self.stat_update_timer = self.event_loop.register_timer(
             self._handle_stat_update)
-        self.vcgencmd: Optional[VCGenCmd] = None
+        self.vcgencmd: VCGenCmd | None = None
         if os.path.exists(VC_GEN_CMD_FILE) and os.path.exists(VCIO_PATH):
             logging.info("Detected 'vcgencmd', throttle checking enabled")
             self.vcgencmd = VCGenCmd()
@@ -92,18 +91,18 @@ class ProcStats:
             "server:klippy_shutdown", self._handle_shutdown
         )
         self.server.register_notification("proc_stats:proc_stat_update")
-        self.proc_stat_queue: Deque[Dict[str, Any]] = deque(maxlen=30)
+        self.proc_stat_queue: deque[dict[str, Any]] = deque(maxlen=30)
         self.last_update_time = time.time()
         self.last_proc_time = time.process_time()
         self.throttle_check_lock = asyncio.Lock()
         self.total_throttled: int = 0
         self.last_throttled: int = 0
         self.update_sequence: int = 0
-        self.last_net_stats: Dict[str, Dict[str, Any]] = {}
-        self.last_cpu_stats: Dict[str, Tuple[int, int]] = {}
-        self.cpu_usage: Dict[str, float] = {}
-        self.memory_usage: Dict[str, int] = {}
-        self.stat_callbacks: List[STAT_CALLBACK] = []
+        self.last_net_stats: dict[str, dict[str, Any]] = {}
+        self.last_cpu_stats: dict[str, tuple[int, int]] = {}
+        self.cpu_usage: dict[str, float] = {}
+        self.memory_usage: dict[str, int] = {}
+        self.stat_callbacks: list[STAT_CALLBACK] = []
 
     async def component_init(self) -> None:
         self.stat_update_timer.start()
@@ -114,8 +113,8 @@ class ProcStats:
 
     async def _handle_stat_request(self,
                                    web_request: WebRequest
-                                   ) -> Dict[str, Any]:
-        ts: Optional[Dict[str, Any]] = None
+                                   ) -> dict[str, Any]:
+        ts: dict[str, Any] | None = None
         if self.vcgencmd is not None:
             ts = await self._check_throttled_state()
         cpu_temp = await self.event_loop.run_in_thread(
@@ -202,7 +201,7 @@ class ProcStats:
         self.update_sequence += 1
         return eventtime + STAT_UPDATE_TIME
 
-    async def _check_throttled_state(self) -> Dict[str, Any]:
+    async def _check_throttled_state(self) -> dict[str, Any]:
         ret = {'bits': 0, 'flags': ["?"]}
         if self.vcgencmd is not None:
             async with self.throttle_check_lock:
@@ -216,7 +215,7 @@ class ProcStats:
                     pass
         return ret
 
-    def _read_system_files(self) -> Tuple:
+    def _read_system_files(self) -> tuple:
         mem, units = self._get_memory_usage()
         temp = self._get_cpu_temperature()
         net_stats = self._get_net_stats()
@@ -224,7 +223,7 @@ class ProcStats:
         self._update_system_memory()
         return temp, mem, units, net_stats
 
-    def _get_memory_usage(self) -> Tuple[Optional[int], Optional[str]]:
+    def _get_memory_usage(self) -> tuple[int | None, str | None]:
         try:
             mem_data = self.smaps.read_text()
             rss_match = re.search(r"Rss:\s+(\d+)\s+(\w+)", mem_data)
@@ -236,7 +235,7 @@ class ProcStats:
             return None, None
         return mem, units
 
-    def _get_cpu_temperature(self) -> Optional[float]:
+    def _get_cpu_temperature(self) -> float | None:
         try:
             res = int(self.temp_file.read_text().strip())
             temp = res / 1000.
@@ -244,8 +243,8 @@ class ProcStats:
             return None
         return temp
 
-    def _get_net_stats(self) -> Dict[str, Any]:
-        net_stats: Dict[str, Any] = {}
+    def _get_net_stats(self) -> dict[str, Any]:
+        net_stats: dict[str, Any] = {}
         try:
             ret = self.netdev_file.read_text()
             dev_info = re.findall(r"([\w]+):(.+)", ret)
@@ -266,7 +265,7 @@ class ProcStats:
             return {}
 
     def _update_system_memory(self) -> None:
-        mem_stats: Dict[str, Any] = {}
+        mem_stats: dict[str, Any] = {}
         try:
             ret = self.meminfo_file.read_text()
             total_match = re.search(r"MemTotal:\s+(\d+)", ret)
@@ -281,9 +280,9 @@ class ProcStats:
 
     def _update_cpu_stats(self) -> None:
         try:
-            cpu_usage: Dict[str, Any] = {}
+            cpu_usage: dict[str, Any] = {}
             ret = self.cpu_stats_file.read_text()
-            usage_info: List[str] = re.findall(r"cpu[^\n]+", ret)
+            usage_info: list[str] = re.findall(r"cpu[^\n]+", ret)
             for cpu in usage_info:
                 parts = cpu.split()
                 name = parts[0]
@@ -319,7 +318,7 @@ class ProcStats:
         logging.info("Monitoring temperature using default thermal zone")
         return TEMPERATURE_PATH
 
-    def _format_stats(self, stats: Dict[str, Any]) -> str:
+    def _format_stats(self, stats: dict[str, Any]) -> str:
         return f"System Time: {stats['time']:2f}, " \
                f"Usage: {stats['cpu_usage']}%, " \
                f"Memory: {stats['memory']} {stats['mem_units']}"

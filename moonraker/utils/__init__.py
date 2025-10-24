@@ -89,8 +89,8 @@ def retrieve_git_version(source_path: str) -> str:
     tag = _retrieve_git_tag(source_path)
     return f"t{tag}-g{ver}-shallow"
 
-def get_repo_info(source_path: str) -> Dict[str, Any]:
-    repo_info: Dict[str, Any] = {
+def get_repo_info(source_path: str) -> dict[str, Any]:
+    repo_info: dict[str, Any] = {
         "software_version": "?",
         "git_branch": "?",
         "git_remote": "?",
@@ -139,7 +139,7 @@ def get_repo_info(source_path: str) -> Dict[str, Any]:
         logging.exception("Error Retrieving Git Repo Info")
     return repo_info
 
-def get_software_info() -> Dict[str, Any]:
+def get_software_info() -> dict[str, Any]:
     src_path = source_info.source_path()
     if source_info.is_git_repo():
         return get_repo_info(str(src_path))
@@ -157,9 +157,9 @@ def get_software_info() -> Dict[str, Any]:
     return {"software_version": version}
 
 def hash_directory(
-    dir_path: Union[str, pathlib.Path],
-    ignore_exts: List[str],
-    ignore_dirs: List[str]
+    dir_path: str | pathlib.Path,
+    ignore_exts: list[str],
+    ignore_dirs: list[str]
 ) -> str:
     if isinstance(dir_path, str):
         dir_path = pathlib.Path(dir_path)
@@ -167,7 +167,7 @@ def hash_directory(
     if not dir_path.exists():
         return ""
     for dpath, dnames, fnames in os.walk(dir_path):
-        valid_dirs: List[str] = []
+        valid_dirs: list[str] = []
         for dname in sorted(dnames):
             if dname[0] == '.' or dname in ignore_dirs:
                 continue
@@ -185,8 +185,8 @@ def hash_directory(
     return checksum.hexdigest()
 
 def verify_source(
-    path: Optional[Union[str, pathlib.Path]] = None
-) -> Optional[Tuple[str, bool]]:
+    path: str | pathlib.Path | None = None
+) -> tuple[str, bool] | None:
     if path is None:
         path = source_info.source_path()
     elif isinstance(path, str):
@@ -228,7 +228,7 @@ def load_system_module(name: str) -> ModuleType:
 
 def get_unix_peer_credentials(
     writer: asyncio.StreamWriter, name: str
-) -> Dict[str, int]:
+) -> dict[str, int]:
     sock: TransportSocket
     sock = writer.get_extra_info("socket", None)
     if sock is None:
@@ -259,8 +259,8 @@ def get_unix_peer_credentials(
 def pretty_print_time(seconds: int) -> str:
     if seconds == 0:
         return "0 Seconds"
-    fmt_list: List[str] = []
-    times: Dict[str, int] = {}
+    fmt_list: list[str] = []
+    times: dict[str, int] = {}
     times["Day"], seconds = divmod(seconds, 86400)
     times["Hour"], seconds = divmod(seconds, 3600)
     times["Minute"], times["Second"] = divmod(seconds, 60)
@@ -270,7 +270,7 @@ def pretty_print_time(seconds: int) -> str:
         fmt_list.append(f"{val} {ident}" if val == 1 else f"{val} {ident}s")
     return ", ".join(fmt_list)
 
-def parse_ip_address(address: str) -> Optional[IPAddress]:
+def parse_ip_address(address: str) -> IPAddress | None:
     try:
         return ipaddress.ip_address(address)
     except Exception:

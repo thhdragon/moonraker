@@ -22,14 +22,14 @@ class HttpClient:
     async def _do_request(self,
                           method: str,
                           endpoint: str,
-                          args: Dict[str, Any] = {},
-                          headers: Optional[Dict[str, str]] = None
-                          ) -> Dict[str, Any]:
+                          args: dict[str, Any] = {},
+                          headers: dict[str, str] | None = None
+                          ) -> dict[str, Any]:
         ep = "/".join([url_escape(part, plus=False) for part in
                        endpoint.lstrip("/").split("/")])
         url = self.prefix + ep
         method = method.upper()
-        body: Optional[str] = "" if method == "POST" else None
+        body: str | None = "" if method == "POST" else None
         if args:
             if method in ["GET", "DELETE"]:
                 parts = []
@@ -55,23 +55,23 @@ class HttpClient:
 
     async def get(self,
                   endpoint: str,
-                  args: Dict[str, Any] = {},
-                  headers: Optional[Dict[str, str]] = None
-                  ) -> Dict[str, Any]:
+                  args: dict[str, Any] = {},
+                  headers: dict[str, str] | None = None
+                  ) -> dict[str, Any]:
         return await self._do_request("GET", endpoint, args, headers)
 
     async def post(self,
                    endpoint: str,
-                   args: Dict[str, Any] = {},
-                   headers: Optional[Dict[str, str]] = None,
-                   ) -> Dict[str, Any]:
+                   args: dict[str, Any] = {},
+                   headers: dict[str, str] | None = None,
+                   ) -> dict[str, Any]:
         return await self._do_request("POST", endpoint, args, headers)
 
     async def delete(self,
                      endpoint: str,
-                     args: Dict[str, Any] = {},
-                     headers: Optional[Dict[str, str]] = None
-                     ) -> Dict[str, Any]:
+                     args: dict[str, Any] = {},
+                     headers: dict[str, str] | None = None
+                     ) -> dict[str, Any]:
         return await self._do_request("DELETE", endpoint, args, headers)
 
     def close(self):

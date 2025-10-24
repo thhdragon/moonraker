@@ -8,12 +8,12 @@ from typing import (
     TYPE_CHECKING,
     Union,
     Tuple,
-    Callable,
     Dict,
     List,
     Any,
     Optional,
 )
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from tornado.websocket import WebSocketClientConnection
@@ -29,13 +29,13 @@ class WebsocketClient:
                  type: str = "ws",
                  port: int = 7010
                  ) -> None:
-        self.ws: Optional[WebSocketClientConnection] = None
-        self.pending_requests: Dict[int, asyncio.Future] = {}
-        self.notify_cbs: Dict[str, List[Callable[..., None]]] = {}
+        self.ws: WebSocketClientConnection | None = None
+        self.pending_requests: dict[int, asyncio.Future] = {}
+        self.notify_cbs: dict[str, list[Callable[..., None]]] = {}
         assert type in ["ws", "wss"]
         self.url = f"{type}://127.0.0.1:{port}/websocket"
 
-    async def connect(self, token: Optional[str] = None) -> None:
+    async def connect(self, token: str | None = None) -> None:
         url = self.url
         if token is not None:
             url += f"?token={token}"
@@ -45,8 +45,8 @@ class WebsocketClient:
 
     async def request(self,
                       remote_method: str,
-                      args: Dict[str, Any] = {}
-                      ) -> Dict[str, Any]:
+                      args: dict[str, Any] = {}
+                      ) -> dict[str, Any]:
         if self.ws is None:
             pytest.fail("Websocket Not Connected")
         loop = asyncio.get_running_loop()
@@ -58,9 +58,9 @@ class WebsocketClient:
 
     def _encode_request(self,
                         method: str,
-                        args: Dict[str, Any]
-                        ) -> Tuple[str, int]:
-        request: Dict[str, Any] = {
+                        args: dict[str, Any]
+                        ) -> tuple[str, int]:
+        request: dict[str, Any] = {
             'jsonrpc': "2.0",
             'method': method,
         }
@@ -70,21 +70,21 @@ class WebsocketClient:
         request["id"] = req_id
         return json.dumps(request), req_id
 
-    def _on_message_received(self, message: Union[str, bytes, None]) -> None:
+    def _on_message_received(self, message: str | bytes | None) -> None:
         if isinstance(message, str):
             self._decode_jsonrpc(message)
 
     def _decode_jsonrpc(self, data: str) -> None:
         try:
-            resp: Dict[str, Any] = json.loads(data)
+            resp: dict[str, Any] = json.loads(data)
         except json.JSONDecodeError:
             pytest.fail(f"Websocket JSON Decode Error: {data}")
         header = resp.get('jsonrpc', "")
         if header != "2.0":
             # Invalid Json, set error if we can get the id
             pytest.fail(f"Invalid jsonrpc header: {data}")
-        req_id: Optional[int] = resp.get("id")
-        method: Optional[str] = resp.get("method")
+        req_id: int | None = resp.get("id")
+        method: str | None = resp.get("method")
         if method is not None:
             if req_id is None:
                 params = resp.get("params", [])

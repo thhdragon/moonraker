@@ -24,12 +24,12 @@ if TYPE_CHECKING:
     from ..common import WebRequest
     from .klippy_connection import KlippyConnection
     from .klippy_apis import KlippyAPI as APIComp
-    GCQueue = Deque[Dict[str, Any]]
-    TempStore = Dict[str, Dict[str, Deque[Optional[float]]]]
+    GCQueue = deque[dict[str, Any]]
+    TempStore = dict[str, dict[str, deque[float | None]]]
 
 TEMP_UPDATE_TIME = 1.
 
-def _round_null(val: Optional[float], ndigits: int) -> Optional[float]:
+def _round_null(val: float | None, ndigits: int) -> float | None:
     if val is None:
         return val
     return round(val, ndigits)
@@ -45,7 +45,7 @@ class DataStore:
         self.subscription_cache = kconn.get_subscription_cache()
         self.gcode_queue: GCQueue = deque(maxlen=self.gcode_store_size)
         self.temperature_store: TempStore = {}
-        self.temp_monitors: List[str] = []
+        self.temp_monitors: list[str] = []
         eventloop = self.server.get_event_loop()
         self.temp_update_timer = eventloop.register_timer(
             self._update_temperature_store)
@@ -72,21 +72,21 @@ class DataStore:
         klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
         # Fetch sensors
         try:
-            result: Dict[str, Any]
+            result: dict[str, Any]
             result = await klippy_apis.query_objects({'heaters': None})
         except self.server.error as e:
             logging.info(f"Error Configuring Sensors: {e}")
             return
-        heaters: Dict[str, List[str]] = result.get("heaters", {})
+        heaters: dict[str, list[str]] = result.get("heaters", {})
         sensors = heaters.get("available_sensors", [])
         self.temp_monitors = heaters.get("available_monitors", [])
         sensors.extend(self.temp_monitors)
 
         if sensors:
             # Add Subscription
-            sub: Dict[str, Optional[List[str]]] = {s: None for s in sensors}
+            sub: dict[str, list[str] | None] = {s: None for s in sensors}
             try:
-                status: Dict[str, Any]
+                status: dict[str, Any]
                 status = await klippy_apis.subscribe_objects(sub)
             except self.server.error as e:
                 logging.info(f"Error subscribing to sensors: {e}")
@@ -108,7 +108,7 @@ class DataStore:
                         if field not in reported_fields:
                             new_store[sensor].pop(field, None)
                         else:
-                            initial_val: Optional[float]
+                            initial_val: float | None
                             initial_val = _round_null(status[sensor][field], 2)
                             new_store[sensor][field].append(initial_val)
                 else:
@@ -129,14 +129,14 @@ class DataStore:
 
     def _update_temperature_store(self, eventtime: float) -> float:
         for sensor_name, sensor in self.temperature_store.items():
-            sdata: Dict[str, Any] = self.subscription_cache.get(sensor_name, {})
+            sdata: dict[str, Any] = self.subscription_cache.get(sensor_name, {})
             for field, store in sensor.items():
                 store.append(_round_null(sdata.get(field, store[-1]), 2))
         return eventtime + TEMP_UPDATE_TIME
 
     async def _handle_temp_store_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Dict[str, List[Optional[float]]]]:
+    ) -> dict[str, dict[str, list[float | None]]]:
         include_monitors = web_request.get_boolean("include_monitors", False)
         store = {}
         for name, sensor in self.temperature_store.items():
@@ -162,7 +162,7 @@ class DataStore:
 
     async def _handle_gcode_store_request(self,
                                           web_request: WebRequest
-                                          ) -> Dict[str, List[Dict[str, Any]]]:
+                                          ) -> dict[str, list[dict[str, Any]]]:
         count = web_request.get_int("count", None)
         if count is not None:
             gc_responses = list(self.gcode_queue)[-count:]

@@ -67,7 +67,7 @@ def _write_header(ns_count: int, backup: TextIO):
     out = f"+{len(hkey)},{len(hval)}:{hkey}->{hval}\n"
     backup.write(out)
 
-def backup(args: Dict[str, Any]):
+def backup(args: dict[str, Any]):
     source_db = pathlib.Path(args["source"]).expanduser().resolve()
     if not source_db.is_dir():
         print(f"Source path not a folder: '{source_db}'")
@@ -111,7 +111,7 @@ def _process_header(key: bytes, value: bytes) -> int:
             f"{value.decode()}")
     return int(val_parts[1])
 
-def _process_namespace(key: bytes, value: bytes) -> Tuple[bytes, int]:
+def _process_namespace(key: bytes, value: bytes) -> tuple[bytes, int]:
     key_parts = key.split(b"_", 1)
     if key_parts[0] != b"namespace":
         raise DBToolError(
@@ -125,7 +125,7 @@ def _process_namespace(key: bytes, value: bytes) -> Tuple[bytes, int]:
     entries = int(val_parts[1])
     return namespace, entries
 
-def _process_line(line: str) -> Tuple[bytes, bytes]:
+def _process_line(line: str) -> tuple[bytes, bytes]:
     match = LINE_MATCH.match(line)
     if match is None:
         # TODO: use own exception
@@ -148,7 +148,7 @@ def _process_line(line: str) -> Tuple[bytes, bytes]:
     decoded_val = base64.b64decode(val.encode())
     return decoded_key, decoded_val
 
-def restore(args: Dict[str, Any]):
+def restore(args: dict[str, Any]):
     dest_path = pathlib.Path(args["destination"]).expanduser().resolve()
     input_db = pathlib.Path(args["input"]).expanduser().resolve()
     if not input_db.is_file():
@@ -158,7 +158,7 @@ def restore(args: Dict[str, Any]):
         print(f"Destination path '{dest_path}' does not exist, directory"
               "will be created")
     print(f"Restoring backup from '{input_db}' to '{dest_path}'...")
-    bkp_dir: Optional[pathlib.Path] = None
+    bkp_dir: pathlib.Path | None = None
     if dest_path.joinpath("data.mdb").exists():
         bkp_dir = dest_path.parent.joinpath("backup")
         if not bkp_dir.exists():

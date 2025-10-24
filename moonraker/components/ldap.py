@@ -29,13 +29,13 @@ class MoonrakerLDAP:
         self.ldap_secure = config.getboolean("ldap_secure", False)
         base_dn_template = config.gettemplate('base_dn')
         self.base_dn = base_dn_template.render()
-        self.group_dn: Optional[str] = None
+        self.group_dn: str | None = None
         group_dn_template = config.gettemplate("group_dn", None)
         if group_dn_template is not None:
             self.group_dn = group_dn_template.render()
         self.active_directory = config.getboolean('is_active_directory', False)
-        self.bind_dn: Optional[str] = None
-        self.bind_password: Optional[str] = None
+        self.bind_dn: str | None = None
+        self.bind_password: str | None = None
         bind_dn_template = config.gettemplate('bind_dn', None)
         bind_pass_template = config.gettemplate('bind_password', None)
         if bind_dn_template is not None:
@@ -46,7 +46,7 @@ class MoonrakerLDAP:
                     "required when 'bind_dn' is provided"
                 )
             self.bind_password = bind_pass_template.render()
-        self.user_filter: Optional[str] = None
+        self.user_filter: str | None = None
         user_filter_template = config.gettemplate('user_filter', None)
         if user_filter_template is not None:
             self.user_filter = user_filter_template.render()

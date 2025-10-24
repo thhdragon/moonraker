@@ -19,7 +19,6 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPError
 from tornado.httputil import HTTPHeaders
 from typing import (
     TYPE_CHECKING,
-    Callable,
     Optional,
     Tuple,
     Union,
@@ -27,6 +26,7 @@ from typing import (
     List,
     Any
 )
+from collections.abc import Callable
 if TYPE_CHECKING:
     from ..server import Server
     from ..confighelper import ConfigHelper
@@ -45,17 +45,17 @@ class HttpClient:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.client = AsyncHTTPClient()
-        self.response_cache: Dict[str, HttpResponse] = {}
+        self.response_cache: dict[str, HttpResponse] = {}
 
-        self.gh_rate_limit: Optional[int] = None
-        self.gh_limit_remaining: Optional[int] = None
-        self.gh_limit_reset_time: Optional[float] = None
+        self.gh_rate_limit: int | None = None
+        self.gh_limit_remaining: int | None = None
+        self.gh_limit_reset_time: float | None = None
 
     def register_cached_url(
         self,
         url: str,
-        etag: Optional[str] = None,
-        last_modified: Optional[str] = None
+        etag: str | None = None,
+        last_modified: str | None = None
     ) -> None:
         headers = HTTPHeaders()
         if etag is not None:
@@ -72,8 +72,8 @@ class HttpClient:
         self,
         method: str,
         url: str,
-        body: Optional[Union[bytes, str, List[Any], Dict[str, Any]]] = None,
-        headers: Optional[Dict[str, Any]] = None,
+        body: bytes | str | list[Any] | dict[str, Any] | None = None,
+        headers: dict[str, Any] | None = None,
         connect_timeout: float = 5.,
         request_timeout: float = 10.,
         attempts: int = 1,
@@ -81,17 +81,17 @@ class HttpClient:
         enable_cache: bool = False,
         send_etag: bool = True,
         send_if_modified_since: bool = True,
-        basic_auth_user: Optional[str] = None,
-        basic_auth_pass: Optional[str] = None
+        basic_auth_user: str | None = None,
+        basic_auth_pass: str | None = None
     ) -> HttpResponse:
         cache_key = url.split("?", 1)[0]
         method = method.upper()
         # prepare the body if required
-        req_headers: Dict[str, Any] = {}
+        req_headers: dict[str, Any] = {}
         if isinstance(body, (list, dict)):
             body = jsonw.dumps(body)
             req_headers["Content-Type"] = "application/json"
-        cached: Optional[HttpResponse] = None
+        cached: HttpResponse | None = None
         if enable_cache:
             cached = self.response_cache.get(cache_key)
             if cached is not None and send_etag:
@@ -105,7 +105,7 @@ class HttpClient:
             headers = req_headers
 
         timeout = 1 + connect_timeout + request_timeout
-        req_args: Dict[str, Any] = dict(
+        req_args: dict[str, Any] = dict(
             body=body,
             request_timeout=request_timeout,
             connect_timeout=connect_timeout
@@ -116,7 +116,7 @@ class HttpClient:
             req_args["auth_password"] = basic_auth_pass
             req_args["auth_mode"] = "basic"
         request = HTTPRequest(url, method, headers, **req_args)
-        err: Optional[BaseException] = None
+        err: BaseException | None = None
         for i in range(attempts):
             if i:
                 await asyncio.sleep(retry_pause_time)
@@ -159,7 +159,7 @@ class HttpClient:
         return ret
 
     async def get(
-        self, url: str, headers: Optional[Dict[str, Any]] = None, **kwargs
+        self, url: str, headers: dict[str, Any] | None = None, **kwargs
     ) -> HttpResponse:
         if "enable_cache" not in kwargs:
             kwargs["enable_cache"] = True
@@ -168,8 +168,8 @@ class HttpClient:
     async def post(
         self,
         url: str,
-        body: Union[str, List[Any], Dict[str, Any]] = "",
-        headers: Optional[Dict[str, Any]] = None,
+        body: str | list[Any] | dict[str, Any] = "",
+        headers: dict[str, Any] | None = None,
         **kwargs
     ) -> HttpResponse:
         return await self.request("POST", url, body, headers, **kwargs)
@@ -177,7 +177,7 @@ class HttpClient:
     async def delete(
         self,
         url: str,
-        headers: Optional[Dict[str, Any]] = None,
+        headers: dict[str, Any] | None = None,
         **kwargs
     ) -> HttpResponse:
         return await self.request("DELETE", url, None, headers, **kwargs)
@@ -214,7 +214,7 @@ class HttpClient:
                 resp_hdrs['X-Ratelimit-Reset'])
         return resp
 
-    def github_api_stats(self) -> Dict[str, Any]:
+    def github_api_stats(self) -> dict[str, Any]:
         return {
             'github_rate_limit': self.gh_rate_limit,
             'github_requests_remaining': self.gh_limit_remaining,
@@ -244,9 +244,9 @@ class HttpClient:
         self,
         url: str,
         content_type: str,
-        destination_path: Optional[StrOrPath] = None,
+        destination_path: StrOrPath | None = None,
         download_size: int = -1,
-        progress_callback: Optional[Callable[[int, int, int], None]] = None,
+        progress_callback: Callable[[int, int, int], None] | None = None,
         connect_timeout: float = 5.,
         request_timeout: float = 180.,
         attempts: int = 1,
@@ -289,8 +289,8 @@ class HttpRequestWrapper:
         self, client: HttpClient, default_url: str, **kwargs
     ) -> None:
         self._do_request = client.request
-        self._last_response: Optional[HttpResponse] = None
-        self.default_request_args: Dict[str, Any] = {
+        self._last_response: HttpResponse | None = None
+        self.default_request_args: dict[str, Any] = {
             "method": "GET",
             "url": default_url,
         }
@@ -313,7 +313,7 @@ class HttpRequestWrapper:
         self.request_args["url"] = url
 
     def set_body(
-        self, body: Optional[Union[str, List[Any], Dict[str, Any]]]
+        self, body: str | list[Any] | dict[str, Any] | None
     ) -> None:
         self.request_args["body"] = body
 
@@ -322,13 +322,13 @@ class HttpRequestWrapper:
         headers[name] = value
         self.request_args["headers"] = headers
 
-    def set_headers(self, headers: Dict[str, str]) -> None:
+    def set_headers(self, headers: dict[str, str]) -> None:
         self.request_args["headers"] = headers
 
     def reset(self) -> None:
         self.request_args = copy.deepcopy(self.default_request_args)
 
-    def last_response(self) -> Optional[HttpResponse]:
+    def last_response(self) -> HttpResponse | None:
         return self._last_response
 
 class HttpResponse:
@@ -338,7 +338,7 @@ class HttpResponse:
                  code: int,
                  result: bytes,
                  response_headers: HTTPHeaders,
-                 error: Optional[BaseException]
+                 error: BaseException | None
                  ) -> None:
         self._url = url
         self._final_url = final_url
@@ -346,12 +346,12 @@ class HttpResponse:
         self._result: bytes = result
         self._encoding: str = "utf-8"
         self._response_headers: HTTPHeaders = response_headers
-        self._etag: Optional[str] = response_headers.get("etag", None)
+        self._etag: str | None = response_headers.get("etag", None)
         self._error = error
-        self._last_modified: Optional[str] = response_headers.get(
+        self._last_modified: str | None = response_headers.get(
             "last-modified", None)
 
-    def json(self) -> Union[List[Any], Dict[str, Any]]:
+    def json(self) -> list[Any] | dict[str, Any]:
         return jsonw.loads(self._result)
 
     def is_cachable(self) -> bool:
@@ -360,7 +360,7 @@ class HttpResponse:
     def has_error(self) -> bool:
         return self._error is not None
 
-    def raise_for_status(self, message: Optional[str] = None) -> None:
+    def raise_for_status(self, message: str | None = None) -> None:
         if self._error is not None:
             code = 500
             msg = f"HTTP Request Error: {self.url}"
@@ -405,24 +405,24 @@ class HttpResponse:
         return self._response_headers
 
     @property
-    def last_modified(self) -> Optional[str]:
+    def last_modified(self) -> str | None:
         return self._last_modified
 
     @property
-    def etag(self) -> Optional[str]:
+    def etag(self) -> str | None:
         return self._etag
 
     @property
-    def error(self) -> Optional[BaseException]:
+    def error(self) -> BaseException | None:
         return self._error
 
 class StreamingDownload:
     def __init__(
         self,
         server: Server,
-        dest_path: Optional[StrOrPath],
+        dest_path: StrOrPath | None,
         download_size: int,
-        progress_callback: Optional[Callable[[int, int, int], None]]
+        progress_callback: Callable[[int, int, int], None] | None
     ) -> None:
         self.server = server
         self.event_loop = server.get_event_loop()
@@ -443,11 +443,11 @@ class StreamingDownload:
         else:
             self.dest_file = dest_path
         self.filename = self.dest_file.name
-        self.file_hdl: Optional[BufferedWriter] = None
+        self.file_hdl: BufferedWriter | None = None
         self.total_recd: int = 0
         self.download_size: int = download_size
         self.pct_done: int = 0
-        self.chunk_buffer: List[bytes] = []
+        self.chunk_buffer: list[bytes] = []
         self.progress_callback = progress_callback
         self.busy_evt: asyncio.Event = asyncio.Event()
         self.busy_evt.set()
@@ -478,7 +478,7 @@ class StreamingDownload:
             self.need_content_disposition
         ):
             fnr = r"filename[^;\n=]*=(['\"])?(utf-8\'\')?([^\n;]*)(?(1)\1|)"
-            matches: List[Tuple[str, str, str]] = re.findall(fnr, hval)
+            matches: list[tuple[str, str, str]] = re.findall(fnr, hval)
             is_utf8 = False
             for (_, encoding, fname) in matches:
                 if encoding.startswith("utf-8"):

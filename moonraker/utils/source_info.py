@@ -29,12 +29,12 @@ def package_path() -> pathlib.Path:
 def source_path() -> pathlib.Path:
     return package_path().parent
 
-def is_git_repo(src_path: Optional[pathlib.Path] = None) -> bool:
+def is_git_repo(src_path: pathlib.Path | None = None) -> bool:
     if src_path is None:
         src_path = source_path()
     return src_path.joinpath(".git").exists()
 
-def find_git_repo(src_path: Optional[pathlib.Path] = None) -> Optional[pathlib.Path]:
+def find_git_repo(src_path: pathlib.Path | None = None) -> pathlib.Path | None:
     if src_path is None:
         src_path = source_path()
     if src_path.joinpath(".git").exists():
@@ -44,7 +44,7 @@ def find_git_repo(src_path: Optional[pathlib.Path] = None) -> Optional[pathlib.P
             return parent
     return None
 
-def is_dist_package(item_path: Optional[pathlib.Path] = None) -> bool:
+def is_dist_package(item_path: pathlib.Path | None = None) -> bool:
     """
     Check if the supplied path exists within a python dist installation or
     site installation.
@@ -72,7 +72,7 @@ def is_dist_package(item_path: Optional[pathlib.Path] = None) -> bool:
             return True
     return False
 
-def package_version() -> Optional[str]:
+def package_version() -> str | None:
     try:
         import moonraker.__version__ as ver  # type: ignore
         version = ver.__version__
@@ -83,7 +83,7 @@ def package_version() -> Optional[str]:
             return version
     return None
 
-def read_asset(asset_name: str) -> Optional[str]:
+def read_asset(asset_name: str) -> str | None:
     if sys.version_info < (3, 10):
         with ilr.path("moonraker.assets", asset_name) as p:
             if not p.is_file():
@@ -96,7 +96,7 @@ def read_asset(asset_name: str) -> Optional[str]:
                 return None
             return p.read_text()
 
-def get_asset_path() -> Optional[pathlib.Path]:
+def get_asset_path() -> pathlib.Path | None:
     if sys.version_info < (3, 10):
         with ilr.path("moonraker.assets", "__init__.py") as p:
             asset_path = p.parent
@@ -109,7 +109,7 @@ def get_asset_path() -> Optional[pathlib.Path]:
         return None
     return asset_path
 
-def _load_release_info_json(dist_info: Distribution) -> Optional[Dict[str, Any]]:
+def _load_release_info_json(dist_info: Distribution) -> dict[str, Any] | None:
     files = dist_info.files
     if files is None:
         return None
@@ -125,12 +125,12 @@ def _load_release_info_json(dist_info: Distribution) -> Optional[Dict[str, Any]]
                 logging.exception(f"Failed to load release_info from {dist_file}")
     return None
 
-def _load_direct_url_json(dist_info: Distribution) -> Optional[Dict[str, Any]]:
-    ret: Optional[str] = dist_info.read_text("direct_url.json")
+def _load_direct_url_json(dist_info: Distribution) -> dict[str, Any] | None:
+    ret: str | None = dist_info.read_text("direct_url.json")
     if ret is None:
         return None
     try:
-        direct_url: Dict[str, Any] = json.loads(ret)
+        direct_url: dict[str, Any] = json.loads(ret)
     except json.JSONDecodeError:
         return None
     return direct_url
@@ -162,8 +162,8 @@ def load_distribution_info(
     raise ServerError(f"Failed to find distribution info for project {project_name}")
 
 def is_vitualenv_project(
-    venv_path: Optional[pathlib.Path] = None,
-    pkg_path: Optional[pathlib.Path] = None,
+    venv_path: pathlib.Path | None = None,
+    pkg_path: pathlib.Path | None = None,
     project_name: str = "moonraker"
 ) -> bool:
     if venv_path is None:
@@ -189,5 +189,5 @@ def is_vitualenv_project(
 class PackageInfo:
     dist_info: Distribution
     metadata: PackageMetadata
-    release_info: Optional[Dict[str, Any]]
-    direct_url_data: Optional[Dict[str, Any]]
+    release_info: dict[str, Any] | None
+    direct_url_data: dict[str, Any] | None

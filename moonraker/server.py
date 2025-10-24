@@ -37,14 +37,13 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Optional,
-    Callable,
-    Coroutine,
     Dict,
     List,
     Tuple,
     Union,
     TypeVar,
 )
+from collections.abc import Callable, Coroutine
 if TYPE_CHECKING:
     from .common import WebRequest
     from .components.application import MoonrakerApp
@@ -53,7 +52,7 @@ if TYPE_CHECKING:
     from .components.file_manager.file_manager import FileManager
     from .components.machine import Machine
     from .components.extensions import ExtensionManager
-    FlexCallback = Callable[..., Optional[Coroutine]]
+    FlexCallback = Callable[..., Coroutine | None]
     _T = TypeVar("_T", Sentinel, Any)
 
 API_VERSION = (1, 5, 0)
@@ -70,17 +69,17 @@ class Server:
     error = ServerError
     config_error = confighelper.ConfigError
     def __init__(self,
-                 args: Dict[str, Any],
+                 args: dict[str, Any],
                  log_manager: LogManager,
                  event_loop: EventLoop
                  ) -> None:
         self.event_loop = event_loop
         self.log_manager = log_manager
         self.app_args = args
-        self.events: Dict[str, List[FlexCallback]] = {}
-        self.components: Dict[str, Any] = {}
-        self.failed_components: List[str] = []
-        self.warnings: Dict[str, str] = {}
+        self.events: dict[str, list[FlexCallback]] = {}
+        self.components: dict[str, Any] = {}
+        self.failed_components: list[str] = []
+        self.warnings: dict[str, str] = {}
         self._is_configured: bool = False
 
         self.config = config = self._parse_config()
@@ -130,7 +129,7 @@ class Server:
                                    "klippy_disconnected")
         self.register_notification("server:gcode_response")
 
-    def get_app_args(self) -> Dict[str, Any]:
+    def get_app_args(self) -> dict[str, Any]:
         return dict(self.app_args)
 
     def get_app_arg(self, key: str, default=Sentinel.MISSING) -> Any:
@@ -142,10 +141,10 @@ class Server:
     def get_event_loop(self) -> EventLoop:
         return self.event_loop
 
-    def get_api_version(self) -> Tuple[int, int, int]:
+    def get_api_version(self) -> tuple[int, int, int]:
         return API_VERSION
 
-    def get_warnings(self) -> List[str]:
+    def get_warnings(self) -> list[str]:
         return list(self.warnings.values())
 
     def is_running(self) -> bool:
@@ -180,7 +179,7 @@ class Server:
             signal.SIGTERM, self._handle_term_signal)
 
         # Perform asynchronous init after the event loop starts
-        optional_comps: List[Coroutine] = []
+        optional_comps: list[Coroutine] = []
         for name, component in self.components.items():
             if not hasattr(component, "component_init"):
                 continue
@@ -237,9 +236,9 @@ class Server:
     def add_warning(
         self,
         warning: str,
-        warn_id: Optional[str] = None,
+        warn_id: str | None = None,
         log: bool = True,
-        exc_info: Optional[BaseException] = None
+        exc_info: BaseException | None = None
     ) -> str:
         if warn_id is None:
             warn_id = str(id(warning))
@@ -291,7 +290,7 @@ class Server:
         config: confighelper.ConfigHelper,
         component_name: str,
         default: _T = Sentinel.MISSING
-    ) -> Union[_T, Any]:
+    ) -> _T | Any:
         if component_name in self.components:
             return self.components[component_name]
         if self.is_configured():
@@ -308,12 +307,12 @@ class Server:
             # Server components use the [server] section for configuration
             if component_name not in SERVER_COMPONENTS:
                 is_core = component_name in CORE_COMPONENTS
-                fallback: Optional[str] = "server" if is_core else None
+                fallback: str | None = "server" if is_core else None
                 config = config.getsection(component_name, fallback)
             load_func = getattr(module, "load_component")
             component = load_func(config)
         except Exception as e:
-            ucomps: List[str] = self.app_args.get("unofficial_components", [])
+            ucomps: list[str] = self.app_args.get("unofficial_components", [])
             if (
                 isinstance(e, ModuleNotFoundError) and
                 full_name != e.name and
@@ -364,7 +363,7 @@ class Server:
 
     def lookup_component(
         self, component_name: str, default: _T = Sentinel.MISSING
-    ) -> Union[_T, Any]:
+    ) -> _T | Any:
         component = self.components.get(component_name, default)
         if component is Sentinel.MISSING:
             raise ServerError(f"Component ({component_name}) not found")
@@ -381,7 +380,7 @@ class Server:
         self.components[component_name] = component
 
     def register_notification(
-        self, event_name: str, notify_name: Optional[str] = None
+        self, event_name: str, notify_name: str | None = None
     ) -> None:
         self.websocket_manager.register_notification(event_name, notify_name)
 
@@ -400,7 +399,7 @@ class Server:
         self, fut: asyncio.Future, event: str, *args
     ) -> None:
         events = self.events.get(event, [])
-        coroutines: List[Coroutine] = []
+        coroutines: list[Coroutine] = []
         for func in events:
             try:
                 ret = func(*args)
@@ -430,7 +429,7 @@ class Server:
     ) -> None:
         self.klippy_connection.register_remote_method(method_name, cb)
 
-    def get_host_info(self) -> Dict[str, Any]:
+    def get_host_info(self) -> dict[str, Any]:
         return {
             'hostname': socket.gethostname(),
             'address': self.host,
@@ -438,14 +437,14 @@ class Server:
             'ssl_port': self.ssl_port
         }
 
-    def get_klippy_info(self) -> Dict[str, Any]:
+    def get_klippy_info(self) -> dict[str, Any]:
         return self.klippy_connection.klippy_info
 
     def _handle_term_signal(self) -> None:
         logging.info("Exiting with signal SIGTERM")
         self.event_loop.register_callback(self._stop_server, "terminate")
 
-    def restart(self, delay: Optional[float] = None) -> None:
+    def restart(self, delay: float | None = None) -> None:
         if delay is None:
             self.event_loop.register_callback(self._stop_server)
         else:
@@ -507,9 +506,9 @@ class Server:
         self.event_loop.register_callback(self._stop_server)
         return "ok"
 
-    async def _handle_info_request(self, web_request: WebRequest) -> Dict[str, Any]:
+    async def _handle_info_request(self, web_request: WebRequest) -> dict[str, Any]:
         raw = web_request.get_boolean("raw", False)
-        file_manager: Optional[FileManager] = self.lookup_component(
+        file_manager: FileManager | None = self.lookup_component(
             'file_manager', None)
         reg_dirs = []
         if file_manager is not None:
@@ -535,8 +534,8 @@ class Server:
             'api_version_string': ".".join([str(v) for v in API_VERSION])
         }
 
-    async def _handle_config_request(self, web_request: WebRequest) -> Dict[str, Any]:
-        cfg_file_list: List[Dict[str, Any]] = []
+    async def _handle_config_request(self, web_request: WebRequest) -> dict[str, Any]:
+        cfg_file_list: list[dict[str, Any]] = []
         cfg_parent = pathlib.Path(
             self.app_args["config_file"]
         ).expanduser().resolve().parent
@@ -554,16 +553,16 @@ class Server:
         }
 
 async def launch_server(
-    log_manager: LogManager, app_args: Dict[str, Any]
-) -> Optional[int]:
+    log_manager: LogManager, app_args: dict[str, Any]
+) -> int | None:
     eventloop = EventLoop()
-    startup_warnings: List[str] = app_args["startup_warnings"]
+    startup_warnings: list[str] = app_args["startup_warnings"]
     try:
         server = Server(app_args, log_manager, eventloop)
         server.load_components()
     except confighelper.ConfigError as e:
         logging.exception("Server Config Error")
-        backup_cfg: Optional[str] = app_args["backup_config"]
+        backup_cfg: str | None = app_args["backup_config"]
         if app_args["is_backup_config"] or backup_cfg is None:
             return 1
         app_args["is_backup_config"] = True
@@ -660,7 +659,7 @@ def main(from_package: bool = True) -> None:
     )
     cmd_line_args = parser.parse_args()
 
-    startup_warnings: List[str] = []
+    startup_warnings: list[str] = []
     dp: str = cmd_line_args.datapath or "~/printer_data"
     data_path = pathlib.Path(dp).expanduser().resolve()
     if not data_path.exists():

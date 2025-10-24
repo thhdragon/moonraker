@@ -11,7 +11,7 @@ from typing import Any, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     def dumps(obj: Any) -> bytes: ...  # type: ignore # noqa: E704
-    def loads(data: Union[str, bytes, bytearray]) -> Any: ...  # noqa: E704
+    def loads(data: str | bytes | bytearray) -> Any: ...  # noqa: E704
 
 MSGSPEC_ENABLED = False
 _msgspc_var = os.getenv("MOONRAKER_ENABLE_MSGSPEC", "y").lower()

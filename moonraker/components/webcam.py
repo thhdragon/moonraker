@@ -42,7 +42,7 @@ CAM_FIELDS = {
 class WebcamManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.webcams: Dict[str, WebCam] = {}
+        self.webcams: dict[str, WebCam] = {}
         # parse user configured webcams
         prefix_sections = config.get_prefix_sections("webcam ")
         for section in prefix_sections:
@@ -71,8 +71,8 @@ class WebcamManager:
             self._set_default_host_ip(machine.public_ip)
         all_uids = [wc.uid for wc in self.webcams.values()]
         db: MoonrakerDatabase = self.server.lookup_component("database")
-        db_cams: Dict[str, Dict[str, Any]] = await db.get_item("webcams", default={})
-        ro_info: List[str] = []
+        db_cams: dict[str, dict[str, Any]] = await db.get_item("webcams", default={})
+        ro_info: list[str] = []
         # Process configured cams
         for uid, cam_data in db_cams.items():
             try:
@@ -114,16 +114,16 @@ class WebcamManager:
         WebCam.set_default_host(default_host)
         logging.info(f"Default public webcam address set: {default_host}")
 
-    def get_webcams(self) -> Dict[str, WebCam]:
+    def get_webcams(self) -> dict[str, WebCam]:
         return self.webcams
 
-    def _list_webcams(self) -> List[Dict[str, Any]]:
+    def _list_webcams(self) -> list[dict[str, Any]]:
         return [wc.as_dict() for wc in self.webcams.values()]
 
     def _save_cam(self, webcam: WebCam, save_local: bool = True) -> Future:
         if save_local:
             self.webcams[webcam.name] = webcam
-        cam_data: Dict[str, Any] = {}
+        cam_data: dict[str, Any] = {}
         for mfield, dbfield in CAM_FIELDS.items():
             cam_data[dbfield] = getattr(webcam, mfield)
         cam_data["location"] = webcam.location
@@ -153,7 +153,7 @@ class WebcamManager:
 
     def _lookup_camera(
         self, web_request: WebRequest, required: bool = True
-    ) -> Optional[WebCam]:
+    ) -> WebCam | None:
         args = web_request.get_args()
         if "uid" in args:
             return self.get_cam_by_uid(web_request.get_str("uid"))
@@ -163,10 +163,10 @@ class WebcamManager:
             raise self.server.error(f"Webcam {name} not found", 404)
         return webcam
 
-    async def _handle_webcam_request(self, web_request: WebRequest) -> Dict[str, Any]:
+    async def _handle_webcam_request(self, web_request: WebRequest) -> dict[str, Any]:
         req_type = web_request.get_request_type()
         webcam = self._lookup_camera(web_request, req_type != RequestType.POST)
-        webcam_data: Dict[str, Any] = {}
+        webcam_data: dict[str, Any] = {}
         if req_type == RequestType.GET:
             assert webcam is not None
             webcam_data = webcam.as_dict()
@@ -207,14 +207,14 @@ class WebcamManager:
             )
         return {"webcam": webcam_data}
 
-    async def _handle_webcam_list(self, web_request: WebRequest) -> Dict[str, Any]:
+    async def _handle_webcam_list(self, web_request: WebRequest) -> dict[str, Any]:
         return {"webcams": self._list_webcams()}
 
-    async def _handle_webcam_test(self, web_request: WebRequest) -> Dict[str, Any]:
+    async def _handle_webcam_test(self, web_request: WebRequest) -> dict[str, Any]:
         client: HttpClient = self.server.lookup_component("http_client")
         webcam = self._lookup_camera(web_request)
         assert webcam is not None
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "name": webcam.name,
             "snapshot_reachable": False
         }
@@ -234,7 +234,7 @@ class WebcamManager:
 
 class WebCam:
     _default_host: str = "http://127.0.0.1"
-    _protected_fields: List[str] = ["source", "uid"]
+    _protected_fields: list[str] = ["source", "uid"]
     def __init__(self, server: Server, **kwargs) -> None:
         self._server = server
         self.name: str = kwargs["name"]
@@ -251,7 +251,7 @@ class WebCam:
         self.flip_vertical: bool = kwargs["flip_vertical"]
         self.rotation: int = kwargs["rotation"]
         self.source: str = kwargs["source"]
-        self.extra_data: Dict[str, Any] = kwargs.get("extra_data", {})
+        self.extra_data: dict[str, Any] = kwargs.get("extra_data", {})
         self.uid: str = kwargs["uid"]
         if self.rotation not in [0, 90, 180, 270]:
             raise server.error(f"Invalid value for 'rotation': {self.rotation}")
@@ -281,14 +281,14 @@ class WebCam:
             return url
         return await self.convert_local(url)
 
-    def _get_local_ips(self) -> List[str]:
-        all_ips: List[str] = []
+    def _get_local_ips(self) -> list[str]:
+        all_ips: list[str] = []
         machine: Machine = self._server.lookup_component("machine")
         sys_info = machine.get_system_info()
         network = sys_info.get("network", {})
-        iface: Dict[str, Any]
+        iface: dict[str, Any]
         for iface in network.values():
-            addresses: List[Dict[str, Any]] = iface["ip_addresses"]
+            addresses: list[dict[str, Any]] = iface["ip_addresses"]
             for addr_info in addresses:
                 all_ips.append(addr_info["address"])
         return all_ips
@@ -311,7 +311,7 @@ class WebCam:
         if addr_match is None:
             return url
         addr = addr_match.group(1)
-        port: Optional[str] = addr_match.group(2)
+        port: str | None = addr_match.group(2)
         default_ports = {"http": "80", "https": "443", "rtsp": "554"}
         if port is None:
             if scheme not in default_ports:
@@ -441,7 +441,7 @@ class WebCam:
         )
 
     @classmethod
-    def from_database(cls, server: Server, cam_data: Dict[str, Any]) -> WebCam:
+    def from_database(cls, server: Server, cam_data: dict[str, Any]) -> WebCam:
         return cls(
             server,
             name=str(cam_data["name"]),

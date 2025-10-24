@@ -16,10 +16,10 @@ from mocks import MockComponent, MockWebsocket
 
 from typing import (
     TYPE_CHECKING,
-    AsyncIterator,
     Dict,
     Optional
 )
+from collections.abc import AsyncIterator
 
 if TYPE_CHECKING:
     from fixtures import HttpClient, WebsocketClient
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 MockArgs = namedtuple('MockArgs', ["logfile", "nologfile", "configfile"])
 
 @pytest.mark.run_paths(moonraker_conf="invalid_config.conf")
-def test_invalid_config(path_args: Dict[str, pathlib.Path]):
+def test_invalid_config(path_args: dict[str, pathlib.Path]):
     evtloop = EventLoop()
     args = {
         'config_file': str(path_args['moonraker.conf']),
@@ -37,7 +37,7 @@ def test_invalid_config(path_args: Dict[str, pathlib.Path]):
     with pytest.raises(ConfigError):
         Server(args, None, evtloop)
 
-def test_config_and_log_warnings(path_args: Dict[str, pathlib.Path]):
+def test_config_and_log_warnings(path_args: dict[str, pathlib.Path]):
     evtloop = EventLoop()
     args = {
         'config_file': str(path_args['moonraker.conf']),
@@ -67,7 +67,7 @@ async def test_unparsed_config_items(full_server: Server):
 @pytest.mark.run_paths(moonraker_log="moonraker.log")
 @pytest.mark.asyncio
 async def test_file_logger(base_server: Server,
-                           path_args: Dict[str, pathlib.Path]):
+                           path_args: dict[str, pathlib.Path]):
     log_path = path_args.get("moonraker.log", None)
     assert log_path is not None and log_path.exists()
 
@@ -82,7 +82,7 @@ class TestInstantiation:
         assert base_server.is_running() is False
 
     def test_app_args(self,
-                      path_args: Dict[str, pathlib.Path],
+                      path_args: dict[str, pathlib.Path],
                       base_server: Server):
         args = {
             'config_file': str(path_args['moonraker.conf']),
@@ -257,7 +257,7 @@ class TestServerInit:
 
     def test_config_backup(self,
                            full_server: Server,
-                           path_args: Dict[str, pathlib.Path]):
+                           path_args: dict[str, pathlib.Path]):
         cfg = path_args["config_path"].joinpath(".moonraker.conf.bkp")
         assert cfg.is_file()
 
@@ -360,7 +360,7 @@ async def test_register_remote_method_running(full_server: Server):
             "moonraker_test", lambda: None)
 
 @pytest.mark.usefixtures("event_loop")
-def test_main(path_args: Dict[str, pathlib.Path],
+def test_main(path_args: dict[str, pathlib.Path],
               monkeypatch: pytest.MonkeyPatch,
               caplog: pytest.LogCaptureFixture):
     tries = [1]
@@ -374,7 +374,7 @@ def test_main(path_args: Dict[str, pathlib.Path],
     cfg_path = path_args["moonraker.conf"]
     args = MockArgs("", True, str(cfg_path))
     monkeypatch.setattr(Server, "server_init", mock_init)
-    code: Optional[int] = None
+    code: int | None = None
     try:
         servermain(args)
     except SystemExit as e:
@@ -386,7 +386,7 @@ def test_main(path_args: Dict[str, pathlib.Path],
     )
 
 @pytest.mark.run_paths(moonraker_conf="invalid_config.conf")
-def test_main_config_error(path_args: Dict[str, pathlib.Path],
+def test_main_config_error(path_args: dict[str, pathlib.Path],
                            caplog: pytest.LogCaptureFixture):
     cfg_path = path_args["moonraker.conf"]
     args = MockArgs("", True, str(cfg_path))
@@ -399,7 +399,7 @@ def test_main_config_error(path_args: Dict[str, pathlib.Path],
 @pytest.mark.run_paths(moonraker_conf="invalid_config.conf",
                        moonraker_bkp=".moonraker.conf.bkp")
 @pytest.mark.usefixtures("event_loop")
-def test_main_restore_config(path_args: Dict[str, pathlib.Path],
+def test_main_restore_config(path_args: dict[str, pathlib.Path],
                              monkeypatch: pytest.MonkeyPatch,
                              caplog: pytest.LogCaptureFixture):
     def mock_init(self: Server):
@@ -409,7 +409,7 @@ def test_main_restore_config(path_args: Dict[str, pathlib.Path],
     cfg_path = path_args["moonraker.conf"]
     args = MockArgs("", True, str(cfg_path))
     monkeypatch.setattr(Server, "server_init", mock_init)
-    code: Optional[int] = None
+    code: int | None = None
     try:
         servermain(args)
     except SystemExit as e:

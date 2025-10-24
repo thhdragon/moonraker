@@ -46,7 +46,7 @@ class OctoPrintCompat:
         self.enable_ufp: bool = config.getboolean('enable_ufp', True)
 
         # Get webcam settings from config
-        self.webcam: Dict[str, Any] = {
+        self.webcam: dict[str, Any] = {
             'flipH': config.getboolean('flip_h', False),
             'flipV': config.getboolean('flip_v', False),
             'rotate90': config.getboolean('rotate_90', False),
@@ -56,8 +56,8 @@ class OctoPrintCompat:
 
         # Local variables
         self.klippy_apis: APIComp = self.server.lookup_component('klippy_apis')
-        self.heaters: Dict[str, Dict[str, Any]] = {}
-        self.last_print_stats: Dict[str, Any] = {}
+        self.heaters: dict[str, dict[str, Any]] = {}
+        self.last_print_stats: dict[str, Any] = {}
 
         # Register status update event
         self.server.register_event_handler(
@@ -131,22 +131,22 @@ class OctoPrintCompat:
         self.heaters = {}
         # Fetch heaters
         try:
-            result: Dict[str, Any]
-            sensors: List[str]
+            result: dict[str, Any]
+            sensors: list[str]
             result = await self.klippy_apis.query_objects({'heaters': None})
             sensors = result.get('heaters', {}).get('available_sensors', [])
         except self.server.error as e:
             logging.info(f'Error Configuring heaters: {e}')
             sensors = []
         # subscribe objects
-        sub: Dict[str, Any] = {s: None for s in sensors}
+        sub: dict[str, Any] = {s: None for s in sensors}
         sub['print_stats'] = None
         result = await self.klippy_apis.subscribe_objects(sub)
         self.last_print_stats = result.get('print_stats', {})
         if sensors:
             self.heaters = {name: result.get(name, {}) for name in sensors}
 
-    def _handle_status_update(self, status: Dict[str, Any]) -> None:
+    def _handle_status_update(self, status: dict[str, Any]) -> None:
         if 'print_stats' in status:
             self.last_print_stats.update(status['print_stats'])
         for heater_name, data in self.heaters.items():
@@ -167,8 +167,8 @@ class OctoPrintCompat:
             'complete': 'Operational'
         }.get(self.last_print_stats.get('state', 'standby'), 'Error')
 
-    def printer_temps(self) -> Dict[str, Any]:
-        temps: Dict[str, Any] = {}
+    def printer_temps(self) -> dict[str, Any]:
+        temps: dict[str, Any] = {}
         for heater, data in self.heaters.items():
             name = 'bed'
             if heater.startswith('extruder'):
@@ -188,7 +188,7 @@ class OctoPrintCompat:
 
     async def _get_version(self,
                            web_request: WebRequest
-                           ) -> Dict[str, str]:
+                           ) -> dict[str, str]:
         """
         Version information
         """
@@ -200,7 +200,7 @@ class OctoPrintCompat:
 
     async def _get_server(self,
                           web_request: WebRequest
-                          ) -> Dict[str, Any]:
+                          ) -> dict[str, Any]:
         """
         Server status
         """
@@ -213,7 +213,7 @@ class OctoPrintCompat:
 
     async def _post_login_user(self,
                                web_request: WebRequest
-                               ) -> Dict[str, Any]:
+                               ) -> dict[str, Any]:
         """
         Confirm session login.
 
@@ -234,7 +234,7 @@ class OctoPrintCompat:
 
     async def _get_settings(self,
                             web_request: WebRequest
-                            ) -> Dict[str, Any]:
+                            ) -> dict[str, Any]:
         """
         Used to parse OctoPrint capabilities
         """
@@ -263,7 +263,7 @@ class OctoPrintCompat:
 
     async def _get_job(self,
                        web_request: WebRequest
-                       ) -> Dict[str, Any]:
+                       ) -> dict[str, Any]:
         """
         Get current job status
         """
@@ -286,7 +286,7 @@ class OctoPrintCompat:
 
     async def _get_printer(self,
                            web_request: WebRequest
-                           ) -> Dict[str, Any]:
+                           ) -> dict[str, Any]:
         """
         Get Printer status
         """
@@ -310,11 +310,11 @@ class OctoPrintCompat:
 
     async def _post_command(self,
                             web_request: WebRequest
-                            ) -> Dict:
+                            ) -> dict:
         """
         Request to run some gcode command
         """
-        commands: List[str] = web_request.get('commands', [])
+        commands: list[str] = web_request.get('commands', [])
         for command in commands:
             logging.info(f'Executing GCode: {command}')
             try:
@@ -327,7 +327,7 @@ class OctoPrintCompat:
 
     async def _get_printerprofiles(self,
                                    web_request: WebRequest
-                                   ) -> Dict[str, Any]:
+                                   ) -> dict[str, Any]:
         """
         Get Printer profiles
         """

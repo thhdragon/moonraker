@@ -36,7 +36,7 @@ NULL_DESCRIPTIONS = [
 def read_item(parent: pathlib.Path, filename: str) -> str:
     return parent.joinpath(filename).read_text().strip()
 
-def find_usb_folder(usb_path: pathlib.Path) -> Optional[str]:
+def find_usb_folder(usb_path: pathlib.Path) -> str | None:
     # Find the sysfs usb folder from a child folder
     while usb_path.is_dir() and usb_path.name:
         dnum_file = usb_path.joinpath("devnum")
@@ -50,18 +50,18 @@ def find_usb_folder(usb_path: pathlib.Path) -> Optional[str]:
     return None
 
 class UsbIdData:
-    _usb_info_cache: Dict[str, str] = {
+    _usb_info_cache: dict[str, str] = {
         "DI:1d50": "OpenMoko, Inc",
         "DI:1d50:614e": "Klipper 3d-Printer Firmware",
         "DI:1d50:6177": "Katapult Bootloader (CDC_ACM)"
     }
 
-    def __init__(self, usb_id_path: Union[str, pathlib.Path]) -> None:
+    def __init__(self, usb_id_path: str | pathlib.Path) -> None:
         if isinstance(usb_id_path, str):
             usb_id_path = pathlib.Path(usb_id_path)
         self.usb_id_path = usb_id_path.expanduser().resolve()
         self.parsed: bool = False
-        self.usb_info: Dict[str, str] = {}
+        self.usb_info: dict[str, str] = {}
 
     def _is_hex(self, item: str) -> bool:
         try:
@@ -70,7 +70,7 @@ class UsbIdData:
             return False
         return True
 
-    def get_item(self, key: str, check_null: bool = False) -> Optional[str]:
+    def get_item(self, key: str, check_null: bool = False) -> str | None:
         item = self.usb_info.get(key, self._usb_info_cache.get(key))
         if item is None:
             if self.parsed:
@@ -123,7 +123,7 @@ class UsbIdData:
                     else:
                         break
 
-    def get_product_info(self, vendor_id: str, product_id: str) -> Dict[str, Any]:
+    def get_product_info(self, vendor_id: str, product_id: str) -> dict[str, Any]:
         vendor_name = self.get_item(f"DI:{vendor_id}")
         if vendor_name is None:
             return {
@@ -140,7 +140,7 @@ class UsbIdData:
 
     def get_class_info(
         self, cls_id: str, subcls_id: str, proto_id: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         cls_desc = self.get_item(f"C:{cls_id}")
         if cls_desc is None or cls_id == "00":
             return {
@@ -154,15 +154,15 @@ class UsbIdData:
             "protocol": self.get_item(f"C:{cls_id}:{subcls_id}:{proto_id}", True)
         }
 
-def find_usb_devices() -> List[Dict[str, Any]]:
+def find_usb_devices() -> list[dict[str, Any]]:
     dev_folder = pathlib.Path(USB_DEVICE_PATH)
     if not dev_folder.is_dir():
         return []
-    usb_devs: List[Dict[str, Any]] = []
+    usb_devs: list[dict[str, Any]] = []
     # Find sysfs usb device descriptors
     for dev_cfg_path in dev_folder.glob("*/bDeviceClass"):
         dev_folder = dev_cfg_path.parent
-        device_info: Dict[str, Any] = {}
+        device_info: dict[str, Any] = {}
         try:
             device_info["device_num"] = int(read_item(dev_folder, "devnum"))
             device_info["bus_num"] = int(read_item(dev_folder, "busnum"))
@@ -184,10 +184,10 @@ def find_usb_devices() -> List[Dict[str, Any]]:
         usb_devs.append(device_info)
     return usb_devs
 
-def find_serial_devices() -> List[Dict[str, Any]]:
-    serial_devs: List[Dict[str, Any]] = []
-    devs_by_path: Dict[str, str] = {}
-    devs_by_id: Dict[str, str] = {}
+def find_serial_devices() -> list[dict[str, Any]]:
+    serial_devs: list[dict[str, Any]] = []
+    devs_by_path: dict[str, str] = {}
+    devs_by_id: dict[str, str] = {}
     by_path_dir = pathlib.Path(SER_BYPTH_PATH)
     by_id_dir = pathlib.Path(SER_BYID_PATH)
     dev_root_folder = pathlib.Path("/dev")
@@ -208,7 +208,7 @@ def find_serial_devices() -> List[Dict[str, Any]]:
         port_file = tty_path.joinpath("port")
         device_name = tty_path.name
         driver_name = device_folder.joinpath("driver").resolve().name
-        device_info: Dict[str, Any] = {
+        device_info: dict[str, Any] = {
             "device_type": "unknown",
             "device_path": str(dev_root_folder.joinpath(device_name)),
             "device_name": device_name,
@@ -229,7 +229,7 @@ def find_serial_devices() -> List[Dict[str, Any]]:
             device_info["device_type"] = "hardware_uart"
         else:
             usb_path = device_folder.resolve()
-            usb_location: Optional[str] = find_usb_folder(usb_path)
+            usb_location: str | None = find_usb_folder(usb_path)
             if usb_location is not None:
                 device_info["device_type"] = "usb"
                 device_info["usb_location"] = usb_location
@@ -347,9 +347,9 @@ def v4l2_fourcc(format: str) -> int:
         result |= (val << (8 * idx)) & 0xFF
     return result
 
-def _get_resolutions(fd: int, pixel_format: int) -> List[str]:
+def _get_resolutions(fd: int, pixel_format: int) -> list[str]:
     res_info = struct_v4l2_frmsizeenum()
-    result: List[str] = []
+    result: list[str] = []
     for idx in range(128):
         res_info.index = idx
         res_info.pixel_format = pixel_format
@@ -364,9 +364,9 @@ def _get_resolutions(fd: int, pixel_format: int) -> List[str]:
         result.append(f"{width}x{height}")
     return result
 
-def _get_modes(fd: int) -> List[Dict[str, Any]]:
+def _get_modes(fd: int) -> list[dict[str, Any]]:
     pix_info = struct_v4l2_fmtdesc()
-    result: List[Dict[str, Any]] = []
+    result: list[dict[str, Any]] = []
     for idx in range(128):
         pix_info.index = idx
         pix_info.type = V4L2_BUF_TYPE_VIDEO_CAPTURE
@@ -390,15 +390,15 @@ def _get_modes(fd: int) -> List[Dict[str, Any]]:
         )
     return result
 
-def find_video_devices() -> List[Dict[str, Any]]:
+def find_video_devices() -> list[dict[str, Any]]:
     v4lpath = pathlib.Path(V4L_DEVICE_PATH)
     if not v4lpath.is_dir():
         return []
     v4l_by_path_dir = pathlib.Path(V4L_BYPTH_PATH)
     v4l_by_id_dir = pathlib.Path(V4L_BYID_PATH)
     dev_root_folder = pathlib.Path("/dev")
-    v4l_devs_by_path: Dict[str, str] = {}
-    v4l_devs_by_id: Dict[str, str] = {}
+    v4l_devs_by_path: dict[str, str] = {}
+    v4l_devs_by_id: dict[str, str] = {}
     if v4l_by_path_dir.is_dir():
         v4l_devs_by_path = {
             dev.resolve().name: str(dev) for dev in v4l_by_path_dir.iterdir()
@@ -407,7 +407,7 @@ def find_video_devices() -> List[Dict[str, Any]]:
         v4l_devs_by_id = {
             dev.resolve().name: str(dev) for dev in v4l_by_id_dir.iterdir()
         }
-    v4l_devices: List[Dict[str, Any]] = []
+    v4l_devices: list[dict[str, Any]] = []
     for v4ldev_path in v4lpath.iterdir():
         devfs_name = v4ldev_path.name
         devfs_path = dev_root_folder.joinpath(devfs_name)
@@ -432,7 +432,7 @@ def find_video_devices() -> List[Dict[str, Any]]:
         ver_tuple = tuple(
             [str((cap_info.version >> (i)) & 0xFF) for i in range(16, -1, -8)]
         )
-        video_device: Dict[str, Any] = {
+        video_device: dict[str, Any] = {
             "device_name": devfs_name,
             "device_path": str(devfs_path),
             "camera_name": cap_info.card.decode(),
@@ -456,7 +456,7 @@ def find_video_devices() -> List[Dict[str, Any]]:
                 video_device["usb_location"] = usb_location
         v4l_devices.append(video_device)
 
-    def idx_sorter(item: Dict[str, Any]) -> int:
+    def idx_sorter(item: dict[str, Any]) -> int:
         try:
             return int(item["device_name"][5:])
         except ValueError:

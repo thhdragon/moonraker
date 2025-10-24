@@ -4,7 +4,6 @@ import pytest
 import hashlib
 import confighelper
 import shutil
-import time
 from moonraker.confighelper import ConfigError
 from moonraker.server import Server
 from moonraker.utils import ServerError
@@ -21,7 +20,7 @@ def config(base_server: Server) -> ConfigHelper:
 
 @pytest.fixture(scope="class")
 def test_config(config: ConfigHelper,
-                path_args: Dict[str, pathlib.Path]
+                path_args: dict[str, pathlib.Path]
                 ) -> ConfigHelper:
     assets = path_args['asset_path']
     sup_cfg_path = assets.joinpath("moonraker/supplemental.conf")
@@ -71,7 +70,7 @@ class TestConfigGeneric:
 
     def test_get_options(self,
                          config: ConfigHelper,
-                         path_args: Dict[str, pathlib.Path]):
+                         path_args: dict[str, pathlib.Path]):
         expected = {
             "host": "0.0.0.0",
             "port": "7010",
@@ -95,7 +94,7 @@ def test_missing_supplemental_config(config: ConfigHelper):
         config.read_supplemental_config(no_file)
 
 def test_error_supplemental_config(config: ConfigHelper,
-                                   path_args: Dict[str, pathlib.Path]):
+                                   path_args: dict[str, pathlib.Path]):
     assets = path_args["asset_path"]
     invalid_cfg = assets.joinpath("moonraker/invalid_config.conf")
     if not invalid_cfg.exists():
@@ -124,7 +123,7 @@ class TestGetString:
         server = test_config.get_server()
         test_config.get("test_string", deprecate=True)
         expected = (
-            f"[test_options]: Option 'test_string' is "
+            "[test_options]: Option 'test_string' is "
             "deprecated, see the configuration documention "
             "at https://moonraker.readthedocs.io/en/latest/configuration"
         )
@@ -167,7 +166,7 @@ class TestGetInt:
         server = test_config.get_server()
         test_config.getint("test_int", deprecate=True)
         expected = (
-            f"[test_options]: Option 'test_int' is "
+            "[test_options]: Option 'test_int' is "
             "deprecated, see the configuration documention "
             "at https://moonraker.readthedocs.io/en/latest/configuration"
         )
@@ -210,7 +209,7 @@ class TestGetFloat:
         server = test_config.get_server()
         test_config.getfloat("test_float", deprecate=True)
         expected = (
-            f"[test_options]: Option 'test_float' is "
+            "[test_options]: Option 'test_float' is "
             "deprecated, see the configuration documention "
             "at https://moonraker.readthedocs.io/en/latest/configuration"
         )
@@ -232,7 +231,7 @@ class TestGetBoolean:
         server = test_config.get_server()
         test_config.getboolean("test_bool", deprecate=True)
         expected = (
-            f"[test_options]: Option 'test_bool' is "
+            "[test_options]: Option 'test_bool' is "
             "deprecated, see the configuration documention "
             "at https://moonraker.readthedocs.io/en/latest/configuration"
         )
@@ -267,7 +266,7 @@ class TestGetList:
         server = test_config.get_server()
         test_config.getlist("test_list", deprecate=True)
         expected = (
-            f"[test_options]: Option 'test_list' is "
+            "[test_options]: Option 'test_list' is "
             "deprecated, see the configuration documention "
             "at https://moonraker.readthedocs.io/en/latest/configuration"
         )
@@ -298,7 +297,7 @@ class TestGetDict:
         server = test_config.get_server()
         test_config.getdict("test_dict", deprecate=True)
         expected = (
-            f"[test_options]: Option 'test_dict' is "
+            "[test_options]: Option 'test_dict' is "
             "deprecated, see the configuration documention "
             "at https://moonraker.readthedocs.io/en/latest/configuration"
         )
@@ -344,7 +343,7 @@ class TestGetTemplate:
         server = test_config.get_server()
         test_config.gettemplate("test_template", deprecate=True)
         expected = (
-            f"[test_options]: Option 'test_template' is "
+            "[test_options]: Option 'test_template' is "
             "deprecated, see the configuration documention "
             "at https://moonraker.readthedocs.io/en/latest/configuration"
         )
@@ -418,7 +417,7 @@ class TestGetGpioOut:
         server = gpio_config.get_server()
         gpio_config.getgpioout("test_gpio", deprecate=True)
         expected = (
-            f"[test_options]: Option 'test_gpio' is "
+            "[test_options]: Option 'test_gpio' is "
             "deprecated, see the configuration documention "
             "at https://moonraker.readthedocs.io/en/latest/configuration"
         )
@@ -436,7 +435,7 @@ class TestGetConfiguration:
 
     def test_get_config_no_access(self,
                                   base_server: Server,
-                                  path_args: Dict[str, pathlib.Path]
+                                  path_args: dict[str, pathlib.Path]
                                   ):
         cfg_path = path_args["config_path"]
         test_cfg = cfg_path.joinpath("test.conf")
@@ -449,7 +448,7 @@ class TestGetConfiguration:
 
     def test_get_config_no_server(self,
                                   base_server: Server,
-                                  path_args: Dict[str, pathlib.Path]
+                                  path_args: dict[str, pathlib.Path]
                                   ):
         assets = path_args['asset_path']
         sup_cfg_path = assets.joinpath("moonraker/supplemental.conf")
@@ -469,7 +468,7 @@ class TestBackupConfig:
         assert result is None
 
     def test_backup_config_success(
-        self, path_args: Dict[str, pathlib.Path], config: ConfigHelper
+        self, path_args: dict[str, pathlib.Path], config: ConfigHelper
     ):
         cfg_path = path_args["moonraker.conf"]
         bkp_dest = cfg_path.parent.joinpath(f".{cfg_path.name}.bkp")
@@ -479,7 +478,7 @@ class TestBackupConfig:
         assert bkp_dest.is_file()
 
     def test_backup_skip(
-        self, path_args: Dict[str, pathlib.Path], config: ConfigHelper
+        self, path_args: dict[str, pathlib.Path], config: ConfigHelper
     ):
         cfg_path = path_args["moonraker.conf"]
         bkp_dest = cfg_path.parent.joinpath(f".{cfg_path.name}.bkp")
@@ -489,7 +488,7 @@ class TestBackupConfig:
         config.create_backup()
         assert stat == bkp_dest.stat()
 
-    def test_find_backup(self, path_args: Dict[str, pathlib.Path]):
+    def test_find_backup(self, path_args: dict[str, pathlib.Path]):
         cfg_path = path_args["moonraker.conf"]
         bkp_dest = cfg_path.parent.joinpath(f".{cfg_path.name}.bkp")
         bkp = confighelper.find_config_backup(str(cfg_path))

@@ -23,18 +23,16 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Optional,
-    Callable,
-    Coroutine,
     Type,
     TypeVar,
     Union,
     Dict,
     List,
-    Awaitable,
     ClassVar,
     Tuple,
     Generic
 )
+from collections.abc import Callable, Coroutine, Awaitable
 
 if TYPE_CHECKING:
     from .server import Server
@@ -56,7 +54,7 @@ ENDPOINT_PREFIXES = ["printer", "server", "machine", "access", "api", "debug"]
 
 class ExtendedFlag(Flag):
     @classmethod
-    def from_string(cls: Type[_F], flag_name: str) -> _F:
+    def from_string(cls: type[_F], flag_name: str) -> _F:
         str_name = flag_name.upper()
         for name, member in cls.__members__.items():
             if name == str_name:
@@ -64,7 +62,7 @@ class ExtendedFlag(Flag):
         raise ValueError(f"No flag member named {flag_name}")
 
     @classmethod
-    def from_string_list(cls: Type[_F], flag_list: List[str]) -> _F:
+    def from_string_list(cls: type[_F], flag_list: list[str]) -> _F:
         ret = cls(0)
         for flag in flag_list:
             flag = flag.upper()
@@ -72,7 +70,7 @@ class ExtendedFlag(Flag):
         return ret
 
     @classmethod
-    def all(cls: Type[_F]) -> _F:
+    def all(cls: type[_F]) -> _F:
         return ~cls(0)
 
     if sys.version_info < (3, 11):
@@ -172,11 +170,11 @@ class RenderableTemplate(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def render(self, context: Dict[str, Any] = {}) -> str:
+    def render(self, context: dict[str, Any] = {}) -> str:
         ...
 
     @abstractmethod
-    async def render_async(self, context: Dict[str, Any] = {}) -> str:
+    async def render_async(self, context: dict[str, Any] = {}) -> str:
         ...
 
 @dataclasses.dataclass
@@ -186,26 +184,26 @@ class UserInfo:
     created_on: float = dataclasses.field(default_factory=time.time)
     salt: str = ""
     source: str = "moonraker"
-    jwt_secret: Optional[str] = None
-    jwk_id: Optional[str] = None
-    groups: List[str] = dataclasses.field(default_factory=lambda: ["admin"])
+    jwt_secret: str | None = None
+    jwk_id: str | None = None
+    groups: list[str] = dataclasses.field(default_factory=lambda: ["admin"])
 
-    def as_tuple(self) -> Tuple[Any, ...]:
+    def as_tuple(self) -> tuple[Any, ...]:
         return dataclasses.astuple(self)
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
 
 @dataclasses.dataclass(frozen=True)
 class APIDefinition:
     endpoint: str
     http_path: str
-    rpc_methods: List[str]
+    rpc_methods: list[str]
     request_types: RequestType
     transports: TransportType
     callback: Callable[[WebRequest], Coroutine]
     auth_required: bool
-    _cache: ClassVar[Dict[str, APIDefinition]] = {}
+    _cache: ClassVar[dict[str, APIDefinition]] = {}
 
     def __str__(self) -> str:
         tprt_str = "|".join([tprt.name for tprt in self.transports if tprt.name])
@@ -221,11 +219,11 @@ class APIDefinition:
 
     def request(
         self,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         request_type: RequestType,
-        transport: Optional[APITransport] = None,
-        ip_addr: Optional[IPAddress] = None,
-        user: Optional[UserInfo] = None
+        transport: APITransport | None = None,
+        ip_addr: IPAddress | None = None,
+        user: UserInfo | None = None
     ) -> Coroutine:
         return self.callback(
             WebRequest(self.endpoint, args, request_type, transport, ip_addr, user)
@@ -235,16 +233,16 @@ class APIDefinition:
     def need_object_parser(self) -> bool:
         return self.endpoint.startswith("objects/")
 
-    def rpc_items(self) -> zip[Tuple[RequestType, str]]:
+    def rpc_items(self) -> zip[tuple[RequestType, str]]:
         return zip(self.request_types, self.rpc_methods)
 
     @classmethod
     def create(
         cls,
         endpoint: str,
-        request_types: Union[List[str], RequestType],
+        request_types: list[str] | RequestType,
         callback: Callable[[WebRequest], Coroutine],
-        transports: Union[List[str], TransportType] = TransportType.all(),
+        transports: list[str] | TransportType = TransportType.all(),
         auth_required: bool = True,
         is_remote: bool = False
     ) -> APIDefinition:
@@ -266,7 +264,7 @@ class APIDefinition:
                     f"Invalid endpoint name '{endpoint}', must start with one of "
                     f"the following: {prefixes}"
                 )
-        rpc_methods: List[str] = []
+        rpc_methods: list[str] = []
         if is_remote:
             # Request Types have no meaning for remote requests.  Therefore
             # both GET and POST http requests are accepted.  JRPC requests do
@@ -297,11 +295,11 @@ class APIDefinition:
         return api_def
 
     @classmethod
-    def pop_cached_def(cls, endpoint: str) -> Optional[APIDefinition]:
+    def pop_cached_def(cls, endpoint: str) -> APIDefinition | None:
         return cls._cache.pop(endpoint, None)
 
     @classmethod
-    def get_cache(cls) -> Dict[str, APIDefinition]:
+    def get_cache(cls) -> dict[str, APIDefinition]:
         return cls._cache
 
     @classmethod
@@ -314,20 +312,20 @@ class APITransport:
         return TransportType.INTERNAL
 
     @property
-    def user_info(self) -> Optional[UserInfo]:
+    def user_info(self) -> UserInfo | None:
         return None
 
     @property
-    def ip_addr(self) -> Optional[IPAddress]:
+    def ip_addr(self) -> IPAddress | None:
         return None
 
     def screen_rpc_request(
-        self, api_def: APIDefinition, req_type: RequestType, args: Dict[str, Any]
+        self, api_def: APIDefinition, req_type: RequestType, args: dict[str, Any]
     ) -> None:
         return None
 
     def send_status(
-        self, status: Dict[str, Any], eventtime: float
+        self, status: dict[str, Any], eventtime: float
     ) -> None:
         raise NotImplementedError
 
@@ -340,21 +338,21 @@ class BaseRemoteConnection(APITransport):
         self._uid = id(self)
         self.is_closed: bool = False
         self.queue_busy: bool = False
-        self.pending_responses: Dict[int, Future] = {}
-        self.message_buf: List[Union[bytes, str]] = []
+        self.pending_responses: dict[int, Future] = {}
+        self.message_buf: list[bytes | str] = []
         self._connected_time: float = 0.
         self._identified: bool = False
-        self._client_data: Dict[str, str] = {
+        self._client_data: dict[str, str] = {
             "name": "unknown",
             "version": "",
             "type": "",
             "url": ""
         }
         self._need_auth: bool = False
-        self._user_info: Optional[UserInfo] = None
+        self._user_info: UserInfo | None = None
 
     @property
-    def user_info(self) -> Optional[UserInfo]:
+    def user_info(self) -> UserInfo | None:
         return self._user_info
 
     @user_info.setter
@@ -383,11 +381,11 @@ class BaseRemoteConnection(APITransport):
         return self._identified
 
     @property
-    def client_data(self) -> Dict[str, str]:
+    def client_data(self) -> dict[str, str]:
         return self._client_data
 
     @client_data.setter
-    def client_data(self, data: Dict[str, str]) -> None:
+    def client_data(self, data: dict[str, str]) -> None:
         self._client_data = data
         self._identified = True
 
@@ -396,7 +394,7 @@ class BaseRemoteConnection(APITransport):
         return TransportType.WEBSOCKET
 
     def screen_rpc_request(
-        self, api_def: APIDefinition, req_type: RequestType, args: Dict[str, Any]
+        self, api_def: APIDefinition, req_type: RequestType, args: dict[str, Any]
     ) -> None:
         self.check_authenticated(api_def)
 
@@ -408,7 +406,7 @@ class BaseRemoteConnection(APITransport):
         except Exception:
             logging.exception("Websocket Command Error")
 
-    def queue_message(self, message: Union[bytes, str, Dict[str, Any]]):
+    def queue_message(self, message: bytes | str | dict[str, Any]):
         self.message_buf.append(
             jsonw.dumps(message) if isinstance(message, dict) else message
         )
@@ -419,8 +417,8 @@ class BaseRemoteConnection(APITransport):
 
     def authenticate(
         self,
-        token: Optional[str] = None,
-        api_key: Optional[str] = None
+        token: str | None = None,
+        api_key: str | None = None
     ) -> None:
         auth: AuthComp = self.server.lookup_component("authorization", None)
         if auth is None:
@@ -459,11 +457,11 @@ class BaseRemoteConnection(APITransport):
             await self.write_to_socket(msg)
         self.queue_busy = False
 
-    async def write_to_socket(self, message: Union[bytes, str]) -> None:
+    async def write_to_socket(self, message: bytes | str) -> None:
         raise NotImplementedError("Children must implement write_to_socket")
 
     def send_status(self,
-                    status: Dict[str, Any],
+                    status: dict[str, Any],
                     eventtime: float
                     ) -> None:
         if not status:
@@ -476,10 +474,10 @@ class BaseRemoteConnection(APITransport):
     def call_method_with_response(
         self,
         method: str,
-        params: Optional[Union[List, Dict[str, Any]]] = None,
+        params: list | dict[str, Any] | None = None,
     ) -> Awaitable:
         fut = self.eventloop.create_future()
-        msg: Dict[str, Any] = {
+        msg: dict[str, Any] = {
             'jsonrpc': "2.0",
             'method': method,
             'id': id(fut)
@@ -493,9 +491,9 @@ class BaseRemoteConnection(APITransport):
     def call_method(
         self,
         method: str,
-        params: Optional[Union[List, Dict[str, Any]]] = None
+        params: list | dict[str, Any] | None = None
     ) -> None:
-        msg: Dict[str, Any] = {
+        msg: dict[str, Any] = {
             "jsonrpc": "2.0",
             "method": method
         }
@@ -503,7 +501,7 @@ class BaseRemoteConnection(APITransport):
             msg["params"] = params
         self.queue_message(msg)
 
-    def send_notification(self, name: str, data: List) -> None:
+    def send_notification(self, name: str, data: list) -> None:
         self.wsm.notify_clients(name, data, [self._uid])
 
     def resolve_pending_response(
@@ -526,17 +524,17 @@ class WebRequest:
     def __init__(
         self,
         endpoint: str,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         request_type: RequestType = RequestType(0),
-        transport: Optional[APITransport] = None,
-        ip_addr: Optional[IPAddress] = None,
-        user: Optional[UserInfo] = None
+        transport: APITransport | None = None,
+        ip_addr: IPAddress | None = None,
+        user: UserInfo | None = None
     ) -> None:
         self.endpoint = endpoint
         self.args = args
         self.transport = transport
         self.request_type = request_type
-        self.ip_addr: Optional[IPAddress] = ip_addr
+        self.ip_addr: IPAddress | None = ip_addr
         self.current_user = user
 
     def get_endpoint(self) -> str:
@@ -548,28 +546,28 @@ class WebRequest:
     def get_action(self) -> str:
         return self.request_type.name or ""
 
-    def get_args(self) -> Dict[str, Any]:
+    def get_args(self) -> dict[str, Any]:
         return self.args
 
-    def get_subscribable(self) -> Optional[APITransport]:
+    def get_subscribable(self) -> APITransport | None:
         return self.transport
 
-    def get_client_connection(self) -> Optional[BaseRemoteConnection]:
+    def get_client_connection(self) -> BaseRemoteConnection | None:
         if isinstance(self.transport, BaseRemoteConnection):
             return self.transport
         return None
 
-    def get_ip_address(self) -> Optional[IPAddress]:
+    def get_ip_address(self) -> IPAddress | None:
         return self.ip_addr
 
-    def get_current_user(self) -> Optional[UserInfo]:
+    def get_current_user(self) -> UserInfo | None:
         return self.current_user
 
     def _get_converted_arg(self,
                            key: str,
-                           default: Union[Sentinel, _T],
-                           dtype: Type[_C]
-                           ) -> Union[_C, _T]:
+                           default: Sentinel | _T,
+                           dtype: type[_C]
+                           ) -> _C | _T:
         if key not in self.args:
             if default is Sentinel.MISSING:
                 raise ServerError(f"No data for argument: {key}")
@@ -593,8 +591,8 @@ class WebRequest:
 
     def get(self,
             key: str,
-            default: Union[Sentinel, _T] = Sentinel.MISSING
-            ) -> Union[_T, Any]:
+            default: Sentinel | _T = Sentinel.MISSING
+            ) -> _T | Any:
         val = self.args.get(key, default)
         if val is Sentinel.MISSING:
             raise ServerError(f"No data for argument: {key}")
@@ -602,36 +600,36 @@ class WebRequest:
 
     def get_str(self,
                 key: str,
-                default: Union[Sentinel, _T] = Sentinel.MISSING
-                ) -> Union[str, _T]:
+                default: Sentinel | _T = Sentinel.MISSING
+                ) -> str | _T:
         return self._get_converted_arg(key, default, str)
 
     def get_int(self,
                 key: str,
-                default: Union[Sentinel, _T] = Sentinel.MISSING
-                ) -> Union[int, _T]:
+                default: Sentinel | _T = Sentinel.MISSING
+                ) -> int | _T:
         return self._get_converted_arg(key, default, int)
 
     def get_float(self,
                   key: str,
-                  default: Union[Sentinel, _T] = Sentinel.MISSING
-                  ) -> Union[float, _T]:
+                  default: Sentinel | _T = Sentinel.MISSING
+                  ) -> float | _T:
         return self._get_converted_arg(key, default, float)
 
     def get_boolean(self,
                     key: str,
-                    default: Union[Sentinel, _T] = Sentinel.MISSING
-                    ) -> Union[bool, _T]:
+                    default: Sentinel | _T = Sentinel.MISSING
+                    ) -> bool | _T:
         return self._get_converted_arg(key, default, bool)
 
     def _parse_list(
         self,
         key: str,
         sep: str,
-        ltype: Type[_C],
-        count: Optional[int],
-        default: Union[Sentinel, _T]
-    ) -> Union[List[_C], _T]:
+        ltype: type[_C],
+        count: int | None,
+        default: Sentinel | _T
+    ) -> list[_C] | _T:
         if key not in self.args:
             if default is Sentinel.MISSING:
                 raise ServerError(f"No data for argument: {key}")
@@ -669,26 +667,26 @@ class WebRequest:
     def get_list(
         self,
         key: str,
-        default: Union[Sentinel, _T] = Sentinel.MISSING,
+        default: Sentinel | _T = Sentinel.MISSING,
         sep: str = ",",
-        count: Optional[int] = None
-    ) -> Union[_T, List[str]]:
+        count: int | None = None
+    ) -> _T | list[str]:
         return self._parse_list(key, sep, str, count, default)
 
 
 class JsonRPC:
     def __init__(self, server: Server) -> None:
-        self.methods: Dict[str, Tuple[RequestType, APIDefinition]] = {}
+        self.methods: dict[str, tuple[RequestType, APIDefinition]] = {}
         self.sanitize_response = False
         self.verbose = server.is_verbose_enabled()
 
-    def _log_request(self, rpc_obj: Dict[str, Any], trtype: TransportType) -> None:
+    def _log_request(self, rpc_obj: dict[str, Any], trtype: TransportType) -> None:
         if not self.verbose:
             return
         self.sanitize_response = False
         output = rpc_obj
-        method: Optional[str] = rpc_obj.get("method")
-        params: Dict[str, Any] = rpc_obj.get("params", {})
+        method: str | None = rpc_obj.get("method")
+        params: dict[str, Any] = rpc_obj.get("params", {})
         if isinstance(method, str):
             if (
                 method.startswith("access.") or
@@ -706,7 +704,7 @@ class JsonRPC:
         logging.debug(f"{trtype} Received::{jsonw.dumps(output).decode()}")
 
     def _log_response(
-        self, resp_obj: Optional[Dict[str, Any]], trtype: TransportType
+        self, resp_obj: dict[str, Any] | None, trtype: TransportType
     ) -> None:
         if not self.verbose:
             return
@@ -727,7 +725,7 @@ class JsonRPC:
     ) -> None:
         self.methods[name] = (request_type, api_definition)
 
-    def get_method(self, name: str) -> Optional[Tuple[RequestType, APIDefinition]]:
+    def get_method(self, name: str) -> tuple[RequestType, APIDefinition] | None:
         return self.methods.get(name, None)
 
     def remove_method(self, name: str) -> None:
@@ -735,12 +733,12 @@ class JsonRPC:
 
     async def dispatch(
         self,
-        data: Union[str, bytes],
+        data: str | bytes,
         transport: APITransport
-    ) -> Optional[bytes]:
+    ) -> bytes | None:
         transport_type = transport.transport_type
         try:
-            obj: Union[Dict[str, Any], List[dict]] = jsonw.loads(data)
+            obj: dict[str, Any] | list[dict] = jsonw.loads(data)
         except Exception:
             if isinstance(data, bytes):
                 data = data.decode()
@@ -749,7 +747,7 @@ class JsonRPC:
             err = self.build_error(-32700, "Parse error")
             return jsonw.dumps(err)
         if isinstance(obj, list):
-            responses: List[Dict[str, Any]] = []
+            responses: list[dict[str, Any]] = []
             for item in obj:
                 self._log_request(item, transport_type)
                 resp = await self.process_object(item, transport)
@@ -768,10 +766,10 @@ class JsonRPC:
 
     async def process_object(
         self,
-        obj: Dict[str, Any],
+        obj: dict[str, Any],
         transport: APITransport
-    ) -> Optional[Dict[str, Any]]:
-        req_id: Optional[int] = obj.get('id', None)
+    ) -> dict[str, Any] | None:
+        req_id: int | None = obj.get('id', None)
         rpc_version: str = obj.get('jsonrpc', "")
         if rpc_version != "2.0":
             return self.build_error(-32600, "Invalid Request", req_id)
@@ -795,7 +793,7 @@ class JsonRPC:
                 -32601, f"Method not found for transport {transport_type.name}",
                 req_id, method_name=method_name
             )
-        params: Dict[str, Any] = {}
+        params: dict[str, Any] = {}
         if 'params' in obj:
             params = obj['params']
             if not isinstance(params, dict):
@@ -807,7 +805,7 @@ class JsonRPC:
         )
 
     def process_response(
-        self, obj: Dict[str, Any], conn: APITransport
+        self, obj: dict[str, Any], conn: APITransport
     ) -> None:
         if not isinstance(conn, BaseRemoteConnection):
             logging.debug(f"RPC Response to non-socket request: {obj}")
@@ -830,10 +828,10 @@ class JsonRPC:
         method_name: str,
         request_type: RequestType,
         api_definition: APIDefinition,
-        req_id: Optional[int],
+        req_id: int | None,
         transport: APITransport,
-        params: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+        params: dict[str, Any]
+    ) -> dict[str, Any] | None:
         try:
             transport.screen_rpc_request(api_definition, request_type, params)
             result = await api_definition.request(
@@ -858,7 +856,7 @@ class JsonRPC:
         else:
             return self.build_result(result, req_id)
 
-    def build_result(self, result: Any, req_id: int) -> Dict[str, Any]:
+    def build_result(self, result: Any, req_id: int) -> dict[str, Any]:
         return {
             'jsonrpc': "2.0",
             'result': result,
@@ -869,10 +867,10 @@ class JsonRPC:
         self,
         code: int,
         msg: str,
-        req_id: Optional[int] = None,
+        req_id: int | None = None,
         exc: Exception | None = None,
         method_name: str = ""
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if method_name:
             method_name = f"Requested Method: {method_name}, "
         log_msg = f"JSON-RPC Request Error - {method_name}Code: {code}, Message: {msg}"
@@ -896,14 +894,14 @@ class FieldTracker(Generic[_T]):
     def __init__(
         self,
         value: _T = None,  # type: ignore
-        reset_callback: Optional[Callable[[], _T]] = None,
+        reset_callback: Callable[[], _T] | None = None,
         exclude_paused: bool = False,
     ) -> None:
         self.tracked_value = value
         self.exclude_paused = exclude_paused
-        self.reset_callback: Optional[Callable[[], _T]] = reset_callback
+        self.reset_callback: Callable[[], _T] | None = reset_callback
 
-    def set_reset_callback(self, cb: Optional[Callable[[], _T]]) -> None:
+    def set_reset_callback(self, cb: Callable[[], _T] | None) -> None:
         self.reset_callback = cb
 
     def set_exclude_paused(self, exclude: bool) -> None:
@@ -930,7 +928,7 @@ class BasicTracker(FieldTracker[Any]):
     def __init__(
         self,
         value: Any = None,
-        reset_callback: Optional[Callable[[], Any]] = None,
+        reset_callback: Callable[[], Any] | None = None,
         exclude_paused: bool = False
     ) -> None:
         super().__init__(value, reset_callback, exclude_paused)
@@ -950,12 +948,12 @@ class BasicTracker(FieldTracker[Any]):
 class DeltaTracker(FieldTracker[Union[int, float]]):
     def __init__(
         self,
-        value: Union[int, float] = 0,
-        reset_callback: Optional[Callable[[], Union[float, int]]] = None,
+        value: int | float = 0,
+        reset_callback: Callable[[], float | int] | None = None,
         exclude_paused: bool = False
     ) -> None:
         super().__init__(value, reset_callback, exclude_paused)
-        self.last_value: Union[float, int, None] = None
+        self.last_value: float | int | None = None
 
     def reset(self) -> None:
         self.tracked_value = 0
@@ -966,7 +964,7 @@ class DeltaTracker(FieldTracker[Union[int, float]]):
                 logging.info("DeltaTracker reset to invalid type")
                 self.last_value = None
 
-    def update(self, value: Union[int, float]) -> None:
+    def update(self, value: int | float) -> None:
         if not isinstance(value, (int, float)):
             return
         if self.history.tracking_enabled(self.exclude_paused):
@@ -981,8 +979,8 @@ class DeltaTracker(FieldTracker[Union[int, float]]):
 class CumulativeTracker(FieldTracker[Union[int, float]]):
     def __init__(
         self,
-        value: Union[int, float] = 0,
-        reset_callback: Optional[Callable[[], Union[float, int]]] = None,
+        value: int | float = 0,
+        reset_callback: Callable[[], float | int] | None = None,
         exclude_paused: bool = False
     ) -> None:
         super().__init__(value, reset_callback, exclude_paused)
@@ -996,7 +994,7 @@ class CumulativeTracker(FieldTracker[Union[int, float]]):
         else:
             self.tracked_value = 0
 
-    def update(self, value: Union[int, float]) -> None:
+    def update(self, value: int | float) -> None:
         if not isinstance(value, (int, float)):
             return
         if self.history.tracking_enabled(self.exclude_paused):
@@ -1008,8 +1006,8 @@ class CumulativeTracker(FieldTracker[Union[int, float]]):
 class AveragingTracker(CumulativeTracker):
     def __init__(
         self,
-        value: Union[int, float] = 0,
-        reset_callback: Optional[Callable[[], Union[float, int]]] = None,
+        value: int | float = 0,
+        reset_callback: Callable[[], float | int] | None = None,
         exclude_paused: bool = False
     ) -> None:
         super().__init__(value, reset_callback, exclude_paused)
@@ -1019,7 +1017,7 @@ class AveragingTracker(CumulativeTracker):
         super().reset()
         self.count = 0
 
-    def update(self, value: Union[int, float]) -> None:
+    def update(self, value: int | float) -> None:
         if not isinstance(value, (int, float)):
             return
         if self.history.tracking_enabled(self.exclude_paused):
@@ -1031,8 +1029,8 @@ class AveragingTracker(CumulativeTracker):
 class MaximumTracker(CumulativeTracker):
     def __init__(
         self,
-        value: Union[int, float] = 0,
-        reset_callback: Optional[Callable[[], Union[float, int]]] = None,
+        value: int | float = 0,
+        reset_callback: Callable[[], float | int] | None = None,
         exclude_paused: bool = False
     ) -> None:
         super().__init__(value, reset_callback, exclude_paused)
@@ -1050,7 +1048,7 @@ class MaximumTracker(CumulativeTracker):
         else:
             self.tracked_value = 0
 
-    def update(self, value: Union[float, int]) -> None:
+    def update(self, value: float | int) -> None:
         if not isinstance(value, (int, float)):
             return
         if self.history.tracking_enabled(self.exclude_paused):
@@ -1063,8 +1061,8 @@ class MaximumTracker(CumulativeTracker):
 class MinimumTracker(CumulativeTracker):
     def __init__(
         self,
-        value: Union[int, float] = 0,
-        reset_callback: Optional[Callable[[], Union[float, int]]] = None,
+        value: int | float = 0,
+        reset_callback: Callable[[], float | int] | None = None,
         exclude_paused: bool = False
     ) -> None:
         super().__init__(value, reset_callback, exclude_paused)
@@ -1082,7 +1080,7 @@ class MinimumTracker(CumulativeTracker):
         else:
             self.tracked_value = 0
 
-    def update(self, value: Union[float, int]) -> None:
+    def update(self, value: float | int) -> None:
         if not isinstance(value, (int, float)):
             return
         if self.history.tracking_enabled(self.exclude_paused):
@@ -1092,12 +1090,12 @@ class MinimumTracker(CumulativeTracker):
             else:
                 self.tracked_value = min(self.tracked_value, value)
 
-class CollectionTracker(FieldTracker[List[Any]]):
+class CollectionTracker(FieldTracker[list[Any]]):
     MAX_SIZE = 100
     def __init__(
         self,
-        value: List[Any] = [],
-        reset_callback: Optional[Callable[[], List[Any]]] = None,
+        value: list[Any] = [],
+        reset_callback: Callable[[], list[Any]] | None = None,
         exclude_paused: bool = False
     ) -> None:
         super().__init__(list(value), reset_callback, exclude_paused)
@@ -1133,7 +1131,7 @@ class TrackingStrategy(ExtendedEnum):
     COLLECT = 7
 
     def get_tracker(self, **kwargs) -> FieldTracker:
-        trackers: Dict[TrackingStrategy, Type[FieldTracker]] = {
+        trackers: dict[TrackingStrategy, type[FieldTracker]] = {
             TrackingStrategy.BASIC: BasicTracker,
             TrackingStrategy.DELTA: DeltaTracker,
             TrackingStrategy.ACCUMULATE: CumulativeTracker,
@@ -1152,12 +1150,12 @@ class HistoryFieldData:
         provider: str,
         desc: str,
         strategy: str,
-        units: Optional[str] = None,
-        reset_callback: Optional[Callable[[], _T]] = None,
+        units: str | None = None,
+        reset_callback: Callable[[], _T] | None = None,
         exclude_paused: bool = False,
         report_total: bool = False,
         report_maximum: bool = False,
-        precision: Optional[int] = None
+        precision: int | None = None
     ) -> None:
         self._name = field_name
         self._provider = provider
@@ -1189,7 +1187,7 @@ class HistoryFieldData:
             return value._provider == self._provider and value._name == self._name
         raise ValueError("Invalid type for comparison")
 
-    def get_configuration(self) -> Dict[str, Any]:
+    def get_configuration(self) -> dict[str, Any]:
         return {
             "field": self._name,
             "provider": self._provider,
@@ -1203,7 +1201,7 @@ class HistoryFieldData:
             "precision": self._precision
         }
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         val = self._tracker.get_tracked_value()
         if self._precision is not None and isinstance(val, float):
             val = round(val, self._precision)
@@ -1222,15 +1220,15 @@ class HistoryFieldData:
         )
 
     def get_totals(
-        self, last_totals: List[Dict[str, Any]], reset: bool = False
-    ) -> Dict[str, Any]:
+        self, last_totals: list[dict[str, Any]], reset: bool = False
+    ) -> dict[str, Any]:
         if not self.has_totals():
             return {}
         if reset:
-            maximum: Optional[float] = 0 if self._report_maximum else None
-            total: Optional[float] = 0 if self._report_total else None
+            maximum: float | None = 0 if self._report_maximum else None
+            total: float | None = 0 if self._report_total else None
         else:
-            cur_val: Union[float, int] = self._tracker.get_tracked_value()
+            cur_val: float | int = self._tracker.get_tracked_value()
             maximum = cur_val if self._report_maximum else None
             total = cur_val if self._report_total else None
             for obj in last_totals:
@@ -1256,8 +1254,8 @@ class SqlTableDefType(type):
     def __new__(
         metacls,
         clsname: str,
-        bases: Tuple[type, ...],
-        cls_attrs: Dict[str, Any]
+        bases: tuple[type, ...],
+        cls_attrs: dict[str, Any]
     ):
         if clsname != "SqlTableDefinition":
             for item in ("name", "prototype"):

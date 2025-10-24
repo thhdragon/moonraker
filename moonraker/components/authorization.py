@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from .ldap import MoonrakerLDAP
     IPAddr = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
     IPNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
-    OneshotToken = Tuple[IPAddr, Optional[UserInfo], asyncio.Handle]
+    OneshotToken = tuple[IPAddr, UserInfo | None, asyncio.Handle]
 
 # Helpers for base64url encoding and decoding
 def base64url_encode(data: bytes) -> bytes:
@@ -93,12 +93,12 @@ class UserSqlDefinition(SqlTableDefinition):
 
     def migrate(self, last_version: int, db_provider: DBProviderWrapper) -> None:
         if last_version == 0:
-            users: Dict[str, Dict[str, Any]]
+            users: dict[str, dict[str, Any]]
             users = db_provider.get_namespace("authorized_users")
             api_user = users.pop(API_USER, {})
             if not isinstance(api_user, dict):
                 api_user = {}
-            user_vals: List[Tuple[Any, ...]] = [
+            user_vals: list[tuple[Any, ...]] = [
                 UserInfo(
                     username=API_USER,
                     password=api_user.get("api_key", uuid.uuid4().hex),
@@ -129,8 +129,8 @@ class Authorization:
         self.default_source = config.get('default_source', "moonraker").lower()
         self.enable_api_key = config.getboolean('enable_api_key', True)
         self.max_logins = config.getint("max_login_attempts", None, above=0)
-        self.failed_logins: Dict[IPAddr, int] = {}
-        self.fqdn_cache: Dict[IPAddr, Dict[str, Any]] = {}
+        self.failed_logins: dict[IPAddr, int] = {}
+        self.fqdn_cache: dict[IPAddr, dict[str, Any]] = {}
         if self.default_source not in AUTH_SOURCES:
             self.server.add_warning(
                 "[authorization]: option 'default_source' - Invalid "
@@ -138,7 +138,7 @@ class Authorization:
                 "'moonraker'."
             )
             self.default_source = "moonraker"
-        self.ldap: Optional[MoonrakerLDAP] = None
+        self.ldap: MoonrakerLDAP | None = None
         if config.has_section("ldap"):
             self.ldap = self.server.load_component(config, "ldap", None)
         if self.default_source == "ldap" and self.ldap is None:
@@ -148,16 +148,16 @@ class Authorization:
             )
         database: DBComp = self.server.lookup_component('database')
         self.user_table = database.register_table(UserSqlDefinition())
-        self.users: Dict[str, UserInfo] = {}
+        self.users: dict[str, UserInfo] = {}
         self.api_key = uuid.uuid4().hex
         hi = self.server.get_host_info()
         self.issuer = f"http://{hi['hostname']}:{hi['port']}"
-        self.public_jwks: Dict[str, Dict[str, Any]] = {}
-        self.trusted_users: Dict[IPAddr, Dict[str, Any]] = {}
-        self.oneshot_tokens: Dict[str, OneshotToken] = {}
+        self.public_jwks: dict[str, dict[str, Any]] = {}
+        self.trusted_users: dict[IPAddr, dict[str, Any]] = {}
+        self.oneshot_tokens: dict[str, OneshotToken] = {}
 
         # Get allowed cors domains
-        self.cors_domains: List[str] = []
+        self.cors_domains: list[str] = []
         for domain in config.getlist('cors_domains', []):
             bad_match = re.search(r"^.+\.[^:]*\*", domain)
             if bad_match is not None:
@@ -178,9 +178,9 @@ class Authorization:
                     domain.replace(".", "\\.").replace("*", ".*"))
 
         # Get Trusted Clients
-        self.trusted_ips: List[IPAddr] = []
-        self.trusted_ranges: List[IPNetwork] = []
-        self.trusted_domains: List[str] = []
+        self.trusted_ips: list[IPAddr] = []
+        self.trusted_ranges: list[IPNetwork] = []
+        self.trusted_domains: list[str] = []
         for val in config.getlist('trusted_clients', []):
             # Check IP address
             try:
@@ -298,7 +298,7 @@ class Authorization:
     async def _sync_user_table(self) -> None:
         async with self.user_table as tx:
             await tx.execute(f"DELETE FROM {USER_TABLE}")
-            user_vals: List[Tuple[Any, ...]]
+            user_vals: list[tuple[Any, ...]]
             user_vals = [user.as_tuple() for user in self.users.values()]
             if not user_vals:
                 return
@@ -309,7 +309,7 @@ class Authorization:
 
     def _initialize_users(self) -> bool:
         need_sync = False
-        api_user: Optional[UserInfo] = self.users.get(API_USER, None)
+        api_user: UserInfo | None = self.users.get(API_USER, None)
         if api_user is None:
             need_sync = True
             self.users[API_USER] = UserInfo(username=API_USER, password=self.api_key)
@@ -347,7 +347,7 @@ class Authorization:
         user_info = web_request.get_current_user()
         return self.get_oneshot_token(ip, user_info)
 
-    async def _handle_login(self, web_request: WebRequest) -> Dict[str, Any]:
+    async def _handle_login(self, web_request: WebRequest) -> dict[str, Any]:
         ip = web_request.get_ip_address()
         if ip is not None and self.check_logins_maxed(ip):
             raise HTTPError(
@@ -366,7 +366,7 @@ class Authorization:
             self.failed_logins.pop(ip, None)
         return ret
 
-    async def _handle_logout(self, web_request: WebRequest) -> Dict[str, str]:
+    async def _handle_logout(self, web_request: WebRequest) -> dict[str, str]:
         user_info = web_request.get_current_user()
         if user_info is None:
             raise self.server.error("No user logged in")
@@ -374,7 +374,7 @@ class Authorization:
         if username in RESERVED_USERS:
             raise self.server.error(
                 f"Invalid log out request for user {username}")
-        jwk_id: Optional[str] = self.users[username].jwk_id
+        jwk_id: str | None = self.users[username].jwk_id
         self.users[username].jwt_secret = None
         self.users[username].jwk_id = None
         if jwk_id is not None:
@@ -390,12 +390,12 @@ class Authorization:
             "action": "user_logged_out"
         }
 
-    async def _handle_info_request(self, web_request: WebRequest) -> Dict[str, Any]:
+    async def _handle_info_request(self, web_request: WebRequest) -> dict[str, Any]:
         sources = ["moonraker"]
         if self.ldap is not None:
             sources.append("ldap")
         login_req = self.force_logins and len(self.users) > 1
-        request_trusted: Optional[bool] = None
+        request_trusted: bool | None = None
         user = web_request.get_current_user()
         req_ip = web_request.ip_addr
         if user is not None and user.username == TRUSTED_USER:
@@ -411,7 +411,7 @@ class Authorization:
 
     async def _handle_refresh_jwt(self,
                                   web_request: WebRequest
-                                  ) -> Dict[str, str]:
+                                  ) -> dict[str, str]:
         refresh_token: str = web_request.get_str('refresh_token')
         try:
             user_info = self.decode_jwt(refresh_token, token_type="refresh")
@@ -432,7 +432,7 @@ class Authorization:
 
     async def _handle_user_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         req_type = web_request.get_request_type()
         if req_type == RequestType.GET:
             user = web_request.get_current_user()
@@ -458,7 +458,7 @@ class Authorization:
 
     async def _handle_list_request(self,
                                    web_request: WebRequest
-                                   ) -> Dict[str, List[Dict[str, Any]]]:
+                                   ) -> dict[str, list[dict[str, Any]]]:
         user_list = []
         for user in self.users.values():
             if user.username == API_USER:
@@ -474,7 +474,7 @@ class Authorization:
 
     async def _handle_password_reset(self,
                                      web_request: WebRequest
-                                     ) -> Dict[str, str]:
+                                     ) -> dict[str, str]:
         password: str = web_request.get_str('password')
         new_pass: str = web_request.get_str('new_password')
         user_info = web_request.get_current_user()
@@ -503,7 +503,7 @@ class Authorization:
 
     async def _login_jwt_user(
         self, web_request: WebRequest, create: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         username: str = web_request.get_str('username')
         password: str = web_request.get_str('password')
         source: str = web_request.get_str(
@@ -560,7 +560,7 @@ class Authorization:
             action = "user_logged_in"
             if hashed_pass != user_info.password:
                 raise self.server.error("Invalid Password")
-        jwt_secret_hex: Optional[str] = user_info.jwt_secret
+        jwt_secret_hex: str | None = user_info.jwt_secret
         if jwt_secret_hex is None:
             private_key = Signer()
             jwk_id = base64url_encode(secrets.token_bytes()).decode()
@@ -595,7 +595,7 @@ class Authorization:
             'action': action
         }
 
-    async def _delete_jwt_user(self, web_request: WebRequest) -> Dict[str, str]:
+    async def _delete_jwt_user(self, web_request: WebRequest) -> dict[str, str]:
         username: str = web_request.get_str('username')
         current_user = web_request.get_current_user()
         if current_user is not None:
@@ -605,7 +605,7 @@ class Authorization:
         if username in RESERVED_USERS:
             raise self.server.error(
                 f"Invalid Request for reserved user {username}")
-        user_info: Optional[UserInfo] = self.users.get(username)
+        user_info: UserInfo | None = self.users.get(username)
         if user_info is None:
             raise self.server.error(f"No registered user: {username}")
         if user_info.jwk_id is not None:
@@ -655,13 +655,13 @@ class Authorization:
     ) -> UserInfo:
         message, sig = token.rsplit('.', maxsplit=1)
         enc_header, enc_payload = message.split('.')
-        header: Dict[str, Any] = jsonw.loads(base64url_decode(enc_header))
+        header: dict[str, Any] = jsonw.loads(base64url_decode(enc_header))
         sig_bytes = base64url_decode(sig)
 
         # verify header
         if header.get('typ') != "JWT" or header.get('alg') != "EdDSA":
             raise self.server.error("Invalid JWT header")
-        jwk_id: Optional[str] = header.get('kid')
+        jwk_id: str | None = header.get('kid')
         if jwk_id not in self.public_jwks:
             raise self.server.error("Invalid key ID")
 
@@ -670,7 +670,7 @@ class Authorization:
         public_key.verify(sig_bytes + message.encode())
 
         # validate claims
-        payload: Dict[str, Any] = jsonw.loads(base64url_decode(enc_payload))
+        payload: dict[str, Any] = jsonw.loads(base64url_decode(enc_payload))
         if payload['token_type'] != token_type:
             raise self.server.error(
                 f"JWT Token type mismatch: Expected {token_type}, "
@@ -683,7 +683,7 @@ class Authorization:
             raise self.server.error("JWT Expired", 401)
 
         # get user
-        user_info: Optional[UserInfo] = self.users.get(
+        user_info: UserInfo | None = self.users.get(
             payload.get('username', ""), None)
         if user_info is None:
             raise self.server.error("Unknown user", 401)
@@ -716,7 +716,7 @@ class Authorization:
                 " be corrupt", 500) from None
         return key
 
-    def _generate_public_jwk(self, private_key: Signer) -> Dict[str, Any]:
+    def _generate_public_jwk(self, private_key: Signer) -> dict[str, Any]:
         public_key = private_key.vk
         return {
             'x': base64url_encode(public_key).decode(),
@@ -725,7 +725,7 @@ class Authorization:
             'use': "sig"
         }
 
-    def _public_key_from_jwk(self, jwk: Dict[str, Any]) -> Verifier:
+    def _public_key_from_jwk(self, jwk: dict[str, Any]) -> Verifier:
         if jwk.get('kty') != "OKP":
             raise self.server.error("Not an Octet Key Pair")
         if jwk.get('crv') != "Ed25519":
@@ -753,7 +753,7 @@ class Authorization:
     def _oneshot_token_expire_handler(self, token):
         self.oneshot_tokens.pop(token, None)
 
-    def get_oneshot_token(self, ip_addr: IPAddr, user: Optional[UserInfo]) -> str:
+    def get_oneshot_token(self, ip_addr: IPAddr, user: UserInfo | None) -> str:
         token = base64.b32encode(os.urandom(20)).decode()
         event_loop = self.server.get_event_loop()
         hdl = event_loop.delay_callback(
@@ -763,8 +763,8 @@ class Authorization:
 
     def _check_json_web_token(
         self, request: HTTPServerRequest, required: bool = True
-    ) -> Optional[UserInfo]:
-        auth_token: Optional[str] = request.headers.get("Authorization")
+    ) -> UserInfo | None:
+        auth_token: str | None = request.headers.get("Authorization")
         if auth_token is None:
             auth_token = request.headers.get("X-Access-Token")
             if auth_token is None:
@@ -797,7 +797,7 @@ class Authorization:
                 try:
                     fut = eventloop.run_in_thread(socket.getfqdn, str(ip))
                     fqdn = await asyncio.wait_for(fut, 5.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logging.info("Call to socket.getfqdn() timed out")
                     return False
                 else:
@@ -810,8 +810,8 @@ class Authorization:
         return False
 
     async def _check_trusted_connection(
-        self, ip: Optional[IPAddr]
-    ) -> Optional[UserInfo]:
+        self, ip: IPAddr | None
+    ) -> UserInfo | None:
         if ip is not None:
             curtime = time.time()
             exp_time = curtime + TRUSTED_CONNECTION_TIMEOUT
@@ -829,8 +829,8 @@ class Authorization:
         return None
 
     def _check_oneshot_token(
-        self, token: str, cur_ip: Optional[IPAddr]
-    ) -> Optional[UserInfo]:
+        self, token: str, cur_ip: IPAddr | None
+    ) -> UserInfo | None:
         if token in self.oneshot_tokens:
             ip_addr, user, hdl = self.oneshot_tokens.pop(token)
             hdl.cancel()
@@ -849,7 +849,7 @@ class Authorization:
 
     async def authenticate_request(
         self, request: HTTPServerRequest, auth_required: bool = True
-    ) -> Optional[UserInfo]:
+    ) -> UserInfo | None:
         if request.method == "OPTIONS":
             return None
 
@@ -866,7 +866,7 @@ class Authorization:
             ip = None
 
         # Check oneshot access token
-        ost: Optional[List[bytes]] = request.arguments.get('token', None)
+        ost: list[bytes] | None = request.arguments.get('token', None)
         if ost is not None:
             ost_user = self._check_oneshot_token(ost[-1].decode(), ip)
             if ost_user is not None:
@@ -874,7 +874,7 @@ class Authorization:
 
         # Check API Key Header
         if self.enable_api_key:
-            key: Optional[str] = request.headers.get("X-Api-Key")
+            key: str | None = request.headers.get("X-Api-Key")
             if key and key == self.api_key:
                 return self.users[API_USER]
 
@@ -895,7 +895,7 @@ class Authorization:
 
         raise HTTPError(401, "Unauthorized")
 
-    async def check_cors(self, origin: Optional[str]) -> bool:
+    async def check_cors(self, origin: str | None) -> bool:
         if origin is None or not self.cors_domains:
             return False
         for regex in self.cors_domains:
@@ -928,7 +928,7 @@ class Authorization:
     def cors_enabled(self) -> bool:
         return self.cors_domains is not None
 
-    def get_api_key(self) -> Optional[str]:
+    def get_api_key(self) -> str | None:
         if not self.enable_api_key:
             return None
         return self.api_key

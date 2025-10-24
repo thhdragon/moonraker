@@ -37,7 +37,7 @@ class GitDeploy(AppDeploy):
         self._configure_dependencies(config)
         self._configure_managed_services(config)
         self.origin: str = config.get('origin')
-        self.moved_origin: Optional[str] = config.get('moved_origin', None)
+        self.moved_origin: str | None = config.get('moved_origin', None)
         self.primary_branch = config.get("primary_branch", "master")
         pinned_commit = config.get("pinned_commit", None)
         if pinned_commit is not None:
@@ -53,7 +53,7 @@ class GitDeploy(AppDeploy):
             self.primary_branch, self.channel, pinned_commit
         )
 
-    async def initialize(self) -> Dict[str, Any]:
+    async def initialize(self) -> dict[str, Any]:
         storage = await super().initialize()
         await self.repo.restore_state(storage)
         self._is_valid = storage.get("is_valid", self.repo.is_valid())
@@ -149,13 +149,13 @@ class GitDeploy(AppDeploy):
         self.notify_status(msg, is_complete=True)
         return ret
 
-    def get_update_status(self) -> Dict[str, Any]:
+    def get_update_status(self) -> dict[str, Any]:
         status = super().get_update_status()
         status.update(self.repo.get_repo_status(self.report_anomalies))
         status["name"] = self.name
         return status
 
-    def get_persistent_data(self) -> Dict[str, Any]:
+    def get_persistent_data(self) -> dict[str, Any]:
         storage = super().get_persistent_data()
         storage.update(self.repo.get_persistent_data())
         return storage
@@ -209,10 +209,10 @@ class GitRepo:
         src_path: pathlib.Path,
         alias: str,
         origin_url: str,
-        moved_origin_url: Optional[str],
+        moved_origin_url: str | None,
         primary_branch: str,
         channel: Channel,
-        pinned_commit: Optional[str]
+        pinned_commit: str | None
     ) -> None:
         self.server = cmd_helper.get_server()
         self.cmd_helper = cmd_helper
@@ -237,18 +237,18 @@ class GitRepo:
             sudo service {self.alias} start
             """
 
-        self.repo_warnings: List[str] = []
-        self.repo_anomalies: List[str] = []
-        self.init_evt: Optional[asyncio.Event] = None
+        self.repo_warnings: list[str] = []
+        self.repo_anomalies: list[str] = []
+        self.init_evt: asyncio.Event | None = None
         self.initialized: bool = False
         self.git_operation_lock = asyncio.Lock()
-        self.fetch_timeout_handle: Optional[asyncio.Handle] = None
+        self.fetch_timeout_handle: asyncio.Handle | None = None
         self.fetch_input_recd: bool = False
         self.channel = channel
         self.pinned_commit = pinned_commit
         self.is_shallow = False
 
-    async def restore_state(self, storage: Dict[str, Any]) -> None:
+    async def restore_state(self, storage: dict[str, Any]) -> None:
         self.valid_git_repo: bool = storage.get('repo_valid', False)
         self.git_owner: str = storage.get('git_owner', "?")
         self.git_repo_name: str = storage.get('git_repo_name', "?")
@@ -266,15 +266,15 @@ class GitRepo:
             'recovery_url',
             self.upstream_url if self.git_remote == "origin" else "?"
         )
-        self.branches: List[str] = storage.get('branches', [])
+        self.branches: list[str] = storage.get('branches', [])
         self.head_detached: bool = storage.get('head_detached', False)
-        self.git_messages: List[str] = storage.get('git_messages', [])
-        self.commits_behind: List[Dict[str, Any]] = storage.get('commits_behind', [])
+        self.git_messages: list[str] = storage.get('git_messages', [])
+        self.commits_behind: list[dict[str, Any]] = storage.get('commits_behind', [])
         self.commits_behind_count: int = storage.get('cbh_count', 0)
         self.diverged: bool = storage.get("diverged", False)
         self.repo_corrupt: bool = storage.get('corrupt', False)
-        self.modified_files: List[str] = storage.get("modified_files", [])
-        self.untracked_files: List[str] = storage.get("untracked_files", [])
+        self.modified_files: list[str] = storage.get("modified_files", [])
+        self.untracked_files: list[str] = storage.get("untracked_files", [])
         def_rbs = self.capture_state_for_rollback()
         self.rollback_commit: str = storage.get('rollback_commit', self.current_commit)
         self.rollback_branch: str = storage.get('rollback_branch', def_rbs["branch"])
@@ -285,7 +285,7 @@ class GitRepo:
             self.valid_git_repo = False
         self._check_warnings()
 
-    def get_persistent_data(self) -> Dict[str, Any]:
+    def get_persistent_data(self) -> dict[str, Any]:
         return {
             'repo_valid': self.valid_git_repo,
             'git_owner': self.git_owner,
@@ -408,7 +408,7 @@ class GitRepo:
                 return False
             await self._wait_for_lock_release()
             attempts = 3
-            resp: Optional[str] = None
+            resp: str | None = None
             while attempts:
                 self.git_messages.clear()
                 try:
@@ -770,7 +770,7 @@ class GitRepo:
                 raise self.server.error(
                     f"Git Repo {self.alias}: No valid git remote detected")
 
-    async def reset(self, ref: Optional[str] = None) -> None:
+    async def reset(self, ref: str | None = None) -> None:
         async with self.git_operation_lock:
             if ref is None:
                 if self.channel != Channel.DEV or self.pinned_commit is not None:
@@ -807,7 +807,7 @@ class GitRepo:
         async with self.git_operation_lock:
             await self._run_git_cmd_async(cmd)
 
-    async def list_branches(self) -> List[str]:
+    async def list_branches(self) -> list[str]:
         self._verify_repo()
         async with self.git_operation_lock:
             resp = await self._run_git_cmd("branch --list --no-color")
@@ -856,7 +856,7 @@ class GitRepo:
         pattern: str = "",
         get_all: bool = False,
         local_only: bool = False
-    ) -> Optional[str]:
+    ) -> str | None:
         local = "--local " if local_only else ""
         cmd = f"{local}--get-all" if get_all else f"{local}--get"
         args = f"{cmd} {key} '{pattern}'" if pattern else f"{cmd} {key}"
@@ -895,9 +895,9 @@ class GitRepo:
             raise self.server.error("Failed to run git-config")
 
 
-    async def checkout(self, branch: Optional[str] = None) -> None:
+    async def checkout(self, branch: str | None = None) -> None:
         self._verify_repo()
-        reset_commit: Optional[str] = None
+        reset_commit: str | None = None
         async with self.git_operation_lock:
             if branch is None:
                 # No branch is specified so we are checking out detached
@@ -965,7 +965,7 @@ class GitRepo:
         await self.reset(self.rollback_commit)
         return True
 
-    def capture_state_for_rollback(self) -> Dict[str, Any]:
+    def capture_state_for_rollback(self) -> dict[str, Any]:
         branch = self.git_branch
         if self.head_detached:
             valid = "?" not in (self.git_remote, self.git_branch)
@@ -976,14 +976,14 @@ class GitRepo:
             "version": self.current_version
         }
 
-    def set_rollback_state(self, rb_state: Optional[Dict[str, Any]]) -> None:
+    def set_rollback_state(self, rb_state: dict[str, Any] | None) -> None:
         if rb_state is None:
             rb_state = self.capture_state_for_rollback()
         self.rollback_commit = rb_state["commit"]
         self.rollback_branch = rb_state["branch"]
         self.rollback_version = rb_state["version"]
 
-    async def get_commits_behind(self) -> List[Dict[str, Any]]:
+    async def get_commits_behind(self) -> list[dict[str, Any]]:
         self._verify_repo()
         if self.is_current():
             return []
@@ -995,7 +995,7 @@ class GitRepo:
             resp = await self._run_git_cmd(
                 f"log {self.current_commit}..{ref} "
                 f"--format={GIT_LOG_FMT} --max-count={GIT_MAX_LOG_CNT}")
-            commits_behind: List[Dict[str, Any]] = []
+            commits_behind: list[dict[str, Any]] = []
             for log_entry in resp.split('\x1E'):
                 log_entry = log_entry.strip()
                 if not log_entry:
@@ -1006,7 +1006,7 @@ class GitRepo:
                 commits_behind.append(dict(cbh))  # type: ignore
             return commits_behind
 
-    async def get_tagged_commits(self, count: int = 100) -> Dict[str, str]:
+    async def get_tagged_commits(self, count: int = 100) -> dict[str, str]:
         self._verify_repo(check_remote=True)
         tip = f"{self.git_remote}/{self.git_branch}"
         cnt_arg = f"--count={count} " if count > 0 else ""
@@ -1015,7 +1015,7 @@ class GitRepo:
                 f"for-each-ref {cnt_arg}--sort='-creatordate' --contains=HEAD "
                 f"--merged={tip} --format={GIT_REF_FMT} 'refs/tags'"
             )
-            tagged_commits: Dict[str, str] = {}
+            tagged_commits: dict[str, str] = {}
             for line in resp.split('\n'):
                 parts = line.strip().split()
                 if len(parts) != 3 or parts[0] != "commit":
@@ -1026,7 +1026,7 @@ class GitRepo:
             # Return tagged commits as SHA keys mapped to tag values
             return tagged_commits
 
-    def get_repo_status(self, rpt_anomalies: bool) -> Dict[str, Any]:
+    def get_repo_status(self, rpt_anomalies: bool) -> dict[str, Any]:
         no_untrk_src = len(self.untracked_files) == 0
         anomalies = self.repo_anomalies if rpt_anomalies else []
         return {
@@ -1099,7 +1099,7 @@ class GitRepo:
             return "worktree"
         return "repo"
 
-    async def get_recovery_ref(self, upstream_ref: Optional[str] = None) -> str:
+    async def get_recovery_ref(self, upstream_ref: str | None = None) -> str:
         """ Fetch the best reference for a 'reset' recovery attempt
 
         Returns the ref to reset to for "soft" recovery requests.  The
@@ -1114,7 +1114,7 @@ class GitRepo:
                     f"Failed to find remote for primary branch '{self.primary_branch}'"
                 )
             upstream_ref = f"{remote}/{self.primary_branch}"
-        reset_commits: List[str] = []
+        reset_commits: list[str] = []
         if self.pinned_commit is not None:
             reset_commits.append(self.pinned_commit)
         if self.current_commit != "?":
@@ -1274,8 +1274,8 @@ class GitRepo:
         git_args: str,
         timeout: float = 20.,
         attempts: int = 5,
-        env: Optional[Dict[str, str]] = None,
-        corrupt_hdr: Optional[str] = None,
+        env: dict[str, str] | None = None,
+        corrupt_hdr: str | None = None,
         log_complete: bool = True
     ) -> str:
         shell_cmd = self.cmd_helper.get_shell_command()
@@ -1291,7 +1291,7 @@ class GitRepo:
         except shell_cmd.error as e:
             stdout = e.stdout.decode().strip()
             stderr = e.stderr.decode().strip()
-            msg_lines: List[str] = []
+            msg_lines: list[str] = []
             if stdout:
                 msg_lines.extend(stdout.split("\n"))
                 self.git_messages.append(stdout)

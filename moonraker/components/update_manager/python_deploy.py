@@ -66,7 +66,7 @@ class PythonDeploy(AppDeploy):
         self.upstream_sha: str = "?"
         self.rollback_version: PyVersion = self.current_version
         self.rollback_ref: str = "?"
-        self.warnings: List[str] = []
+        self.warnings: list[str] = []
         package_info = load_distribution_info(self.virtualenv, self.project_name)
         self._detect_update_source(package_info)
         self._update_current_version(package_info)
@@ -74,7 +74,7 @@ class PythonDeploy(AppDeploy):
         self.system_deps = self._parse_system_dependencies(package_info)
         self._is_valid = len(self.warnings) == 0
 
-    async def initialize(self) -> Dict[str, Any]:
+    async def initialize(self) -> dict[str, Any]:
         storage = await super().initialize()
         self.upstream_sha = storage.get("upstream_commit", "?")
         self.upstream_version = PyVersion(storage.get("upstream_version", "?"))
@@ -84,7 +84,7 @@ class PythonDeploy(AppDeploy):
             self._log_package_info()
         return storage
 
-    def get_persistent_data(self) -> Dict[str, Any]:
+    def get_persistent_data(self) -> dict[str, Any]:
         storage = super().get_persistent_data()
         storage["upstream_commit"] = self.upstream_sha
         storage["upstream_version"] = self.upstream_version.full_version
@@ -92,7 +92,7 @@ class PythonDeploy(AppDeploy):
         storage["rollback_version"] = self.rollback_version.full_version
         return storage
 
-    def get_update_status(self) -> Dict[str, Any]:
+    def get_update_status(self) -> dict[str, Any]:
         status = super().get_update_status()
         status.update({
             "detected_type": "python_package",
@@ -126,7 +126,7 @@ class PythonDeploy(AppDeploy):
             self._match_repo_url()
             return
         self.log_debug(f"Direct URL info: {direct_url_data}")
-        vcs_info: Dict[str, str] = direct_url_data.get("vcs_info", {})
+        vcs_info: dict[str, str] = direct_url_data.get("vcs_info", {})
         if vcs_info.get("vcs", "") != "git":
             self._add_warning(
                 "Package installed from source other than pypi or git: "
@@ -155,18 +155,18 @@ class PythonDeploy(AppDeploy):
         self.repo_name = url_match["proj"] or "?"
         return True
 
-    def _get_url(self, keys: List[str], package_info: PackageInfo) -> str:
+    def _get_url(self, keys: list[str], package_info: PackageInfo) -> str:
         release_info = package_info.release_info
         primary = keys[0]
         if release_info is not None:
-            urls: Dict[str, Any] = release_info.get("urls", {})
+            urls: dict[str, Any] = release_info.get("urls", {})
             for name, url in urls.items():
                 if name.lower() in keys:
                     return url
             self.log_debug(f"Unable to find {primary} url in release info")
         # Fallback to Metadata
         metadata = package_info.metadata
-        md_urls: Optional[List[str]] = metadata.get_all("Project-URL", None)
+        md_urls: list[str] | None = metadata.get_all("Project-URL", None)
         if md_urls is not None:
             for url in md_urls:
                 key, url = url.split(",", maxsplit=1)
@@ -204,7 +204,7 @@ class PythonDeploy(AppDeploy):
             self.git_version = self.current_version.convert_to_git()
         return True
 
-    def _parse_system_dependencies(self, package_info: PackageInfo) -> List[str]:
+    def _parse_system_dependencies(self, package_info: PackageInfo) -> list[str]:
         rinfo = package_info.release_info
         if rinfo is None:
             return []
@@ -260,17 +260,17 @@ class PythonDeploy(AppDeploy):
         pip_exec = pip_utils.AsyncPipExecutor(self.pip_cmd, self.server)
         await self._update_pip(pip_exec)
         resp = await pip_exec.call_pip_with_response(pip_args, timeout=1200.)
-        data: Dict[str, Any] = json_wrapper.loads(resp)
-        install_data: List[Dict[str, Any]] = data.get("install", [])
+        data: dict[str, Any] = json_wrapper.loads(resp)
+        install_data: list[dict[str, Any]] = data.get("install", [])
         if not install_data:
             # No update available
             self.upstream_version = self.current_version
             return
-        metadata: Dict[str, Any] = install_data[0].get("metadata", {})
+        metadata: dict[str, Any] = install_data[0].get("metadata", {})
         name: str = normalize_project_name(metadata.get("name", ""))
         if len(install_data) > 1 and name != norm_name:
             for inst in install_data[1:]:
-                md: Dict[str, Any] = inst.get("metadata", {})
+                md: dict[str, Any] = inst.get("metadata", {})
                 name = normalize_project_name(md.get("name", ""))
                 if name == norm_name:
                     metadata = md
@@ -297,7 +297,7 @@ class PythonDeploy(AppDeploy):
             if resp.status_code != 304 and resp.has_error():
                 self.log_info(f"Github Request Error - {resp.error}")
                 return
-            commit_list: List[Dict[str, Any]] = cast(list, resp.json())
+            commit_list: list[dict[str, Any]] = cast(list, resp.json())
             if not commit_list:
                 self.log_info("No commits found")
                 return
@@ -319,7 +319,7 @@ class PythonDeploy(AppDeploy):
             self.log_info(f"Github Request Error - {resp.error}")
             return
         release = resp.json()
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         if isinstance(release, list):
             if release:
                 result = release[0]
@@ -400,7 +400,7 @@ class PythonDeploy(AppDeploy):
         await self.update(rollback=True)
         return True
 
-    async def _update_sys_deps(self, prev_deps: List[str]) -> None:
+    async def _update_sys_deps(self, prev_deps: list[str]) -> None:
         new_deps = self.system_deps
         deps_diff = list(set(new_deps) - set(prev_deps))
         if new_deps or prev_deps:

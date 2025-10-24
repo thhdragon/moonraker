@@ -43,14 +43,14 @@ class SpoolManager:
         self._get_spoolman_urls(config)
         self.sync_rate_seconds = config.getint("sync_rate", default=5, minval=1)
         self.report_timer = self.eventloop.register_timer(self.report_extrusion)
-        self.pending_reports: Dict[int, float] = {}
-        self.spoolman_ws: Optional[WebSocketClientConnection] = None
-        self.connection_task: Optional[asyncio.Task] = None
-        self.spool_check_task: Optional[asyncio.Task] = None
+        self.pending_reports: dict[int, float] = {}
+        self.spoolman_ws: WebSocketClientConnection | None = None
+        self.connection_task: asyncio.Task | None = None
+        self.spool_check_task: asyncio.Task | None = None
         self.ws_connected: bool = False
         self.reconnect_delay: float = 2.
         self.is_closing: bool = False
-        self.spool_id: Optional[int] = None
+        self.spool_id: int | None = None
         self._error_logged: bool = False
         self._highest_epos: float = 0
         self._current_extruder: str = "extruder"
@@ -111,7 +111,7 @@ class SpoolManager:
             self._handle_status_request,
         )
 
-    def _on_history_reset(self) -> List[int]:
+    def _on_history_reset(self) -> list[int]:
         if self.spool_id is None:
             return []
         return [self.spool_id]
@@ -124,7 +124,7 @@ class SpoolManager:
 
     async def _connect_websocket(self) -> None:
         log_connect: bool = True
-        err_list: List[Exception] = []
+        err_list: list[Exception] = []
         while not self.is_closing:
             if log_connect:
                 logging.info(f"Connecting To Spoolman: {self.ws_url}")
@@ -174,7 +174,7 @@ class SpoolManager:
                 await asyncio.sleep(self.reconnect_delay)
 
     async def _read_messages(self) -> None:
-        message: Union[str, bytes, None]
+        message: str | bytes | None
         while self.spoolman_ws is not None:
             message = await self.spoolman_ws.read_message()
             if isinstance(message, str):
@@ -198,11 +198,11 @@ class SpoolManager:
                 break
 
     def _decode_message(self, message: str) -> None:
-        event: Dict[str, Any] = jsonw.loads(message)
+        event: dict[str, Any] = jsonw.loads(message)
         if event.get("resource") != "spool":
             return
         if self.spool_id is not None and event.get("type") == "deleted":
-            payload: Dict[str, Any] = event.get("payload", {})
+            payload: dict[str, Any] = event.get("payload", {})
             if payload.get("id") == self.spool_id:
                 self.pending_reports.pop(self.spool_id, None)
                 self.set_active_spool(None)
@@ -236,7 +236,7 @@ class SpoolManager:
         self._last_ping_received = self.eventloop.get_loop_time()
 
     async def _handle_klippy_ready(self) -> None:
-        result: Dict[str, Dict[str, Any]]
+        result: dict[str, dict[str, Any]]
         result = await self.klippy_apis.subscribe_objects(
             {"toolhead": ["position", "extruder"]}, self._handle_status_update, {}
         )
@@ -253,12 +253,12 @@ class SpoolManager:
     def _get_response_error(self, response: HttpResponse) -> str:
         err_msg = f"HTTP error: {response.status_code} {response.error}"
         with contextlib.suppress(Exception):
-            msg: Optional[str] = cast(dict, response.json())["message"]
+            msg: str | None = cast(dict, response.json())["message"]
             err_msg += f", Spoolman message: {msg}"
         return err_msg
 
-    def _handle_status_update(self, status: Dict[str, Any], _: float) -> None:
-        toolhead: Optional[Dict[str, Any]] = status.get("toolhead")
+    def _handle_status_update(self, status: dict[str, Any], _: float) -> None:
+        toolhead: dict[str, Any] | None = status.get("toolhead")
         if toolhead is None:
             return
         epos: float = toolhead.get("position", [0, 0, 0, self._highest_epos])[3]
@@ -277,7 +277,7 @@ class SpoolManager:
         else:
             self.pending_reports[spool_id] = used_length
 
-    def set_active_spool(self, spool_id: Union[int, None]) -> None:
+    def set_active_spool(self, spool_id: int | None) -> None:
         assert spool_id is None or isinstance(spool_id, int)
         if self.spool_id == spool_id:
             logging.info(f"Spool ID already set to: {spool_id}")
@@ -390,8 +390,8 @@ class SpoolManager:
                 "error": None
             }
 
-    async def _handle_status_request(self, web_request: WebRequest) -> Dict[str, Any]:
-        pending: List[Dict[str, Any]] = [
+    async def _handle_status_request(self, web_request: WebRequest) -> dict[str, Any]:
+        pending: list[dict[str, Any]] = [
             {"spool_id": sid, "filament_used": used} for sid, used in
             self.pending_reports.items()
         ]
@@ -417,7 +417,7 @@ class SpoolManager:
             return
         try:
             await asyncio.wait_for(self.connection_task, 2.)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
 def load_component(config: ConfigHelper) -> SpoolManager:

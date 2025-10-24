@@ -25,7 +25,6 @@ from ..common import RequestType, SqlTableDefinition
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     TypeVar,
     Tuple,
     Optional,
@@ -33,19 +32,18 @@ from typing import (
     Dict,
     List,
     Set,
-    Type,
-    Sequence,
-    Generator
+    Type
 )
+from collections.abc import Callable, Sequence, Generator
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper
     from ..common import WebRequest
     from .klippy_connection import KlippyConnection
     from lmdb import Environment as LmdbEnvironment
     from types import TracebackType
-    DBRecord = Optional[Union[int, float, bool, str, List[Any], Dict[str, Any]]]
+    DBRecord = Optional[int | float | bool | str | list[Any] | dict[str, Any]]
     DBType = DBRecord
-    SqlParams = Union[List[Any], Tuple[Any, ...], Dict[str, Any]]
+    SqlParams = Union[list[Any], tuple[Any, ...], dict[str, Any]]
     _T = TypeVar("_T")
 
 DATABASE_VERSION = 2
@@ -57,7 +55,7 @@ SCHEMA_TABLE = (
     else "sqlite_master"
 )
 
-RECORD_ENCODE_FUNCS: Dict[Type, Callable[..., bytes]] = {
+RECORD_ENCODE_FUNCS: dict[type, Callable[..., bytes]] = {
     int: lambda x: b"q" + struct.pack("q", x),
     float: lambda x: b"d" + struct.pack("d", x),
     bool: lambda x: b"?" + struct.pack("?", x),
@@ -67,7 +65,7 @@ RECORD_ENCODE_FUNCS: Dict[Type, Callable[..., bytes]] = {
     type(None): lambda x: b"\x00",
 }
 
-RECORD_DECODE_FUNCS: Dict[int, Callable[..., DBRecord]] = {
+RECORD_DECODE_FUNCS: dict[int, Callable[..., DBRecord]] = {
     ord("q"): lambda x: struct.unpack("q", x[1:])[0],
     ord("d"): lambda x: struct.unpack("d", x[1:])[0],
     ord("?"): lambda x: struct.unpack("?", x[1:])[0],
@@ -97,15 +95,15 @@ def decode_record(bvalue: bytes) -> DBRecord:
             f"Error decoding value {val}, format: {chr(fmt)}"
         )
 
-def getitem_with_default(item: Dict, field: Any) -> Any:
-    if not isinstance(item, Dict):
+def getitem_with_default(item: dict, field: Any) -> Any:
+    if not isinstance(item, dict):
         raise ServerError(
             f"Cannot reduce a value of type {type(item)}")
     if field not in item:
         item[field] = {}
     return item[field]
 
-def parse_namespace_key(key: Union[List[str], str]) -> List[str]:
+def parse_namespace_key(key: list[str] | str) -> list[str]:
     try:
         key_list = key if isinstance(key, list) else key.split('.')
     except Exception:
@@ -116,7 +114,7 @@ def parse_namespace_key(key: Union[List[str], str]) -> List[str]:
 
 def generate_lmdb_entries(
     db_folder: pathlib.Path
-) -> Generator[Tuple[str, str, bytes], Any, None]:
+) -> Generator[tuple[str, str, bytes], Any]:
     if not db_folder.joinpath("data.mdb").is_file():
         return
     MAX_LMDB_NAMESPACES = 100
@@ -148,7 +146,7 @@ def generate_lmdb_entries(
             return
         else:
             break
-    lmdb_namespaces: List[Tuple[str, object]] = []
+    lmdb_namespaces: list[tuple[str, object]] = []
     with lmdb_env.begin(buffers=True) as txn:
         # lookup existing namespaces
         with txn.cursor() as cursor:
@@ -201,8 +199,8 @@ class MoonrakerDatabase:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
         self.eventloop = self.server.get_event_loop()
-        self.registered_namespaces: Set[str] = set(["moonraker", "database"])
-        self.registered_tables: Set[str] = set([NAMESPACE_TABLE, REGISTRATION_TABLE])
+        self.registered_namespaces: set[str] = set(["moonraker", "database"])
+        self.registered_tables: set[str] = set([NAMESPACE_TABLE, REGISTRATION_TABLE])
         self.backup_lock = Lock()
         instance_id: str = self.server.get_app_args()["instance_uuid"]
         db_path = self._get_database_folder(config)
@@ -218,18 +216,18 @@ class MoonrakerDatabase:
                 )
         else:
             self.insert_item("moonraker", "instance_id", instance_id)
-        dbinfo: Dict[str, Any] = self.get_item("database", default={}).result()
+        dbinfo: dict[str, Any] = self.get_item("database", default={}).result()
         # Protected Namespaces have read-only API access.  Write access can
         # be granted by enabling the debug option.  Forbidden namespaces
         # have no API access.  This cannot be overridden.
-        ptns: Set[str] = set(dbinfo.get("protected_namespaces", []))
-        fbns: Set[str] = set(dbinfo.get("forbidden_namespaces", []))
-        self.protected_namespaces: Set[str] = ptns.union(["moonraker"])
-        self.forbidden_namespaces: Set[str] = fbns.union(["database"])
+        ptns: set[str] = set(dbinfo.get("protected_namespaces", []))
+        fbns: set[str] = set(dbinfo.get("forbidden_namespaces", []))
+        self.protected_namespaces: set[str] = ptns.union(["moonraker"])
+        self.forbidden_namespaces: set[str] = fbns.union(["database"])
         # Initialize Debug Counter
         config.getboolean("enable_database_debug", False, deprecate=True)
-        self.debug_counter: Dict[str, int] = {"get": 0, "post": 0, "delete": 0}
-        db_counter: Optional[Dict[str, int]] = dbinfo.get("debug_counter")
+        self.debug_counter: dict[str, int] = {"get": 0, "post": 0, "delete": 0}
+        db_counter: dict[str, int] | None = dbinfo.get("debug_counter")
         if isinstance(db_counter, dict):
             self.debug_counter.update(db_counter)
             self.server.add_log_rollover_item(
@@ -320,21 +318,21 @@ class MoonrakerDatabase:
     # used to access elements in the deserialized objects.
 
     def insert_item(
-        self, namespace: str, key: Union[List[str], str], value: DBType
+        self, namespace: str, key: list[str] | str, value: DBType
     ) -> Future[None]:
         return self.db_provider.execute_db_function(
             self.db_provider.insert_item, namespace, key, value
         )
 
     def update_item(
-        self, namespace: str, key: Union[List[str], str], value: DBType
+        self, namespace: str, key: list[str] | str, value: DBType
     ) -> Future[None]:
         return self.db_provider.execute_db_function(
             self.db_provider.update_item, namespace, key, value
         )
 
     def delete_item(
-        self, namespace: str, key: Union[List[str], str]
+        self, namespace: str, key: list[str] | str
     ) -> Future[Any]:
         return self.db_provider.execute_db_function(
             self.db_provider.delete_item, namespace, key
@@ -343,7 +341,7 @@ class MoonrakerDatabase:
     def get_item(
         self,
         namespace: str,
-        key: Optional[Union[List[str], str]] = None,
+        key: list[str] | str | None = None,
         default: Any = Sentinel.MISSING
     ) -> Future[Any]:
         return self.db_provider.execute_db_function(
@@ -356,29 +354,29 @@ class MoonrakerDatabase:
     #  a namespace in a single transaction.
 
     def insert_batch(
-        self, namespace: str, records: Dict[str, Any]
+        self, namespace: str, records: dict[str, Any]
     ) -> Future[None]:
         return self.db_provider.execute_db_function(
             self.db_provider.insert_batch, namespace, records
         )
 
     def move_batch(
-        self, namespace: str, source_keys: List[str], dest_keys: List[str]
+        self, namespace: str, source_keys: list[str], dest_keys: list[str]
     ) -> Future[None]:
         return self.db_provider.execute_db_function(
             self.db_provider.move_batch, namespace, source_keys, dest_keys
         )
 
     def delete_batch(
-        self, namespace: str, keys: List[str]
-    ) -> Future[Dict[str, Any]]:
+        self, namespace: str, keys: list[str]
+    ) -> Future[dict[str, Any]]:
         return self.db_provider.execute_db_function(
             self.db_provider.delete_batch, namespace, keys
         )
 
     def get_batch(
-        self, namespace: str, keys: List[str]
-    ) -> Future[Dict[str, Any]]:
+        self, namespace: str, keys: list[str]
+    ) -> Future[dict[str, Any]]:
         return self.db_provider.execute_db_function(
             self.db_provider.get_batch, namespace, keys
         )
@@ -386,7 +384,7 @@ class MoonrakerDatabase:
     # *** Namespace level operations***
 
     def update_namespace(
-        self, namespace: str, values: Dict[str, DBRecord]
+        self, namespace: str, values: dict[str, DBRecord]
     ) -> Future[None]:
         return self.db_provider.execute_db_function(
             self.db_provider.insert_batch, namespace, values
@@ -398,7 +396,7 @@ class MoonrakerDatabase:
         )
 
     def sync_namespace(
-        self, namespace: str, values: Dict[str, DBRecord]
+        self, namespace: str, values: dict[str, DBRecord]
     ) -> Future[None]:
         return self.db_provider.execute_db_function(
             self.db_provider.sync_namespace, namespace, values
@@ -409,23 +407,23 @@ class MoonrakerDatabase:
             self.db_provider.get_namespace_length, namespace
         )
 
-    def ns_keys(self, namespace: str) -> Future[List[str]]:
+    def ns_keys(self, namespace: str) -> Future[list[str]]:
         return self.db_provider.execute_db_function(
             self.db_provider.get_namespace_keys, namespace,
         )
 
-    def ns_values(self, namespace: str) -> Future[List[Any]]:
+    def ns_values(self, namespace: str) -> Future[list[Any]]:
         return self.db_provider.execute_db_function(
             self.db_provider.get_namespace_values, namespace
         )
 
-    def ns_items(self, namespace: str) -> Future[List[Tuple[str, Any]]]:
+    def ns_items(self, namespace: str) -> Future[list[tuple[str, Any]]]:
         return self.db_provider.execute_db_function(
             self.db_provider.get_namespace_items, namespace
         )
 
     def ns_contains(
-        self, namespace: str, key: Union[List[str], str]
+        self, namespace: str, key: list[str] | str
     ) -> Future[bool]:
         return self.db_provider.execute_db_function(
             self.db_provider.namespace_contains, namespace
@@ -462,7 +460,7 @@ class MoonrakerDatabase:
     ) -> Future[Any]:
         return self.db_provider.execute_db_function(callback)
 
-    def compact_database(self) -> Future[Dict[str, int]]:
+    def compact_database(self) -> Future[dict[str, int]]:
         return self.db_provider.execute_db_function(
             self.db_provider.compact_database
         )
@@ -472,7 +470,7 @@ class MoonrakerDatabase:
             self.db_provider.backup_database, bkp_path
         )
 
-    def restore_database(self, restore_path: pathlib.Path) -> Future[Dict[str, Any]]:
+    def restore_database(self, restore_path: pathlib.Path) -> Future[dict[str, Any]]:
         return self.db_provider.execute_db_function(
             self.db_provider.restore_database, restore_path
         )
@@ -538,14 +536,14 @@ class MoonrakerDatabase:
         self.db_provider.register_table(table_def)
         return SqlTableWrapper(self, table_def)
 
-    async def _handle_compact_request(self, web_request: WebRequest) -> Dict[str, int]:
+    async def _handle_compact_request(self, web_request: WebRequest) -> dict[str, int]:
         kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
         if kconn.is_printing():
             raise self.server.error("Cannot compact when Klipper is printing")
         async with self.backup_lock:
             return await self.compact_database()
 
-    async def _handle_backup_request(self, web_request: WebRequest) -> Dict[str, Any]:
+    async def _handle_backup_request(self, web_request: WebRequest) -> dict[str, Any]:
         async with self.backup_lock:
             request_type = web_request.get_request_type()
             if request_type == RequestType.POST:
@@ -577,7 +575,7 @@ class MoonrakerDatabase:
                 "backup_path": str(bkp_path)
             }
 
-    async def _handle_restore_request(self, web_request: WebRequest) -> Dict[str, Any]:
+    async def _handle_restore_request(self, web_request: WebRequest) -> dict[str, Any]:
         kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
         if kconn.is_printing():
             raise self.server.error("Cannot restore when Klipper is printing")
@@ -593,11 +591,11 @@ class MoonrakerDatabase:
 
     async def _handle_list_request(
         self, web_request: WebRequest
-    ) -> Dict[str, List[str]]:
+    ) -> dict[str, list[str]]:
         path = web_request.get_endpoint()
         ns_list = set(self.db_provider.namespaces)
         bkp_dir = self.get_backup_dir()
-        backups: List[str] = []
+        backups: list[str] = []
         if bkp_dir.is_dir():
             backups = [bkp.name for bkp in bkp_dir.iterdir() if bkp.is_file()]
         if not path.startswith("/debug/"):
@@ -613,7 +611,7 @@ class MoonrakerDatabase:
                 "tables": list(self.db_provider.tables)
             }
 
-    async def _handle_item_request(self, web_request: WebRequest) -> Dict[str, Any]:
+    async def _handle_item_request(self, web_request: WebRequest) -> dict[str, Any]:
         req_type = web_request.get_request_type()
         is_debug = web_request.get_endpoint().startswith("/debug/")
         namespace = web_request.get_str("namespace")
@@ -671,7 +669,7 @@ class MoonrakerDatabase:
         # Stop command thread
         await self.db_provider.stop()
 
-    async def _handle_table_request(self, web_request: WebRequest) -> Dict[str, Any]:
+    async def _handle_table_request(self, web_request: WebRequest) -> dict[str, Any]:
         table = web_request.get_str("table")
         if table not in self.db_provider.tables:
             raise self.server.error(f"Table name '{table}' does not exist", 404)
@@ -681,7 +679,7 @@ class MoonrakerDatabase:
             "rows": [dict(r) for r in await cur.fetchall()]
         }
 
-    async def _handle_row_request(self, web_request: WebRequest) -> Dict[str, Any]:
+    async def _handle_row_request(self, web_request: WebRequest) -> dict[str, Any]:
         req_type = web_request.get_request_type()
         table = web_request.get_str("table")
         if table not in self.db_provider.tables:
@@ -740,11 +738,11 @@ class SqliteProvider(Thread):
         super().__init__()
         self.server = config.get_server()
         self.asyncio_loop = self.server.get_event_loop().asyncio_loop
-        self._namespaces: Set[str] = set()
-        self._tables: Set[str] = set()
+        self._namespaces: set[str] = set()
+        self._tables: set[str] = set()
         self._db_path = db_path
         self.restored: bool = False
-        self.command_queue: Queue[Tuple[Future, Optional[Callable], Tuple[Any, ...]]]
+        self.command_queue: Queue[tuple[Future, Callable | None, tuple[Any, ...]]]
         self.command_queue = Queue()
         sqlite3.register_converter("record", decode_record)
         sqlite3.register_converter("pyjson", jsonw.loads)
@@ -758,11 +756,11 @@ class SqliteProvider(Thread):
         self.setup_database()
 
     @property
-    def namespaces(self) -> Set[str]:
+    def namespaces(self) -> set[str]:
         return self._namespaces
 
     @property
-    def tables(self) -> Set[str]:
+    def tables(self) -> set[str]:
         return self._tables
 
     def async_init(self) -> Future[str]:
@@ -887,7 +885,7 @@ class SqliteProvider(Thread):
             )
         self._tables.add(table_name)
 
-    def _lookup_registered_table(self, table_name: str) -> Tuple[str, int]:
+    def _lookup_registered_table(self, table_name: str) -> tuple[str, int]:
         cur = self.sync_conn.execute(
             f"SELECT prototype, version FROM {REGISTRATION_TABLE} "
             f"WHERE name = ?",
@@ -921,7 +919,7 @@ class SqliteProvider(Thread):
         conn: sqlite3.Connection,
         namespace: str,
         key: str,
-        default: Union[Sentinel, DBRecord] = Sentinel.MISSING
+        default: Sentinel | DBRecord = Sentinel.MISSING
     ) -> DBRecord:
         cur = conn.execute(
             f"SELECT value FROM {NAMESPACE_TABLE} WHERE namespace = ? and key = ?",
@@ -940,7 +938,7 @@ class SqliteProvider(Thread):
 
     def get_namespace(
         self, conn: sqlite3.Connection, namespace: str, must_exist: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if namespace not in self._namespaces:
             if not must_exist:
                 return {}
@@ -957,7 +955,7 @@ class SqliteProvider(Thread):
         conn: sqlite3.Connection,
         namespace: str,
         count: int = 1000
-    ) -> Generator[Dict[str, Any], Any, None]:
+    ) -> Generator[dict[str, Any], Any]:
         if self.is_alive():
             raise self.server.error("Cannot iterate a namespace asynchronously")
         if namespace not in self._namespaces:
@@ -989,7 +987,7 @@ class SqliteProvider(Thread):
                 self._namespaces.remove(namespace)
 
     def sync_namespace(
-        self, conn: sqlite3.Connection, namespace: str, values: Dict[str, DBRecord]
+        self, conn: sqlite3.Connection, namespace: str, values: dict[str, DBRecord]
     ) -> None:
         def generate_params():
             for key, val in values.items():
@@ -1009,7 +1007,7 @@ class SqliteProvider(Thread):
         )
         return cur.fetchone()[0]
 
-    def get_namespace_keys(self, conn: sqlite3.Connection, namespace: str) -> List[str]:
+    def get_namespace_keys(self, conn: sqlite3.Connection, namespace: str) -> list[str]:
         cur = conn.execute(
             f"SELECT key FROM {NAMESPACE_TABLE} WHERE namespace = ?",
             (namespace,)
@@ -1019,7 +1017,7 @@ class SqliteProvider(Thread):
 
     def get_namespace_values(
         self, conn: sqlite3.Connection, namespace: str
-    ) -> List[Any]:
+    ) -> list[Any]:
         cur = conn.execute(
             f"SELECT value FROM {NAMESPACE_TABLE} WHERE namespace = ?",
             (namespace,)
@@ -1029,7 +1027,7 @@ class SqliteProvider(Thread):
 
     def get_namespace_items(
         self, conn: sqlite3.Connection, namespace: str
-    ) -> List[Tuple[str, Any]]:
+    ) -> list[tuple[str, Any]]:
         cur = conn.execute(
             f"SELECT key, value FROM {NAMESPACE_TABLE} WHERE namespace = ?",
             (namespace,)
@@ -1038,7 +1036,7 @@ class SqliteProvider(Thread):
         return cur.fetchall()
 
     def namespace_contains(
-        self, conn: sqlite3.Connection, namespace: str, key: Union[List[str], str]
+        self, conn: sqlite3.Connection, namespace: str, key: list[str] | str
     ) -> bool:
         try:
             key_list = parse_namespace_key(key)
@@ -1059,7 +1057,7 @@ class SqliteProvider(Thread):
         self,
         conn: sqlite3.Connection,
         namespace: str,
-        key: Union[List[str], str],
+        key: list[str] | str,
         value: DBType
     ) -> None:
         key_list = parse_namespace_key(key)
@@ -1090,7 +1088,7 @@ class SqliteProvider(Thread):
         self,
         conn: sqlite3.Connection,
         namespace: str,
-        key: Union[List[str], str],
+        key: list[str] | str,
         value: DBType
     ) -> None:
         key_list = parse_namespace_key(key)
@@ -1103,7 +1101,7 @@ class SqliteProvider(Thread):
         else:
             try:
                 assert isinstance(record, dict)
-                item: Dict[str, Any] = reduce(
+                item: dict[str, Any] = reduce(
                     operator.getitem, key_list[1:-1], record
                 )
             except Exception:
@@ -1124,7 +1122,7 @@ class SqliteProvider(Thread):
             logging.info(f"Error updating key '{key}' in namespace '{namespace}'")
 
     def delete_item(
-        self, conn: sqlite3.Connection, namespace: str, key: Union[List[str], str]
+        self, conn: sqlite3.Connection, namespace: str, key: list[str] | str
     ) -> Any:
         key_list = parse_namespace_key(key)
         val = record = self._get_record(conn, namespace, key_list[0])
@@ -1132,7 +1130,7 @@ class SqliteProvider(Thread):
         if len(key_list) > 1:
             try:
                 assert isinstance(record, dict)
-                item: Dict[str, Any] = reduce(
+                item: dict[str, Any] = reduce(
                     operator.getitem, key_list[1:-1], record)
                 val = item.pop(key_list[-1])
             except Exception:
@@ -1158,7 +1156,7 @@ class SqliteProvider(Thread):
         self,
         conn: sqlite3.Connection,
         namespace: str,
-        key: Optional[Union[List[str], str]] = None,
+        key: list[str] | str | None = None,
         default: Any = Sentinel.MISSING
     ) -> Any:
         try:
@@ -1178,7 +1176,7 @@ class SqliteProvider(Thread):
         return val
 
     def insert_batch(
-        self, conn: sqlite3.Connection, namespace: str, records: Dict[str, Any]
+        self, conn: sqlite3.Connection, namespace: str, records: dict[str, Any]
     ) -> None:
         def generate_params():
             for key, val in records.items():
@@ -1195,8 +1193,8 @@ class SqliteProvider(Thread):
         self,
         conn: sqlite3.Connection,
         namespace: str,
-        source_keys: List[str],
-        dest_keys: List[str]
+        source_keys: list[str],
+        dest_keys: list[str]
     ) -> None:
         def generate_params():
             for src, dest in zip(source_keys, dest_keys):
@@ -1209,8 +1207,8 @@ class SqliteProvider(Thread):
             )
 
     def delete_batch(
-        self, conn: sqlite3.Connection, namespace: str, keys: List[str]
-    ) -> Dict[str, Any]:
+        self, conn: sqlite3.Connection, namespace: str, keys: list[str]
+    ) -> dict[str, Any]:
         def generate_params():
             for key in keys:
                 yield (namespace, key)
@@ -1236,8 +1234,8 @@ class SqliteProvider(Thread):
                 return dict(cur.fetchall())
 
     def get_batch(
-        self, conn: sqlite3.Connection, namespace: str, keys: List[str]
-    ) -> Dict[str, Any]:
+        self, conn: sqlite3.Connection, namespace: str, keys: list[str]
+    ) -> dict[str, Any]:
         placeholders = ",".join("?" * len(keys))
         sql = (
             f"SELECT key, value FROM {NAMESPACE_TABLE} "
@@ -1320,7 +1318,7 @@ class SqliteProvider(Thread):
                 f"Stored table prototype:\n{detected_proto}"
             )
 
-    def compact_database(self, conn: sqlite3.Connection) -> Dict[str, int]:
+    def compact_database(self, conn: sqlite3.Connection) -> dict[str, int]:
         if self.restored:
             raise self.server.error(
                 "Cannot compact restored database, awaiting restart"
@@ -1351,7 +1349,7 @@ class SqliteProvider(Thread):
 
     def restore_database(
         self, conn: sqlite3.Connection, restore_path: pathlib.Path
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if self.restored:
             raise self.server.error("Database already restored")
         if not restore_path.is_file():
@@ -1365,7 +1363,7 @@ class SqliteProvider(Thread):
 
     def _validate_restore_db(
         self, restore_conn: sqlite3.Connection
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         cursor = restore_conn.execute(
             f"SELECT name FROM {SCHEMA_TABLE} WHERE type = 'table'"
         )
@@ -1418,22 +1416,22 @@ class DBProviderWrapper:
 
     def iter_namespace(
         self, namespace: str, batch_count: int = 100
-    ) -> Generator[Dict[str, Any], Any, None]:
+    ) -> Generator[dict[str, Any], Any]:
         yield from self.provider.iter_namespace(self._sql_conn, namespace, batch_count)
 
-    def get_namespace_keys(self, namespace: str) -> List[str]:
+    def get_namespace_keys(self, namespace: str) -> list[str]:
         return self.provider.get_namespace_keys(self._sql_conn, namespace)
 
-    def get_namespace_values(self, namespace: str) -> List[Any]:
+    def get_namespace_values(self, namespace: str) -> list[Any]:
         return self.provider.get_namespace_values(self._sql_conn, namespace)
 
-    def get_namespace_items(self, namespace: str) -> List[Tuple[str, Any]]:
+    def get_namespace_items(self, namespace: str) -> list[tuple[str, Any]]:
         return self.provider.get_namespace_items(self._sql_conn, namespace)
 
     def get_namespace_length(self, namespace: str) -> int:
         return self.provider.get_namespace_length(self._sql_conn, namespace)
 
-    def get_namespace(self, namespace: str) -> Dict[str, Any]:
+    def get_namespace(self, namespace: str) -> dict[str, Any]:
         return self.provider.get_namespace(self._sql_conn, namespace, must_exist=False)
 
     def clear_namespace(self, namespace: str) -> None:
@@ -1442,35 +1440,35 @@ class DBProviderWrapper:
     def get_item(
         self,
         namespace: str,
-        key: Union[str, List[str]],
+        key: str | list[str],
         default: Any = Sentinel.MISSING
     ) -> Any:
         return self.provider.get_item(self._sql_conn, namespace, key, default)
 
-    def delete_item(self, namespace: str, key: Union[str, List[str]]) -> Any:
+    def delete_item(self, namespace: str, key: str | list[str]) -> Any:
         return self.provider.delete_item(self._sql_conn, namespace, key)
 
     def insert_item(
-        self, namespace: str, key: Union[str, List[str]], value: DBType
+        self, namespace: str, key: str | list[str], value: DBType
     ) -> None:
         self.provider.insert_item(self._sql_conn, namespace, key, value)
 
     def update_item(
-        self, namespace: str, key: Union[str, List[str]], value: DBType
+        self, namespace: str, key: str | list[str], value: DBType
     ) -> None:
         self.provider.update_item(self._sql_conn, namespace, key, value)
 
-    def get_batch(self, namespace: str, keys: List[str]) -> Dict[str, Any]:
+    def get_batch(self, namespace: str, keys: list[str]) -> dict[str, Any]:
         return self.provider.get_batch(self._sql_conn, namespace, keys)
 
-    def delete_batch(self, namespace: str, keys: List[str]) -> Dict[str, Any]:
+    def delete_batch(self, namespace: str, keys: list[str]) -> dict[str, Any]:
         return self.provider.delete_batch(self._sql_conn, namespace, keys)
 
-    def insert_batch(self, namespace: str, records: Dict[str, Any]) -> None:
+    def insert_batch(self, namespace: str, records: dict[str, Any]) -> None:
         self.provider.insert_batch(self._sql_conn, namespace, records)
 
     def move_batch(
-        self, namespace: str, source_keys: List[str], dest_keys: List[str]
+        self, namespace: str, source_keys: list[str], dest_keys: list[str]
     ) -> None:
         self.provider.move_batch(self._sql_conn, namespace, source_keys, dest_keys)
 
@@ -1498,7 +1496,7 @@ class SqliteCursorProxy:
         return self._rowcount
 
     @property
-    def lastrowid(self) -> Optional[int]:
+    def lastrowid(self) -> int | None:
         return self._lastrowid
 
     @property
@@ -1515,20 +1513,20 @@ class SqliteCursorProxy:
             self._array_size = size
         return self._db_provider.execute_db_function(wrapper)
 
-    def fetchone(self) -> Future[Optional[sqlite3.Row]]:
-        def fetch_wrapper(_) -> Optional[sqlite3.Row]:
+    def fetchone(self) -> Future[sqlite3.Row | None]:
+        def fetch_wrapper(_) -> sqlite3.Row | None:
             return self._cursor.fetchone()
         return self._db_provider.execute_db_function(fetch_wrapper)
 
-    def fetchmany(self, size: Optional[int] = None) -> Future[List[sqlite3.Row]]:
-        def fetch_wrapper(_) -> List[sqlite3.Row]:
+    def fetchmany(self, size: int | None = None) -> Future[list[sqlite3.Row]]:
+        def fetch_wrapper(_) -> list[sqlite3.Row]:
             if size is None:
                 return self._cursor.fetchmany()
             return self._cursor.fetchmany(size)
         return self._db_provider.execute_db_function(fetch_wrapper)
 
-    def fetchall(self) -> Future[List[sqlite3.Row]]:
-        def fetch_wrapper(_) -> List[sqlite3.Row]:
+    def fetchall(self) -> Future[list[sqlite3.Row]]:
+        def fetch_wrapper(_) -> list[sqlite3.Row]:
             return self._cursor.fetchall()
         return self._db_provider.execute_db_function(fetch_wrapper)
 
@@ -1551,9 +1549,9 @@ class SqlTableWrapper(contextlib.AbstractAsyncContextManager):
 
     async def __aexit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
     ) -> None:
         if exc_value is not None:
             await self.rollback()
@@ -1625,89 +1623,89 @@ class NamespaceWrapper:
         return self.db.get_provider_wrapper()
 
     def insert(
-        self, key: Union[List[str], str], value: DBType
+        self, key: list[str] | str, value: DBType
     ) -> Future[None]:
         if isinstance(key, str) and not self._parse_keys:
             key = [key]
         return self.db.insert_item(self.namespace, key, value)
 
     def update_child(
-        self, key: Union[List[str], str], value: DBType
+        self, key: list[str] | str, value: DBType
     ) -> Future[None]:
         if isinstance(key, str) and not self._parse_keys:
             key = [key]
         return self.db.update_item(self.namespace, key, value)
 
-    def update(self, value: Dict[str, DBRecord]) -> Future[None]:
+    def update(self, value: dict[str, DBRecord]) -> Future[None]:
         return self.db.update_namespace(self.namespace, value)
 
-    def sync(self, value: Dict[str, DBRecord]) -> Future[None]:
+    def sync(self, value: dict[str, DBRecord]) -> Future[None]:
         return self.db.sync_namespace(self.namespace, value)
 
-    def get(self, key: Union[List[str], str], default: Any = None) -> Future[Any]:
+    def get(self, key: list[str] | str, default: Any = None) -> Future[Any]:
         if isinstance(key, str) and not self._parse_keys:
             key = [key]
         return self.db.get_item(self.namespace, key, default)
 
-    def delete(self, key: Union[List[str], str]) -> Future[Any]:
+    def delete(self, key: list[str] | str) -> Future[Any]:
         if isinstance(key, str) and not self._parse_keys:
             key = [key]
         return self.db.delete_item(self.namespace, key)
 
-    def insert_batch(self, records: Dict[str, Any]) -> Future[None]:
+    def insert_batch(self, records: dict[str, Any]) -> Future[None]:
         return self.db.insert_batch(self.namespace, records)
 
     def move_batch(self,
-                   source_keys: List[str],
-                   dest_keys: List[str]
+                   source_keys: list[str],
+                   dest_keys: list[str]
                    ) -> Future[None]:
         return self.db.move_batch(self.namespace, source_keys, dest_keys)
 
-    def delete_batch(self, keys: List[str]) -> Future[Dict[str, Any]]:
+    def delete_batch(self, keys: list[str]) -> Future[dict[str, Any]]:
         return self.db.delete_batch(self.namespace, keys)
 
-    def get_batch(self, keys: List[str]) -> Future[Dict[str, Any]]:
+    def get_batch(self, keys: list[str]) -> Future[dict[str, Any]]:
         return self.db.get_batch(self.namespace, keys)
 
     def length(self) -> Future[int]:
         return self.db.ns_length(self.namespace)
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         self._check_sync_method("as_dict")
         return self.db.get_item(self.namespace).result()
 
-    def __getitem__(self, key: Union[List[str], str]) -> Future[Any]:
+    def __getitem__(self, key: list[str] | str) -> Future[Any]:
         return self.get(key, default=Sentinel.MISSING)
 
-    def __setitem__(self, key: Union[List[str], str], value: DBType) -> None:
+    def __setitem__(self, key: list[str] | str, value: DBType) -> None:
         self.insert(key, value)
 
-    def __delitem__(self, key: Union[List[str], str]):
+    def __delitem__(self, key: list[str] | str):
         self.delete(key)
 
-    def __contains__(self, key: Union[List[str], str]) -> bool:
+    def __contains__(self, key: list[str] | str) -> bool:
         self._check_sync_method("__contains__")
         if isinstance(key, str) and not self._parse_keys:
             key = [key]
         return self.db.ns_contains(self.namespace, key).result()
 
-    def contains(self, key: Union[List[str], str]) -> Future[bool]:
+    def contains(self, key: list[str] | str) -> Future[bool]:
         if isinstance(key, str) and not self._parse_keys:
             key = [key]
         return self.db.ns_contains(self.namespace, key)
 
-    def keys(self) -> Future[List[str]]:
+    def keys(self) -> Future[list[str]]:
         return self.db.ns_keys(self.namespace)
 
-    def values(self) -> Future[List[Any]]:
+    def values(self) -> Future[list[Any]]:
         return self.db.ns_values(self.namespace)
 
-    def items(self) -> Future[List[Tuple[str, Any]]]:
+    def items(self) -> Future[list[tuple[str, Any]]]:
         return self.db.ns_items(self.namespace)
 
     def pop(
-        self, key: Union[List[str], str], default: Any = Sentinel.MISSING
-    ) -> Union[Future[Any], Task[Any]]:
+        self, key: list[str] | str, default: Any = Sentinel.MISSING
+    ) -> Future[Any] | Task[Any]:
         if not self.server.is_running():
             try:
                 val = self.delete(key).result()

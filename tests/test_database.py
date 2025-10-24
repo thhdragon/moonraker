@@ -1,5 +1,4 @@
 from __future__ import annotations
-from re import L
 import pytest
 import pytest_asyncio
 import asyncio
@@ -7,14 +6,15 @@ import copy
 from inspect import isawaitable
 from moonraker.server import Server
 from moonraker.utils import ServerError
-from typing import TYPE_CHECKING, AsyncIterator, Dict, Any, Iterator
+from typing import TYPE_CHECKING, Dict, Any
+from collections.abc import AsyncIterator, Iterator
 
 if TYPE_CHECKING:
     from components.database import MoonrakerDatabase
     from components.database import NamespaceWrapper
     from fixtures import HttpClient, WebsocketClient
 
-TEST_DB: Dict[str, Dict[str, Any]] = {
+TEST_DB: dict[str, dict[str, Any]] = {
     "automobiles": {
         "chevy": {
             "camaro": "silver",
@@ -1224,7 +1224,7 @@ class TestNamespaceWrapperThreadedNoParse(
 ):
     pass
 
-def endpoint_result(req_args: Dict[str, Any], expected: Any) -> Dict[str, Any]:
+def endpoint_result(req_args: dict[str, Any], expected: Any) -> dict[str, Any]:
     return {
         "namespace": req_args["namespace"],
         "key": req_args.get("key"),

@@ -84,8 +84,8 @@ class BaseVersion:
         self._release_type = ReleaseType(0)
         self._tag: str = "?"
         self._orig: str = version.strip()
-        self._release_tup: Tuple[int, ...] = tuple()
-        self._extra_tup: Tuple[int, ...] = tuple()
+        self._release_tup: tuple[int, ...] = tuple()
+        self._extra_tup: tuple[int, ...] = tuple()
         self._has_dev_part: bool = False
         self._dev_count: int = 0
         self._valid_version: bool = False
@@ -241,7 +241,7 @@ class PyVersion(BaseVersion):
         version_info = self._get_version_info()
         if version_info is None:
             return
-        release: Optional[str] = version_info["release"]
+        release: str | None = version_info["release"]
         if release is None:
             return
         self._valid_version = True
@@ -250,7 +250,7 @@ class PyVersion(BaseVersion):
         self._release_tup = tuple(int(part) for part in release.split("."))
         self._extra_tup = (1, 0, 0)
         if version_info["pre"] is not None:
-            pre_conv: Dict[str, int]
+            pre_conv: dict[str, int]
             pre_conv = dict([("a", 1), ("b", 2), ("c", 3), ("r", 3), ("p", 3)])
             lbl: str = version_info["pre_l"][0].lower()
             self._extra_tup = (0, pre_conv.get(lbl, 0), int(version_info["pre_n"] or 0))
@@ -275,7 +275,7 @@ class PyVersion(BaseVersion):
         elif self._release_type.value == ReleaseType.POST.value:
             self._release_type |= ReleaseType.FINAL
         self._dev_count = int(version_info["dev_n"] or 0)
-        self.local: Optional[str] = version_info["local"]
+        self.local: str | None = version_info["local"]
 
     @property
     def short_version(self) -> str:
@@ -285,7 +285,7 @@ class PyVersion(BaseVersion):
             return self._tag
         return f"{self._tag}-{self._dev_count}"
 
-    def _get_version_info(self) -> Optional[Dict[str, Any]]:
+    def _get_version_info(self) -> dict[str, Any] | None:
         ver_match = _py_version_regex.match(self._orig)
         if ver_match is None:
             return None
@@ -315,7 +315,7 @@ class PyVersion(BaseVersion):
         version_info = self._get_version_info()
         if version_info is None:
             return GitVersion("?")
-        git_version: Optional[str] = version_info["release"]
+        git_version: str | None = version_info["release"]
         if git_version is None:
             raise ValueError("Invalid version string")
         if self._orig[0].lower() == "v":
@@ -355,7 +355,7 @@ class GitVersion(BaseVersion):
             self._is_inferred = True
             return
         version_info = ver_match.groupdict()
-        release: Optional[str] = version_info["release"]
+        release: str | None = version_info["release"]
         if release is None:
             return
         self._valid_version = True
@@ -364,7 +364,7 @@ class GitVersion(BaseVersion):
         self._release_tup = tuple(int(part) for part in release.split("."))
         self._extra_tup = (1, 0, 0)
         if version_info["pre"] is not None:
-            pre_conv: Dict[str, int]
+            pre_conv: dict[str, int]
             pre_conv = dict([("a", 1), ("b", 2), ("c", 3), ("r", 3), ("p", 3)])
             lbl = version_info["pre_l"][0].lower()
             self._extra_tup = (0, pre_conv.get(lbl, 0), int(version_info["pre_n"] or 0))
@@ -397,7 +397,7 @@ class GitVersion(BaseVersion):
             if self._is_inferred:
                 # We can't infer a previous release from another inferred release
                 return self._tag
-            type_choices: Dict[int, str] = dict([(1, "a"), (2, "b"), (3, "rc")])
+            type_choices: dict[int, str] = dict([(1, "a"), (2, "b"), (3, "rc")])
             if self.is_pre_release() and self._extra_tup > (0, 1, 0):
                 type_idx = self._extra_tup[1]
                 type_count = self._extra_tup[2]
@@ -409,7 +409,7 @@ class GitVersion(BaseVersion):
                 return f"{self._release}.{pretype}{type_count}"
             else:
                 parts = [int(ver) for ver in self._release.split(".")]
-                new_ver: List[str] = []
+                new_ver: list[str] = []
                 need_decrement = True
                 for part in reversed(parts):
                     if part > 0 and need_decrement:

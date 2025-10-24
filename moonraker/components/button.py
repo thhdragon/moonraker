@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 class ButtonManager:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.buttons: Dict[str, GpioButton] = {}
+        self.buttons: dict[str, GpioButton] = {}
         prefix_sections = config.get_prefix_sections("button")
         logging.info(f"Loading Buttons: {prefix_sections}")
         for section in prefix_sections:
@@ -61,8 +61,8 @@ class GpioButton:
                 f"[{config.get_name()}]: No template option configured"
             )
         self.notification_sent: bool = False
-        self.user_data: Dict[str, Any] = {}
-        self.context: Dict[str, Any] = {
+        self.user_data: dict[str, Any] = {}
+        self.context: dict[str, Any] = {
             'call_method': self.itransport.call_method,
             'send_notification': self._send_notification,
             'event': {
@@ -78,7 +78,7 @@ class GpioButton:
         self.gpio_event.start()
         self.context['event']['pressed'] = bool(self.gpio_event.get_value())
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         return {
             'name': self.name,
             'type': "gpio",
@@ -104,7 +104,7 @@ class GpioButton:
             return
         async with self.mutex:
             self.notification_sent = False
-            event_info: Dict[str, Any] = {
+            event_info: dict[str, Any] = {
                 'elapsed_time': elapsed_time,
                 'received_time': eventtime,
                 'render_time': self.eventloop.get_loop_time(),

@@ -21,7 +21,7 @@ class LockTimeout(ServerError):
 
 class AsyncExclusiveFileLock(contextlib.AbstractAsyncContextManager):
     def __init__(
-        self, file_path: pathlib.Path, timeout: Union[int, float] = 0
+        self, file_path: pathlib.Path, timeout: int | float = 0
     ) -> None:
         self.lock_path = file_path.parent.joinpath(f".{file_path.name}.lock")
         self.timeout = timeout
@@ -35,9 +35,9 @@ class AsyncExclusiveFileLock(contextlib.AbstractAsyncContextManager):
 
     async def __aexit__(
         self,
-        __exc_type: Optional[Type[BaseException]],
-        __exc_value: Optional[BaseException],
-        __traceback: Optional[TracebackType]
+        __exc_type: type[BaseException] | None,
+        __exc_value: BaseException | None,
+        __traceback: TracebackType | None
     ) -> None:
         await self.release()
 

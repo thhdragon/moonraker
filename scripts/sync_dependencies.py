@@ -12,7 +12,8 @@ import tomllib
 import json
 import ast
 from io import StringIO, TextIOBase
-from typing import Dict, List, Iterator
+from typing import Dict, List
+from collections.abc import Iterator
 
 MAX_LINE_LENGTH = 88
 SCRIPTS_PATH = pathlib.Path(__file__).parent
@@ -21,7 +22,7 @@ INST_PKG_FOOTER = "# *** AUTO GENERATED OS PACKAGE SCRIPT END ***"
 DEPS_HEADER = "# *** SYSTEM DEPENDENCIES START ***"
 DEPS_FOOTER = "# *** SYSTEM DEPENDENCIES END ***"
 
-def gen_pkg_list(values: List[str], indent: int = 0) -> Iterator[str]:
+def gen_pkg_list(values: list[str], indent: int = 0) -> Iterator[str]:
     idt = " " * indent
     if not values:
         return
@@ -34,7 +35,7 @@ def gen_pkg_list(values: List[str], indent: int = 0) -> Iterator[str]:
             current_line += f" \"{val}\","
     yield current_line.rstrip(",") + "\n"
 
-def write_parser_script(sys_deps: Dict[str, List[str]], out_hdl: TextIOBase) -> None:
+def write_parser_script(sys_deps: dict[str, list[str]], out_hdl: TextIOBase) -> None:
     parser_file = SCRIPTS_PATH.parent.joinpath("moonraker/utils/sysdeps_parser.py")
     out_hdl.write("    get_pkgs_script=$(cat << EOF\n")
     with parser_file.open("r") as f:
@@ -65,8 +66,8 @@ EOF
 def sync_packages() -> int:
     inst_script = SCRIPTS_PATH.joinpath("install-moonraker.sh")
     sys_deps_file = SCRIPTS_PATH.joinpath("system-dependencies.json")
-    prev_deps: Dict[str, List[str]] = {}
-    new_deps: Dict[str, List[str]] = json.loads(sys_deps_file.read_bytes())
+    prev_deps: dict[str, list[str]] = {}
+    new_deps: dict[str, list[str]] = json.loads(sys_deps_file.read_bytes())
     # Copy install script in memory.
     install_data = StringIO()
     prev_deps_str: str = ""
@@ -120,7 +121,7 @@ def sync_packages() -> int:
                 write_parser_script(new_deps, inst_file)
     return 1
 
-def check_reqs_changed(reqs_file: pathlib.Path, new_reqs: List[str]) -> bool:
+def check_reqs_changed(reqs_file: pathlib.Path, new_reqs: list[str]) -> bool:
     req_list = []
     for requirement in reqs_file.read_text().splitlines():
         requirement = requirement.strip()

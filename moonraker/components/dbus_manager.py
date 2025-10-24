@@ -34,11 +34,11 @@ class DbusManager:
     DbusError = dbus_fast.errors.DBusError
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.bus: Optional[MessageBus] = None
-        self.polkit: Optional[ProxyInterface] = None
+        self.bus: MessageBus | None = None
+        self.polkit: ProxyInterface | None = None
         self.warned: bool = False
         st_path = pathlib.Path(STAT_PATH)
-        self.polkit_subject: List[Any] = []
+        self.polkit_subject: list[Any] = []
         if not st_path.is_file():
             return
         proc_data = st_path.read_text()
@@ -127,11 +127,11 @@ class DbusManager:
     async def get_interfaces(self,
                              bus_name: str,
                              bus_path: str,
-                             interface_names: List[str]
-                             ) -> List[ProxyInterface]:
+                             interface_names: list[str]
+                             ) -> list[ProxyInterface]:
         if self.bus is None:
             raise self.server.error("Bus not available")
-        interfaces: List[ProxyInterface] = []
+        interfaces: list[ProxyInterface] = []
         introspection = await self.bus.introspect(bus_name, bus_path)
         proxy_obj = self.bus.get_proxy_object(bus_name, bus_path,
                                               introspection)

@@ -11,7 +11,8 @@ import logging
 import asyncio
 import contextlib
 from serial import Serial, SerialException
-from typing import TYPE_CHECKING, Optional, List, Tuple, Awaitable, Callable
+from typing import TYPE_CHECKING, Optional, List, Tuple
+from collections.abc import Awaitable, Callable
 
 if TYPE_CHECKING:
     from ..server import Server
@@ -27,9 +28,9 @@ class AsyncSerialConnection:
         self.eventloop = server.get_event_loop()
         self.port = port
         self.baud = baud
-        self.ser: Optional[Serial] = None
-        self.send_task: Optional[asyncio.Task] = None
-        self.send_buffer: List[Tuple[asyncio.Future, bytes]] = []
+        self.ser: Serial | None = None
+        self.send_task: asyncio.Task | None = None
+        self.send_buffer: list[tuple[asyncio.Future, bytes]] = []
         self._reader = asyncio.StreamReader(limit=READER_LIMIT)
         self._read_callback: Callable[[bytes], None] = self._reader.feed_data
 

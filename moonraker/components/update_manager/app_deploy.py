@@ -12,7 +12,7 @@ import logging
 import re
 import asyncio
 import importlib
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from .common import AppType, Channel
 from .base_deploy import BaseDeploy
 from ...utils import pip_utils
@@ -59,18 +59,18 @@ class AppDeploy(BaseDeploy):
             )
         self.report_anomalies = config.getboolean("report_anomalies", True)
         self._is_valid: bool = False
-        self.virtualenv: Optional[pathlib.Path] = None
-        self.py_exec: Optional[pathlib.Path] = None
-        self.pip_cmd: Optional[str] = None
+        self.virtualenv: pathlib.Path | None = None
+        self.py_exec: pathlib.Path | None = None
+        self.pip_cmd: str | None = None
         self.pip_version_info: pip_utils.PipVersionInfo | None = None
-        self.pip_ver_date: datetime = datetime.fromtimestamp(0., timezone.utc)
-        self.venv_args: Optional[str] = None
-        self.npm_pkg_json: Optional[pathlib.Path] = None
-        self.python_reqs: Optional[pathlib.Path] = None
-        self.install_script: Optional[pathlib.Path] = None
-        self.system_deps_json: Optional[pathlib.Path] = None
-        self.info_tags: List[str] = config.getlist("info_tags", [])
-        self.managed_services: List[str] = []
+        self.pip_ver_date: datetime = datetime.fromtimestamp(0., UTC)
+        self.venv_args: str | None = None
+        self.npm_pkg_json: pathlib.Path | None = None
+        self.python_reqs: pathlib.Path | None = None
+        self.install_script: pathlib.Path | None = None
+        self.system_deps_json: pathlib.Path | None = None
+        self.info_tags: list[str] = config.getlist("info_tags", [])
+        self.managed_services: list[str] = []
 
     def _configure_path(self, config: ConfigHelper, reserve: bool = True) -> None:
         self.path = pathlib.Path(config.get('path')).expanduser().resolve()
@@ -83,7 +83,7 @@ class AppDeploy(BaseDeploy):
             fm.add_reserved_path(f"update_manager {self.name}", self.path)
 
     def _configure_virtualenv(self, config: ConfigHelper) -> None:
-        venv_path: Optional[pathlib.Path] = None
+        venv_path: pathlib.Path | None = None
         if config.has_option("virtualenv"):
             venv_path = pathlib.Path(config.get("virtualenv")).expanduser()
             if not venv_path.is_absolute():
@@ -153,7 +153,7 @@ class AppDeploy(BaseDeploy):
         if config.getboolean("is_system_service", True):
             svc_default.append(self.name)
         svc_choices = [self.name, "klipper", "moonraker"]
-        services: List[str] = config.getlist(
+        services: list[str] = config.getlist(
             "managed_services", svc_default, separator=None
         )
         if self.name in services:
@@ -205,12 +205,12 @@ class AppDeploy(BaseDeploy):
         if check_exe and not os.access(path, os.X_OK):
             raise config.error(f"{base_msg} is not executable")
 
-    async def initialize(self) -> Dict[str, Any]:
+    async def initialize(self) -> dict[str, Any]:
         storage = await super().initialize()
-        pv_info: List[Any] | None = storage.get("pip_version_info", None)
+        pv_info: list[Any] | None = storage.get("pip_version_info", None)
         if pv_info is not None:
             self.pip_version_info = pip_utils.PipVersionInfo(*pv_info[:2])
-            self.pip_ver_date = datetime.fromtimestamp(pv_info[2], timezone.utc)
+            self.pip_ver_date = datetime.fromtimestamp(pv_info[2], UTC)
             self.log_info(
                 f"Pip Version: {pv_info[0]}, Python Version: {pv_info[1]}\n"
                 f"Last checked on {self.pip_ver_date}"
@@ -221,8 +221,8 @@ class AppDeploy(BaseDeploy):
         return self.type
 
     def check_same_paths(self,
-                         app_path: Union[str, pathlib.Path],
-                         executable: Union[str, pathlib.Path]
+                         app_path: str | pathlib.Path,
+                         executable: str | pathlib.Path
                          ) -> bool:
         if isinstance(app_path, str):
             app_path = pathlib.Path(app_path)
@@ -268,13 +268,13 @@ class AppDeploy(BaseDeploy):
                     svc = kconn.unit_name
                 await machine.do_service_action("restart", svc)
 
-    async def _read_system_dependencies(self) -> List[str]:
+    async def _read_system_dependencies(self) -> list[str]:
         eventloop = self.server.get_event_loop()
         if self.system_deps_json is not None:
             deps_json = self.system_deps_json
             try:
                 ret = await eventloop.run_in_thread(deps_json.read_bytes)
-                dep_info: Dict[str, List[str]] = jsonw.loads(ret)
+                dep_info: dict[str, list[str]] = jsonw.loads(ret)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -297,16 +297,16 @@ class AppDeploy(BaseDeploy):
         except Exception:
             logging.exception(f"Error reading install script: {inst_path}")
             return []
-        plines: List[str] = re.findall(r'PKGLIST="(.*)"', data)
+        plines: list[str] = re.findall(r'PKGLIST="(.*)"', data)
         plines = [p.lstrip("${PKGLIST}").strip() for p in plines]
-        packages: List[str] = []
+        packages: list[str] = []
         for line in plines:
             packages.extend(line.split())
         if not packages:
             self.log_info(f"No packages found in script: {inst_path}")
         return packages
 
-    async def _read_python_reqs(self) -> List[str]:
+    async def _read_python_reqs(self) -> list[str]:
         if self.python_reqs is None:
             return []
         pyreqs = self.python_reqs
@@ -318,7 +318,7 @@ class AppDeploy(BaseDeploy):
             pip_utils.read_requirements_file, self.python_reqs
         )
 
-    def get_update_status(self) -> Dict[str, Any]:
+    def get_update_status(self) -> dict[str, Any]:
         return {
             'channel': str(self.channel),
             'debug_enabled': self.server.is_debug_enabled(),
@@ -328,7 +328,7 @@ class AppDeploy(BaseDeploy):
             'info_tags': self.info_tags
         }
 
-    def get_persistent_data(self) -> Dict[str, Any]:
+    def get_persistent_data(self) -> dict[str, Any]:
         storage = super().get_persistent_data()
         storage['is_valid'] = self._is_valid
         pv_info = None
@@ -342,8 +342,8 @@ class AppDeploy(BaseDeploy):
         return storage
 
     async def _get_file_hash(self,
-                             filename: Optional[pathlib.Path]
-                             ) -> Optional[str]:
+                             filename: pathlib.Path | None
+                             ) -> str | None:
         if filename is None or not filename.is_file():
             return None
 
@@ -356,15 +356,15 @@ class AppDeploy(BaseDeploy):
             return None
 
     async def _check_need_update(self,
-                                 prev_hash: Optional[str],
-                                 filename: Optional[pathlib.Path]
+                                 prev_hash: str | None,
+                                 filename: pathlib.Path | None
                                  ) -> bool:
         cur_hash = await self._get_file_hash(filename)
         if prev_hash is None or cur_hash is None:
             return False
         return prev_hash != cur_hash
 
-    async def _install_packages(self, package_list: List[str]) -> None:
+    async def _install_packages(self, package_list: list[str]) -> None:
         self.notify_status("Installing system dependencies...")
         # Install packages with apt-get
         try:
@@ -375,7 +375,7 @@ class AppDeploy(BaseDeploy):
             return
 
     async def _update_python_requirements(
-        self, requirements: Union[pathlib.Path, List[str]]
+        self, requirements: pathlib.Path | list[str]
     ) -> None:
         if self.pip_cmd is None:
             return
@@ -396,10 +396,10 @@ class AppDeploy(BaseDeploy):
 
     async def _update_pip(self, pip_exec: pip_utils.AsyncPipExecutor) -> None:
         self.notify_status("Checking pip version...")
-        check_time = datetime.now(timezone.utc) - self.pip_ver_date
+        check_time = datetime.now(UTC) - self.pip_ver_date
         if self.pip_version_info is None or check_time.days > PIPVER_CHECK_DAYS:
             self.pip_version_info = await pip_exec.get_pip_version()
-            self.pip_ver_date = datetime.now(timezone.utc)
+            self.pip_ver_date = datetime.now(UTC)
         try:
             if self.pip_version_info.needs_pip_update:
                 cur_ver = self.pip_version_info.pip_version_string
@@ -409,7 +409,7 @@ class AppDeploy(BaseDeploy):
                 )
                 await pip_exec.update_pip()
                 self.pip_version_info = await pip_exec.get_pip_version()
-                self.pip_ver_date = datetime.now(timezone.utc)
+                self.pip_ver_date = datetime.now(UTC)
             else:
                 self.notify_status("Pip version up to date")
         except asyncio.CancelledError:
@@ -418,7 +418,7 @@ class AppDeploy(BaseDeploy):
             self.notify_status(f"Pip Version Check Error: {e}")
             self.log_exc("Pip Version Check Error")
 
-    async def _collect_dependency_info(self) -> Dict[str, Any]:
+    async def _collect_dependency_info(self) -> dict[str, Any]:
         pkg_deps = await self._read_system_dependencies()
         pyreqs = await self._read_python_reqs()
         npm_hash = await self._get_file_hash(self.npm_pkg_json)
@@ -434,7 +434,7 @@ class AppDeploy(BaseDeploy):
         }
 
     async def _update_dependencies(
-        self, dep_info: Dict[str, Any], force: bool = False
+        self, dep_info: dict[str, Any], force: bool = False
     ) -> None:
         packages = await self._read_system_dependencies()
         modules = await self._read_python_reqs()
@@ -456,7 +456,7 @@ class AppDeploy(BaseDeploy):
             await self._install_packages(packages)
         if modules:
             await self._update_python_requirements(self.python_reqs or modules)
-        npm_hash: Optional[str] = dep_info["npm_hash"]
+        npm_hash: str | None = dep_info["npm_hash"]
         ret = await self._check_need_update(npm_hash, self.npm_pkg_json)
         if force or ret:
             if self.npm_pkg_json is not None:

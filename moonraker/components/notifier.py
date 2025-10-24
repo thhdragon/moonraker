@@ -29,8 +29,8 @@ if TYPE_CHECKING:
 class Notifier:
     def __init__(self, config: ConfigHelper) -> None:
         self.server = config.get_server()
-        self.notifiers: Dict[str, NotifierInstance] = {}
-        self.events: Dict[str, List[NotifierInstance]] = {}
+        self.notifiers: dict[str, NotifierInstance] = {}
+        self.events: dict[str, list[NotifierInstance]] = {}
         prefix_sections = config.get_prefix_sections("notifier")
         self.register_remote_actions()
         for section in prefix_sections:
@@ -67,8 +67,8 @@ class Notifier:
     async def _on_job_state_changed(
             self,
             job_event: JobEvent,
-            prev_stats: Dict[str, Any],
-            new_stats: Dict[str, Any]
+            prev_stats: dict[str, Any],
+            new_stats: dict[str, Any]
     ) -> None:
         evt_name = str(job_event)
         for notifier in self.events.get(evt_name, []):
@@ -84,15 +84,15 @@ class Notifier:
 
     async def _handle_notifier_list(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return {"notifiers": self._list_notifiers()}
 
-    def _list_notifiers(self) -> List[Dict[str, Any]]:
+    def _list_notifiers(self) -> list[dict[str, Any]]:
         return [notifier.as_dict() for notifier in self.notifiers.values()]
 
     async def _handle_notifier_test(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
 
         name = web_request.get_str("name")
         if name not in self.notifiers:
@@ -100,7 +100,7 @@ class Notifier:
         notifier = self.notifiers[name]
 
         kapis: APIComp = self.server.lookup_component('klippy_apis')
-        result: Dict[str, Any] = await kapis.query_objects(
+        result: dict[str, Any] = await kapis.query_objects(
             {'print_stats': None}, default={})
         print_stats = result.get('print_stats', {})
         print_stats["filename"] = "notifier_test.gcode"  # Mock the filename
@@ -134,7 +134,7 @@ class NotifierInstance:
         if not hasattr(apprise.NotifyFormat, upper_body_format):
             raise config.error(f"Invalid body_format for {config.get_name()}")
         self.body_format = getattr(apprise.NotifyFormat, upper_body_format)
-        self.events: List[str] = config.getlist("events", separator=",")
+        self.events: list[str] = config.getlist("events", separator=",")
         self.apprise.add(self.url)
 
     def as_dict(self):
@@ -149,7 +149,7 @@ class NotifierInstance:
         }
 
     async def notify(
-        self, event_name: str, event_args: List, message: str = ""
+        self, event_name: str, event_args: list, message: str = ""
     ) -> None:
         context = {
             "event_name": event_name,
@@ -165,7 +165,7 @@ class NotifierInstance:
         )
 
         # Verify the attachment
-        attachments: List[str] = []
+        attachments: list[str] = []
         if self.attach is not None:
             fm: FileManager = self.server.lookup_component("file_manager")
             try:

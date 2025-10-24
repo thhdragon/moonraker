@@ -141,7 +141,7 @@ class GcodeAnalysis:
         # with the metadata processor.  Keep a reference to the config
         # so it can be updated after the Klipper Estimator Executable is
         # verified in component_init().
-        self.proc_config: Dict[str, Any] = {
+        self.proc_config: dict[str, Any] = {
             "name": "klipper_estimator",
             "command": [
                 str(self.estimator_path),
@@ -181,7 +181,7 @@ class GcodeAnalysis:
         )
 
     @property
-    def estimator_version_tuple(self) -> Tuple[int, ...]:
+    def estimator_version_tuple(self) -> tuple[int, ...]:
         if self.estimator_version in ["?", ""]:
             return tuple()
         ver_string = self.estimator_version
@@ -253,7 +253,7 @@ class GcodeAnalysis:
                 enabled = True
         self.proc_config["enabled"] = enabled
 
-    def _detect_platform(self) -> Optional[str]:
+    def _detect_platform(self) -> str | None:
         # Detect OS
         if sys.platform.startswith("darwin"):
             return "osx"
@@ -392,14 +392,14 @@ class GcodeAnalysis:
     def _gen_url_opts(self) -> str:
         url = self._get_moonraker_url()
         opts = f"--config_moonraker_url {url}"
-        auth: Optional[Authorization]
+        auth: Authorization | None
         auth = self.server.lookup_component("authorization", None)
         api_key = auth.get_api_key() if auth is not None else None
         if api_key is not None:
             opts = f"{opts} --config_moonraker_api_key {api_key}"
         return opts
 
-    async def _dump_estimator_config(self, dest: pathlib.Path) -> Dict[str, Any]:
+    async def _dump_estimator_config(self, dest: pathlib.Path) -> dict[str, Any]:
         async with self.cmd_lock:
             kconn: KlippyConnection = self.server.lookup_component("klippy_connection")
             scmd: ShellCommandFactory = self.server.lookup_component("shell_command")
@@ -422,8 +422,8 @@ class GcodeAnalysis:
             return jsonw.loads(ret)
 
     async def estimate_file(
-        self, gc_path: pathlib.Path, est_config: Optional[pathlib.Path] = None
-    ) -> Dict[str, Any]:
+        self, gc_path: pathlib.Path, est_config: pathlib.Path | None = None
+    ) -> dict[str, Any]:
         async with self.cmd_lock:
             if est_config is None:
                 # Fall back to estimator config specified in the [analysis] section.
@@ -443,9 +443,9 @@ class GcodeAnalysis:
     async def post_process_file(
         self,
         gc_path: pathlib.Path,
-        est_config: Optional[pathlib.Path] = None,
+        est_config: pathlib.Path | None = None,
         force: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         async with self.cmd_lock:
             if est_config is None:
                 # Fall back to estimator config specified in the [analysis] section.
@@ -476,7 +476,7 @@ class GcodeAnalysis:
 
     async def _handle_status_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         est_exec = "unknown"
         if self.estimator_path is not None:
             est_exec = self.estimator_path.name
@@ -491,7 +491,7 @@ class GcodeAnalysis:
 
     async def _handle_estimator_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         gcode_file = web_request.get_str("filename").strip("/")
         estimator_config = web_request.get_str("estimator_config", None)
         gc_path = self.file_manger.get_full_path("gcodes", gcode_file)
@@ -520,7 +520,7 @@ class GcodeAnalysis:
 
     async def _handle_dump_cfg_request(
         self, web_request: WebRequest
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         dest = web_request.get_str("dest_config", None)
         root: str | None = None
         if dest is not None:

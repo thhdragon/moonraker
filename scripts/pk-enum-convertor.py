@@ -36,7 +36,6 @@
 # https://github.com/PackageKit/PackageKit/blob/main/lib/packagekit-glib2/pk-enum.c
 # https://github.com/PackageKit/PackageKit/blob/main/lib/packagekit-glib2/pk-enum.h
 #
-from __future__ import print_function
 
 from re import compile, DOTALL, MULTILINE
 import time

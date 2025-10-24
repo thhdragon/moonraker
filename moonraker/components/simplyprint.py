@@ -22,14 +22,13 @@ from ..utils import json_wrapper as jsonw
 
 from typing import (
     TYPE_CHECKING,
-    Awaitable,
     Optional,
     Dict,
     List,
     Union,
     Any,
-    Callable,
 )
+from collections.abc import Awaitable, Callable
 if TYPE_CHECKING:
     from .application import InternalTransport
     from ..confighelper import ConfigHelper
@@ -72,17 +71,17 @@ class SimplyPrint(APITransport):
         self.spdb = database.wrap_namespace("simplyprint")
         self.sp_info = self.spdb.as_dict()
         self.is_closing = False
-        self.ws: Optional[WebSocketClientConnection] = None
+        self.ws: WebSocketClientConnection | None = None
         self.cache = ReportCache()
         ambient = self.sp_info.get("ambient_temp", INITIAL_AMBIENT)
         self.amb_detect = AmbientDetect(config, self, ambient)
         self.layer_detect = LayerDetect()
         self.webcam_stream = WebcamStream(config, self)
         self.print_handler = PrintHandler(self)
-        self.last_received_temps: Dict[str, float] = {}
+        self.last_received_temps: dict[str, float] = {}
         self.last_err_log_time: float = 0.
         self.last_cpu_update_time: float = 0.
-        self.intervals: Dict[str, float] = {
+        self.intervals: dict[str, float] = {
             "job": 1.,
             "temps": 1.,
             "temps_target": .25,
@@ -90,13 +89,13 @@ class SimplyPrint(APITransport):
             "ai": 0.,
             "ping": 20.,
         }
-        self.printer_status: Dict[str, Dict[str, Any]] = {}
-        self.heaters: Dict[str, str] = {}
-        self.missed_job_events: List[Dict[str, Any]] = []
+        self.printer_status: dict[str, dict[str, Any]] = {}
+        self.heaters: dict[str, str] = {}
+        self.missed_job_events: list[dict[str, Any]] = []
         self.announce_mutex = asyncio.Lock()
-        self.connection_task: Optional[asyncio.Task] = None
+        self.connection_task: asyncio.Task | None = None
         self.reconnect_delay: float = 1.
-        self.reconnect_token: Optional[str] = None
+        self.reconnect_token: str | None = None
         self._last_sp_ping: float = 0.
         self.ping_sp_timer = self.eventloop.register_timer(self._handle_sp_ping)
         self.printer_info_timer = self.eventloop.register_timer(
@@ -105,7 +104,7 @@ class SimplyPrint(APITransport):
         self.next_temp_update_time: float = 0.
         self._last_ping_received: float = 0.
         self.gcode_terminal_enabled: bool = False
-        self._current_job_id: Optional[int] = None
+        self._current_job_id: int | None = None
         self.connected = False
         self.is_set_up = False
         self.test = config.get("use_test_endpoint", False)
@@ -117,7 +116,7 @@ class SimplyPrint(APITransport):
             self._set_ws_url()
 
         self.power_id: str = ""
-        power_id: Optional[str] = config.get("power_device", None)
+        power_id: str | None = config.get("power_device", None)
         if power_id is not None:
             self.power_id = power_id
             if self.power_id.startswith("power "):
@@ -221,7 +220,7 @@ class SimplyPrint(APITransport):
                 await asyncio.sleep(self.reconnect_delay)
 
     async def _read_messages(self) -> None:
-        message: Union[str, bytes, None]
+        message: str | bytes | None
         while self.ws is not None:
             message = await self.ws.read_message()
             if isinstance(message, str):
@@ -250,12 +249,12 @@ class SimplyPrint(APITransport):
     def _process_message(self, msg: str) -> None:
         self._logger.info(f"received: {msg}")
         try:
-            packet: Dict[str, Any] = jsonw.loads(msg)
+            packet: dict[str, Any] = jsonw.loads(msg)
         except jsonw.JSONDecodeError:
             logging.debug(f"Invalid message, not JSON: {msg}")
             return
         event: str = packet.get("type", "")
-        data: Optional[Dict[str, Any]] = packet.get("data")
+        data: dict[str, Any] | None = packet.get("data")
         if event == "connected":
             logging.info("SimplyPrint Reports Connection Success")
             self.connected = True
@@ -290,7 +289,7 @@ class SimplyPrint(APITransport):
             if data.get("no_exist", False) is True and self.is_set_up:
                 self.is_set_up = False
                 self.save_item("printer_id", None)
-            token: Optional[str] = data.get("token")
+            token: str | None = data.get("token")
             if not isinstance(token, str):
                 logging.debug(f"Invalid token received: {token}")
                 token = None
@@ -335,7 +334,7 @@ class SimplyPrint(APITransport):
             # status.
             logging.debug(f"Unknown event: {msg}")
 
-    def _process_demand(self, demand: str, args: Dict[str, Any]) -> None:
+    def _process_demand(self, demand: str, args: dict[str, Any]) -> None:
         kconn: KlippyConnection
         kconn = self.server.lookup_component("klippy_connection")
         if demand in ["pause", "resume", "cancel"]:
@@ -348,15 +347,15 @@ class SimplyPrint(APITransport):
         elif demand == "gcode":
             if not kconn.is_connected():
                 return
-            script_list: List[str] = args.get("list", [])
-            ident: Optional[str] = args.get("identifier", None)
+            script_list: list[str] = args.get("list", [])
+            ident: str | None = args.get("identifier", None)
             if script_list:
                 script = "\n".join(script_list)
                 self.eventloop.create_task(self._handle_gcode_demand(script, ident))
         elif demand == "webcam_snapshot":
             self.eventloop.create_task(self.webcam_stream.post_image(args))
         elif demand == "file":
-            url: Optional[str] = args.get("url")
+            url: str | None = args.get("url")
             if not isinstance(url, str):
                 logging.debug("Invalid url in message")
                 return
@@ -401,10 +400,10 @@ class SimplyPrint(APITransport):
             self.spdb[name] = data
 
     async def _handle_gcode_demand(
-        self, script: str, ident: Optional[str]
+        self, script: str, ident: str | None
     ) -> None:
         success: bool = True
-        msg: Optional[str] = None
+        msg: str | None = None
         try:
             await self.klippy_apis.run_gcode(script)
         except self.server.error as e:
@@ -430,8 +429,8 @@ class SimplyPrint(APITransport):
         return ret
 
     def _set_ws_url(self) -> None:
-        token: Optional[str] = self.sp_info.get("printer_token")
-        printer_id: Optional[str] = self.sp_info.get("printer_id")
+        token: str | None = self.sp_info.get("printer_token")
+        printer_id: str | None = self.sp_info.get("printer_id")
         ep = TEST_ENDPOINT if self.test else PROD_ENDPOINT
         self.connect_url = f"{ep}/0/0"
         if token is not None:
@@ -441,14 +440,14 @@ class SimplyPrint(APITransport):
                 self.is_set_up = True
                 self.connect_url = f"{ep}/{printer_id}/{token}"
 
-    def _update_intervals(self, intervals: Dict[str, Any]) -> None:
+    def _update_intervals(self, intervals: dict[str, Any]) -> None:
         for key, val in intervals.items():
             self.intervals[key] = val / 1000.
         logging.debug(f"Intervals Updated: {self.intervals}")
 
     async def _announce_setup(self, short_id: str) -> None:
         async with self.announce_mutex:
-            eid: Optional[str] = self.sp_info.get("announcement_id")
+            eid: str | None = self.sp_info.get("announcement_id")
             if (
                 eid is not None and
                 self.sp_info.get("temp_short_setup_id") == short_id
@@ -499,7 +498,7 @@ class SimplyPrint(APITransport):
 
     async def _request_print_action(self, action: str) -> None:
         cur_state = self.cache.state
-        ret: Optional[str] = ""
+        ret: str | None = ""
         self._print_request_event.clear()
         if action == "pause":
             if cur_state == "printing":
@@ -530,12 +529,12 @@ class SimplyPrint(APITransport):
         )
 
     async def _on_klippy_ready(self) -> None:
-        last_stats: Dict[str, Any] = self.job_state.get_last_stats()
+        last_stats: dict[str, Any] = self.job_state.get_last_stats()
         if last_stats["state"] == "printing":
             self._on_print_started(last_stats, last_stats, False)
         else:
             self._update_state("operational")
-        query: Optional[Dict[str, Any]]
+        query: dict[str, Any] | None
         query = await self.klippy_apis.query_objects({"heaters": None}, None)
         sub_objs = {
             "display_status": ["progress"],
@@ -549,8 +548,8 @@ class SimplyPrint(APITransport):
         has_amb_sensor: bool = False
         cfg_amb_sensor = self.amb_detect.sensor_name
         if query is not None:
-            heaters: Dict[str, Any] = query.get("heaters", {})
-            avail_htrs: List[str]
+            heaters: dict[str, Any] = query.get("heaters", {})
+            avail_htrs: list[str]
             avail_htrs = sorted(heaters.get("available_heaters", []))
             logging.debug(f"SimplyPrint: Heaters Detected: {avail_htrs}")
             for htr in avail_htrs:
@@ -564,7 +563,7 @@ class SimplyPrint(APITransport):
                 elif htr == "heater_bed":
                     sub_objs[htr] = ["temperature", "target"]
                     self.heaters[htr] = "bed"
-            sensors: List[str] = heaters.get("available_sensors", [])
+            sensors: list[str] = heaters.get("available_sensors", [])
             if cfg_amb_sensor:
                 if cfg_amb_sensor in sensors:
                     has_amb_sensor = True
@@ -575,7 +574,7 @@ class SimplyPrint(APITransport):
                         "configured in Klipper"
                     )
         if self.filament_sensor:
-            objects: List[str]
+            objects: list[str]
             objects = await self.klippy_apis.get_object_list(default=[])
             if self.filament_sensor in objects:
                 sub_objs[self.filament_sensor] = ["filament_detected"]
@@ -583,7 +582,7 @@ class SimplyPrint(APITransport):
         if not sub_objs:
             return
         # Create our own subscription rather than use the host sub
-        status: Dict[str, Any] = await self.klippy_apis.subscribe_from_transport(
+        status: dict[str, Any] = await self.klippy_apis.subscribe_from_transport(
             sub_objs, self, default={}
         )
         if status:
@@ -612,7 +611,7 @@ class SimplyPrint(APITransport):
             self.amb_detect.start()
         self.printer_info_timer.start(delay=1.)
 
-    def _on_power_changed(self, device_info: Dict[str, Any]) -> None:
+    def _on_power_changed(self, device_info: dict[str, Any]) -> None:
         if self.power_id and device_info["device"] == self.power_id:
             is_on = device_info["status"] == "on"
             self.send_sp("power_controller", {"on": is_on})
@@ -622,7 +621,7 @@ class SimplyPrint(APITransport):
             self.cache.current_wsid is None and
             ws.client_data.get("type", "") == "web"
         ):
-            ui_data: Dict[str, Any] = {
+            ui_data: dict[str, Any] = {
                 "ui": ws.client_data["name"],
                 "ui_version": ws.client_data["version"]
             }
@@ -663,7 +662,7 @@ class SimplyPrint(APITransport):
         self.printer_status = {}
 
     def _on_job_state_changed(self, job_event: JobEvent, *args) -> None:
-        callback: Optional[Callable] = getattr(self, f"_on_print_{job_event}", None)
+        callback: Callable | None = getattr(self, f"_on_print_{job_event}", None)
         if callback is not None:
             callback(*args)
         else:
@@ -671,17 +670,17 @@ class SimplyPrint(APITransport):
 
     def _on_print_started(
         self,
-        prev_stats: Dict[str, Any],
-        new_stats: Dict[str, Any],
+        prev_stats: dict[str, Any],
+        new_stats: dict[str, Any],
         need_start_event: bool = True
     ) -> None:
         # includes started and resumed events
         self._update_state("printing")
         filename = new_stats["filename"]
-        job_info: Dict[str, Any] = {"filename": filename}
+        job_info: dict[str, Any] = {"filename": filename}
         fm: FileManager = self.server.lookup_component("file_manager")
         metadata = fm.get_file_metadata(filename)
-        filament: Optional[float] = metadata.get("filament_total")
+        filament: float | None = metadata.get("filament_total")
         if filament is not None:
             job_info["filament"] = round(filament)
         est_time = metadata.get("estimated_time")
@@ -696,11 +695,11 @@ class SimplyPrint(APITransport):
 
     def _check_job_started(
         self,
-        prev_stats: Dict[str, Any],
-        new_stats: Dict[str, Any]
+        prev_stats: dict[str, Any],
+        new_stats: dict[str, Any]
     ) -> None:
         if not self.cache.job_info:
-            job_info: Dict[str, Any] = {
+            job_info: dict[str, Any] = {
                 "filename": new_stats.get("filename", ""),
                 "started": True
             }
@@ -736,8 +735,8 @@ class SimplyPrint(APITransport):
     def _on_print_error(self, *args) -> None:
         self._check_job_started(*args)
         self._reset_file()
-        payload: Dict[str, Any] = {"failed": True}
-        new_stats: Dict[str, Any] = args[1]
+        payload: dict[str, Any] = {"failed": True}
+        new_stats: dict[str, Any] = args[1]
         msg = new_stats.get("message", "Unknown Error")
         payload["error"] = msg
         self._send_job_event(payload)
@@ -785,7 +784,7 @@ class SimplyPrint(APITransport):
             cmds = [s.strip() for s in script.strip().split() if s.strip()]
             self.send_sp("term_update", {"command": cmds})
 
-    def _on_proc_update(self, proc_stats: Dict[str, Any]) -> None:
+    def _on_proc_update(self, proc_stats: dict[str, Any]) -> None:
         cpu = proc_stats["system_cpu_usage"]
         if not cpu:
             return
@@ -802,7 +801,7 @@ class SimplyPrint(APITransport):
             "memory": int(mem_pct + .5),
             "flags": self.cache.throttled_state.get("bits", 0)
         }
-        temp: Optional[float] = proc_stats["cpu_temp"]
+        temp: float | None = proc_stats["cpu_temp"]
         if temp is not None:
             cpu_data["temp"] = int(temp + .5)
         diff = self._get_object_diff(cpu_data, self.cache.cpu_info)
@@ -810,10 +809,10 @@ class SimplyPrint(APITransport):
             self.cache.cpu_info.update(cpu_data)
             self.send_sp("cpu", diff)
 
-    def _on_cpu_throttled(self, throttled_state: Dict[str, Any]):
+    def _on_cpu_throttled(self, throttled_state: dict[str, Any]):
         self.cache.throttled_state = throttled_state
 
-    def send_status(self, status: Dict[str, Any], eventtime: float) -> None:
+    def send_status(self, status: dict[str, Any], eventtime: float) -> None:
         for printer_obj, vals in status.items():
             self.printer_status[printer_obj].update(vals)
         if self.amb_detect.sensor_name in status:
@@ -867,9 +866,9 @@ class SimplyPrint(APITransport):
 
 
     def _update_job_progress(self) -> None:
-        job_info: Dict[str, Any] = {}
+        job_info: dict[str, Any] = {}
         est_time = self.cache.metadata.get("estimated_time")
-        last_stats: Dict[str, Any] = self.job_state.get_last_stats()
+        last_stats: dict[str, Any] = self.job_state.get_last_stats()
         if est_time is not None:
             duration: float = last_stats["print_duration"]
             time_left = max(0, int(est_time - duration + .5))
@@ -905,7 +904,7 @@ class SimplyPrint(APITransport):
             if pct_prog != self.cache.job_info.get("progress", 0):
                 job_info["progress"] = pct_prog
 
-        layer: Optional[int] = last_stats.get("info", {}).get("current_layer")
+        layer: int | None = last_stats.get("info", {}).get("current_layer")
         if layer is None:
             layer = self.layer_detect.layer
         if layer != self.cache.job_info.get("layer", -1):
@@ -918,7 +917,7 @@ class SimplyPrint(APITransport):
         if eventtime < self.next_temp_update_time:
             return
         need_rapid_update: bool = False
-        temp_data: Dict[str, List[int]] = {}
+        temp_data: dict[str, list[int]] = {}
         for printer_obj, key in self.heaters.items():
             reported_temp = self.printer_status[printer_obj]["temperature"]
             ret = [
@@ -983,7 +982,7 @@ class SimplyPrint(APITransport):
         self.cache.mesh = mesh
         self.send_sp("mesh_data", mesh)
 
-    def _send_job_event(self, job_info: Dict[str, Any]) -> None:
+    def _send_job_event(self, job_info: dict[str, Any]) -> None:
         if self.connected:
             self.send_sp("job_info", job_info)
         else:
@@ -993,8 +992,8 @@ class SimplyPrint(APITransport):
             if len(self.missed_job_events) > 10:
                 self.missed_job_events.pop(0)
 
-    def _get_ui_info(self) -> Dict[str, Any]:
-        ui_data: Dict[str, Any] = {"ui": None, "ui_version": None}
+    def _get_ui_info(self) -> dict[str, Any]:
+        ui_data: dict[str, Any] = {"ui": None, "ui_version": None}
         self.cache.current_wsid = None
         websockets: WebsocketManager
         websockets = self.server.lookup_component("websockets")
@@ -1078,7 +1077,7 @@ class SimplyPrint(APITransport):
         self.send_sp("webcam", wc_data)
 
     async def _send_power_state(self) -> None:
-        dev_info: Optional[Dict[str, Any]]
+        dev_info: dict[str, Any] | None
         dev_info = await self._call_internal_api(
             "machine.device_power.get_device", device=self.power_id
         )
@@ -1139,7 +1138,7 @@ class SimplyPrint(APITransport):
         packet = {"type": evt_name, "data": data}
         return self.eventloop.create_task(self._send_wrapper(packet))
 
-    async def _send_wrapper(self, packet: Dict[str, Any]) -> bool:
+    async def _send_wrapper(self, packet: dict[str, Any]) -> bool:
         try:
             assert self.ws is not None
             await self.ws.write_message(jsonw.dumps(packet))
@@ -1153,11 +1152,11 @@ class SimplyPrint(APITransport):
         return True
 
     def _get_object_diff(
-        self, new_obj: Dict[str, Any], cached_obj: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, new_obj: dict[str, Any], cached_obj: dict[str, Any]
+    ) -> dict[str, Any]:
         if not cached_obj:
             return new_obj
-        diff: Dict[str, Any] = {}
+        diff: dict[str, Any] = {}
         for key, val in new_obj.items():
             if key in cached_obj and val == cached_obj[key]:
                 continue
@@ -1180,24 +1179,24 @@ class SimplyPrint(APITransport):
         ):
             try:
                 await asyncio.wait_for(self.connection_task, 2.)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
 class ReportCache:
     def __init__(self) -> None:
         self.state = "offline"
-        self.temps: Dict[str, Any] = {}
-        self.metadata: Dict[str, Any] = {}
-        self.mesh: Dict[str, Any] = {}
-        self.job_info: Dict[str, Any] = {}
-        self.exclude_object_status: Dict[str, Any] = {}
+        self.temps: dict[str, Any] = {}
+        self.metadata: dict[str, Any] = {}
+        self.mesh: dict[str, Any] = {}
+        self.job_info: dict[str, Any] = {}
+        self.exclude_object_status: dict[str, Any] = {}
         self.active_extruder: str = ""
         # Persistent state across connections
-        self.firmware_info: Dict[str, Any] = {}
-        self.machine_info: Dict[str, Any] = {}
-        self.cpu_info: Dict[str, Any] = {}
-        self.throttled_state: Dict[str, Any] = {}
-        self.current_wsid: Optional[int] = None
+        self.firmware_info: dict[str, Any] = {}
+        self.machine_info: dict[str, Any] = {}
+        self.cpu_info: dict[str, Any] = {}
+        self.throttled_state: dict[str, Any] = {}
+        self.current_wsid: int | None = None
         self.filament_state: str = ""
 
     def reset_print_state(self) -> None:
@@ -1242,7 +1241,7 @@ class AmbientDetect:
         return self._sensor_name
 
     def update_ambient(
-        self, sensor_info: Dict[str, Any], eventtime: float = SAMPLE_CHECK_TIME
+        self, sensor_info: dict[str, Any], eventtime: float = SAMPLE_CHECK_TIME
     ) -> None:
         if "temperature" not in sensor_info:
             return
@@ -1318,7 +1317,7 @@ class LayerDetect:
     def layer(self) -> int:
         return self._layer
 
-    def update(self, new_pos: List[float]) -> None:
+    def update(self, new_pos: list[float]) -> None:
         if (
             not self._active or
             self._layer_z == new_pos[2] or
@@ -1337,7 +1336,7 @@ class LayerDetect:
         self._layer = min(layer, self._layer_count)
         self._layer_z = new_pos[2]
 
-    def start(self, metadata: Dict[str, Any]) -> None:
+    def start(self, metadata: dict[str, Any]) -> None:
         self.reset()
         lh: float = metadata.get("layer_height", 0)
         flh: float = metadata.get("first_layer_height", lh)
@@ -1345,8 +1344,8 @@ class LayerDetect:
             self._active = True
             self._layer_height = lh
             self._fl_height = flh
-            layer_count: Optional[int] = metadata.get("layer_count")
-            obj_height: Optional[float] = metadata.get("object_height")
+            layer_count: int | None = metadata.get("layer_count")
+            obj_height: float | None = metadata.get("object_height")
             if layer_count is not None:
                 self._layer_count = layer_count
             elif obj_height is not None:
@@ -1385,7 +1384,7 @@ class WebcamStream:
         self.webcam_name = config.get("webcam_name", "")
         self.url = FALLBACK_URL
         self.client: HttpClient = self.server.lookup_component("http_client")
-        self.cam: Optional[WebCam] = None
+        self.cam: WebCam | None = None
         self._connected = False
 
     @property
@@ -1419,7 +1418,7 @@ class WebcamStream:
         resp = await self.client.get(self.url, headers, enable_cache=False)
         self._connected = not resp.has_error()
 
-    async def get_webcam_config(self) -> Dict[str, Any]:
+    async def get_webcam_config(self) -> dict[str, Any]:
         if self.cam is None:
             return {}
         return self.cam.as_dict()
@@ -1435,9 +1434,9 @@ class WebcamStream:
     def _encode_image(self, image: bytes) -> str:
         return base64.b64encode(image).decode()
 
-    async def post_image(self, payload: Dict[str, Any]) -> None:
-        uid: Optional[str] = payload.get("id")
-        timer: Optional[int] = payload.get("timer")
+    async def post_image(self, payload: dict[str, Any]) -> None:
+        uid: str | None = payload.get("id")
+        timer: int | None = payload.get("timer")
         try:
             if uid is not None:
                 url = payload.get("endpoint", SP_SNAPSHOT_URL)
@@ -1468,7 +1467,7 @@ class PrintHandler:
         self.server = simplyprint.server
         self.eventloop = self.server.get_event_loop()
         self.cache = simplyprint.cache
-        self.download_task: Optional[asyncio.Task] = None
+        self.download_task: asyncio.Task | None = None
         self.print_ready_event: asyncio.Event = asyncio.Event()
         self.download_progress: int = -1
         self.pending_file: str = ""
@@ -1509,7 +1508,7 @@ class PrintHandler:
                 url, accept, progress_callback=self._on_download_progress,
                 request_timeout=3600.
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise
         except Exception:
             logging.exception(f"Failed to download file: {url}")
@@ -1530,7 +1529,7 @@ class PrintHandler:
                 name = f"{filename.stem}_copy_{count}.{filename.suffix}"
                 fpath = gc_path.joinpath(name)
                 count += 1
-        args: Dict[str, Any] = {
+        args: dict[str, Any] = {
             "filename": fpath.name,
             "tmp_file_path": str(tmp_path),
         }
@@ -1557,7 +1556,7 @@ class PrintHandler:
             self.print_ready_event.clear()
             try:
                 await asyncio.wait_for(self.print_ready_event.wait(), 10.)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self.pending_file = ""
                 self.simplyprint.send_sp(
                     "file_progress",
@@ -1616,7 +1615,7 @@ class PrintHandler:
 class ProtoLogger:
     def __init__(self, config: ConfigHelper) -> None:
         server = config.get_server()
-        self._logger: Optional[logging.Logger] = None
+        self._logger: logging.Logger | None = None
         if not server.is_verbose_enabled():
             return
         fm: FileManager = server.lookup_component("file_manager")

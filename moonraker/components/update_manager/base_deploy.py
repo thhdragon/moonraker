@@ -9,7 +9,8 @@ import logging
 import time
 from ...utils import pretty_print_time
 
-from typing import TYPE_CHECKING, Dict, Any, Optional, Coroutine
+from typing import TYPE_CHECKING, Dict, Any, Optional
+from collections.abc import Coroutine
 if TYPE_CHECKING:
     from ...confighelper import ConfigHelper
     from ...utils import ServerError
@@ -20,9 +21,9 @@ class BaseDeploy:
     def __init__(
         self,
         config: ConfigHelper,
-        name: Optional[str] = None,
+        name: str | None = None,
         prefix: str = "",
-        cfg_hash: Optional[str] = None
+        cfg_hash: str | None = None
     ) -> None:
         if name is None:
             name = self.parse_name(config)
@@ -51,9 +52,9 @@ class BaseDeploy:
     def set_command_helper(cmd_helper: CommandHelper) -> None:
         BaseDeploy.cmd_helper = cmd_helper
 
-    async def initialize(self) -> Dict[str, Any]:
+    async def initialize(self) -> dict[str, Any]:
         umdb = self.cmd_helper.get_umdb()
-        storage: Dict[str, Any] = await umdb.get(self.name, {})
+        storage: dict[str, Any] = await umdb.get(self.name, {})
         self.last_refresh_time: float = storage.get('last_refresh_time', 0.0)
         self.last_cfg_hash: str = storage.get('last_config_hash', "")
         return storage
@@ -79,10 +80,10 @@ class BaseDeploy:
     async def rollback(self) -> bool:
         raise self.server.error(f"Rollback not available for {self.name}")
 
-    def get_update_status(self) -> Dict[str, Any]:
+    def get_update_status(self) -> dict[str, Any]:
         return {}
 
-    def get_persistent_data(self) -> Dict[str, Any]:
+    def get_persistent_data(self) -> dict[str, Any]:
         return {
             'last_config_hash': self.cfg_hash,
             'last_refresh_time': self.last_refresh_time
@@ -115,5 +116,5 @@ class BaseDeploy:
         logging.debug(log_msg)
         self.cmd_helper.notify_update_response(log_msg, is_complete)
 
-    def close(self) -> Optional[Coroutine]:
+    def close(self) -> Coroutine | None:
         return None
