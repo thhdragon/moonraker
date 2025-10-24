@@ -13,7 +13,6 @@ import os
 import platform
 import sys
 import time
-from collections.abc import Awaitable
 from queue import SimpleQueue as Queue
 
 # Annotation imports
@@ -26,6 +25,8 @@ from .common import RequestType
 from .utils import json_wrapper as jsonw
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from .common import WebRequest
     from .components.klippy_connection import KlippyConnection
     from .server import Server
@@ -190,7 +191,8 @@ class LogManager:
 
     def rollover_log(self) -> Awaitable[None]:
         if self.file_hdlr is None:
-            raise self.server.error("File Logging Disabled")
+            msg = "File Logging Disabled"
+            raise self.server.error(msg)
         eventloop = self.server.get_event_loop()
         return eventloop.run_in_thread(self.file_hdlr.doRollover)
 

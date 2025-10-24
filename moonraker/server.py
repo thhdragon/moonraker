@@ -24,7 +24,6 @@ import uuid
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
-    Any,
     TypeVar,
 )
 
@@ -51,9 +50,20 @@ if TYPE_CHECKING:
     from .components.klippy_connection import KlippyConnection
     from .components.machine import Machine
     from .components.websockets import WebsocketManager
+    from .types import (
+        AppArgs,
+        Component,
+        ConfigFile,
+        ConfigResponse,
+        HostInfo,
+        ServerInfo,
+    )
 
     FlexCallback = Callable[..., Coroutine | None]
-    _T = TypeVar("_T", Sentinel, Any)
+    _T = TypeVar("_T", Sentinel, Component)
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 API_VERSION = (1, 5, 0)
 SERVER_COMPONENTS = ["application", "websockets", "klippy_connection"]
@@ -78,20 +88,38 @@ CORE_COMPONENTS = [
 
 
 class Server:
+    """The main Moonraker server class. Manages components, events, & server lifecycle.
+
+    This class handles the initialization, configuration, and operation of the server,
+    including loading components, managing websockets, and interfacing with Klipper.
+    """
+
     error = ServerError
     config_error = confighelper.ConfigError
 
     def __init__(
         self,
-        args: dict[str, Any],
+        args: AppArgs,
         log_manager: LogManager,
         event_loop: EventLoop,
     ) -> None:
+        """Initialize the Server instance.
+
+        Parameters
+        ----------
+        args : AppArgs
+            Application arguments passed to the server.
+        log_manager : LogManager
+            The log manager for handling logging.
+        event_loop : EventLoop
+            The event loop for asynchronous operations.
+
+        """
         self.event_loop = event_loop
         self.log_manager = log_manager
         self.app_args = args
         self.events: dict[str, list[FlexCallback]] = {}
-        self.components: dict[str, Any] = {}
+        self.components: dict[str, Component] = {}
         self.failed_components: list[str] = []
         self.warnings: dict[str, str] = {}
         self._is_configured: bool = False
@@ -109,7 +137,7 @@ class Server:
         config.getboolean("enable_debug_logging", False, deprecate=True)
         self.debug = args["debug"]
         log_level = logging.DEBUG if args["verbose"] else logging.INFO
-        logging.getLogger().setLevel(log_level)
+        logger.setLevel(log_level)
         self.event_loop.set_debug(args["asyncio_debug"])
         self.klippy_connection: KlippyConnection
         self.klippy_connection = self.load_component(config, "klippy_connection")
@@ -148,10 +176,38 @@ class Server:
         self.register_notification("server:klippy_disconnect", "klippy_disconnected")
         self.register_notification("server:gcode_response")
 
-    def get_app_args(self) -> dict[str, Any]:
-        return dict(self.app_args)
+    def get_app_args(self) -> AppArgs:
+        """Get a copy of the application arguments.
 
-    def get_app_arg(self, key: str, default=Sentinel.MISSING) -> Any:
+        Returns
+        -------
+        AppArgs
+            The application arguments.
+
+        """
+        return dict(self.app_args)  # type: ignore[return-value]
+
+    def get_app_arg(self, key: str, default=Sentinel.MISSING) -> object:
+        """Get a specific application argument.
+
+        Parameters
+        ----------
+        key : str
+            The key of the argument to retrieve.
+        default : object, optional
+            The default value if the key is not found.
+
+        Returns
+        -------
+        object
+            The value of the argument.
+
+        Raises
+        ------
+        KeyError
+            If the key is not found and no default is provided.
+
+        """
         val = self.app_args.get(key, default)
         if val is Sentinel.MISSING:
             msg = f"No key '{key}' in Application Arguments"
@@ -159,27 +215,91 @@ class Server:
         return val
 
     def get_event_loop(self) -> EventLoop:
+        """Get the event loop instance.
+
+        Returns
+        -------
+        EventLoop
+            The event loop used by the server.
+
+        """
         return self.event_loop
 
     def get_api_version(self) -> tuple[int, int, int]:
+        """Get the API version of the server.
+
+        Returns
+        -------
+        tuple[int, int, int]
+            The API version as a tuple (major, minor, patch).
+
+        """
         return API_VERSION
 
     def get_warnings(self) -> list[str]:
+        """Get the list of current warnings.
+
+        Returns
+        -------
+        list[str]
+            A list of warning messages.
+
+        """
         return list(self.warnings.values())
 
     def is_running(self) -> bool:
+        """Check if the server is currently running.
+
+        Returns
+        -------
+        bool
+            True if the server is running, False otherwise.
+
+        """
         return self.server_running
 
     def is_configured(self) -> bool:
+        """Check if the server has been configured.
+
+        Returns
+        -------
+        bool
+            True if the server is configured, False otherwise.
+
+        """
         return self._is_configured
 
     def is_debug_enabled(self) -> bool:
+        """Check if debug mode is enabled.
+
+        Returns
+        -------
+        bool
+            True if debug is enabled, False otherwise.
+
+        """
         return self.debug
 
     def is_verbose_enabled(self) -> bool:
+        """Check if verbose logging is enabled.
+
+        Returns
+        -------
+        bool
+            True if verbose logging is enabled, False otherwise.
+
+        """
         return self.app_args["verbose"]
 
     def _parse_config(self) -> confighelper.ConfigHelper:
+        """Parse the server configuration.
+
+        Returns
+        -------
+        confighelper.ConfigHelper
+            The parsed configuration helper.
+
+        """
         config = confighelper.get_configuration(self, self.app_args)
         # log config file
         cfg_files = "\n".join(config.get_config_files())
@@ -195,6 +315,14 @@ class Server:
         return config
 
     async def server_init(self, start_server: bool = True) -> None:
+        """Initialize the server asynchronously.
+
+        Parameters
+        ----------
+        start_server : bool, optional
+            Whether to start the server after initialization. Default is True.
+
+        """
         self.event_loop.add_signal_handler(signal.SIGTERM, self._handle_term_signal)
 
         # Perform asynchronous init after the event loop starts
@@ -228,14 +356,24 @@ class Server:
             await self.start_server()
 
     async def start_server(self, connect_to_klippy: bool = True) -> None:
+        """Start the server.
+
+        Parameters
+        ----------
+        connect_to_klippy : bool, optional
+            Whether to connect to Klippy. Default is True.
+
+        """
         # Open Unix Socket Server
         extm: ExtensionManager = self.lookup_component("extensions")
         await extm.start_unix_server()
 
         # Start HTTP Server
-        logging.info(
-            f"Starting Moonraker on ({self.host}, {self.port}), "
-            f"Hostname: {socket.gethostname()}",
+        logger.info(
+            "Starting Moonraker on (%s, %s), Hostname: %s",
+            self.host,
+            self.port,
+            socket.gethostname(),
         )
         self.moonraker_app.listen(self.host, self.port, self.ssl_port)
         self.server_running = True
@@ -243,6 +381,7 @@ class Server:
             self.klippy_connection.connect()
 
     async def run_until_exit(self) -> None:
+        """Run the server until exit is requested."""
         await self.app_running_evt.wait()
 
     def add_log_rollover_item(
@@ -251,9 +390,21 @@ class Server:
         item: str,
         log: bool = True,
     ) -> None:
+        """Add an item to the log rollover.
+
+        Parameters
+        ----------
+        name : str
+            The name of the item.
+        item : str
+            The item content.
+        log : bool, optional
+            Whether to log the item. Default is True.
+
+        """
         self.log_manager.set_rollover_info(name, item)
         if log and item is not None:
-            logging.info(item)
+            logger.info(item)
 
     def add_warning(
         self,
@@ -262,19 +413,56 @@ class Server:
         log: bool = True,
         exc_info: BaseException | None = None,
     ) -> str:
+        """Add a warning.
+
+        Parameters
+        ----------
+        warning : str
+            The warning message.
+        warn_id : str or None, optional
+            The warning ID. If None, an ID is generated.
+        log : bool, optional
+            Whether to log the warning. Default is True.
+        exc_info : BaseException or None, optional
+            Exception info to include in the log.
+
+        Returns
+        -------
+        str
+            The warning ID.
+
+        """
         if warn_id is None:
             warn_id = str(id(warning))
         self.warnings[warn_id] = warning
         if log:
-            logging.warning(warning, exc_info=exc_info)
+            logger.warning(warning, exc_info=exc_info)
         return warn_id
 
     def remove_warning(self, warn_id: str) -> None:
+        """Remove a warning by ID.
+
+        Parameters
+        ----------
+        warn_id : str
+            The warning ID to remove.
+
+        """
         self.warnings.pop(warn_id, None)
 
     # ***** Component Management *****
-    async def _initialize_component(self, name: str, component: Any) -> None:
-        logging.info(f"Performing Component Post Init: [{name}]")
+    async def _initialize_component(self, name: str, component: Component) -> None:
+        """Initialize a component asynchronously.
+
+        Parameters
+        ----------
+        name : str
+            The component name.
+        component : Component
+            The component instance.
+
+        """
+        logger.info("Performing Component Post Init: [%s]", name)
         try:
             ret = component.component_init()
             if ret is not None:
@@ -287,6 +475,7 @@ class Server:
             self.set_failed_component(name)
 
     def load_components(self) -> None:
+        """Load all server components."""
         config = self.config
         cfg_sections = {s.split()[0] for s in config.sections()}
         cfg_sections.remove("server")
@@ -312,7 +501,29 @@ class Server:
         config: confighelper.ConfigHelper,
         component_name: str,
         default: _T = Sentinel.MISSING,
-    ) -> _T | Any:
+    ) -> _T | Component:
+        """Load a specific component.
+
+        Parameters
+        ----------
+        config : confighelper.ConfigHelper
+            The configuration helper.
+        component_name : str
+            The name of the component to load.
+        default : _T, optional
+            The default value if loading fails.
+
+        Returns
+        -------
+        _T | Component
+            The loaded component.
+
+        Raises
+        ------
+        ServerError
+            If the component fails to load and no default is provided.
+
+        """
         if component_name in self.components:
             return self.components[component_name]
         if self.is_configured():
@@ -345,18 +556,30 @@ class Server:
                 and component_name not in ucomps
             ) and self.try_pip_recovery(e.name or "unknown"):
                 return self.load_component(config, component_name, default)
-            msg = f"Unable to load component: ({component_name})"
-            logging.exception(msg)
+            logger.exception("Unable to load component: (%s)", component_name)
             if component_name not in self.failed_components:
                 self.failed_components.append(component_name)
             if default is Sentinel.MISSING:
                 raise
             return default
         self.components[component_name] = component
-        logging.info(f"Component ({component_name}) loaded")
+        logger.info("Component (%s) loaded", component_name)
         return component
 
     def try_pip_recovery(self, missing_module: str) -> bool:
+        """Attempt to recover from a missing module by updating pip and installing dependencies.
+
+        Parameters
+        ----------
+        missing_module : str
+            The name of the missing module.
+
+        Returns
+        -------
+        bool
+            True if recovery was successful, False otherwise.
+
+        """
         if self.pip_recovery_attempted:
             return False
         self.pip_recovery_attempted = True
@@ -365,24 +588,24 @@ class Server:
         if not req_file.is_file():
             return False
         pip_cmd = f"{sys.executable} -m pip"
-        pip_exec = pip_utils.PipExecutor(pip_cmd, logging.info)
-        logging.info(f"Module '{missing_module}' not found. Attempting Pip Update...")
-        logging.info("Checking Pip Version...")
+        pip_exec = pip_utils.PipExecutor(pip_cmd, logger.info)
+        logger.info("Module '%s' not found. Attempting Pip Update...", missing_module)
+        logger.info("Checking Pip Version...")
         try:
             pipver = pip_exec.get_pip_version()
             if pipver.needs_pip_update:
                 cur_ver = pipver.pip_version_string
                 new_ver = pipver.max_pip_version_string
-                logging.info(f"Updating Pip from {cur_ver} to {new_ver}...")
+                logger.info("Updating Pip from %s to %s...", cur_ver, new_ver)
                 pip_exec.update_pip()
         except Exception:
-            logging.exception("Pip version check failed")
+            logger.exception("Pip version check failed")
             return False
-        logging.info("Installing Moonraker python dependencies...")
+        logger.info("Installing Moonraker python dependencies...")
         try:
             pip_exec.install_packages(req_file, {"SKIP_CYTHON": "Y"})
         except Exception:
-            logging.exception("Failed to install python packages")
+            logger.exception("Failed to install python packages")
             return False
         return True
 
@@ -390,7 +613,27 @@ class Server:
         self,
         component_name: str,
         default: _T = Sentinel.MISSING,
-    ) -> _T | Any:
+    ) -> _T | Component:
+        """Look up a loaded component.
+
+        Parameters
+        ----------
+        component_name : str
+            The name of the component.
+        default : _T, optional
+            The default value if not found.
+
+        Returns
+        -------
+        _T | Component
+            The component instance.
+
+        Raises
+        ------
+        ServerError
+            If the component is not found and no default is provided.
+
+        """
         component = self.components.get(component_name, default)
         if component is Sentinel.MISSING:
             msg = f"Component ({component_name}) not found"
@@ -398,10 +641,33 @@ class Server:
         return component
 
     def set_failed_component(self, component_name: str) -> None:
+        """Mark a component as failed.
+
+        Parameters
+        ----------
+        component_name : str
+            The name of the failed component.
+
+        """
         if component_name not in self.failed_components:
             self.failed_components.append(component_name)
 
-    def register_component(self, component_name: str, component: Any) -> None:
+    def register_component(self, component_name: str, component: Component) -> None:
+        """Register a component.
+
+        Parameters
+        ----------
+        component_name : str
+            The name of the component.
+        component : Component
+            The component instance.
+
+        Raises
+        ------
+        ServerError
+            If the component is already registered.
+
+        """
         if component_name in self.components:
             msg = f"Component '{component_name}' already registered"
             raise self.error(msg)
@@ -412,6 +678,16 @@ class Server:
         event_name: str,
         notify_name: str | None = None,
     ) -> None:
+        """Register a notification for an event.
+
+        Parameters
+        ----------
+        event_name : str
+            The event name.
+        notify_name : str or None, optional
+            The notification name. If None, uses the event name.
+
+        """
         self.websocket_manager.register_notification(event_name, notify_name)
 
     def register_event_handler(
@@ -419,9 +695,34 @@ class Server:
         event: str,
         callback: FlexCallback,
     ) -> None:
+        """Register an event handler.
+
+        Parameters
+        ----------
+        event : str
+            The event name.
+        callback : FlexCallback
+            The callback function.
+
+        """
         self.events.setdefault(event, []).append(callback)
 
     def send_event(self, event: str, *args) -> asyncio.Future:
+        """Send an event to registered handlers.
+
+        Parameters
+        ----------
+        event : str
+            The event name.
+        *args
+            Arguments to pass to the handlers.
+
+        Returns
+        -------
+        asyncio.Future
+            A future representing the event processing.
+
+        """
         fut = self.event_loop.create_future()
         self.event_loop.register_callback(self._process_event, fut, event, *args)
         return fut
@@ -432,13 +733,25 @@ class Server:
         event: str,
         *args,
     ) -> None:
+        """Process an event by calling registered handlers.
+
+        Parameters
+        ----------
+        fut : asyncio.Future
+            The future to set when done.
+        event : str
+            The event name.
+        *args
+            Arguments to pass to the handlers.
+
+        """
         events = self.events.get(event, [])
         coroutines: list[Coroutine] = []
         for func in events:
             try:
                 ret = func(*args)
             except Exception:
-                logging.exception(f"Error processing callback in event {event}")
+                logger.exception("Error processing callback in event %s", event)
             else:
                 if ret is not None:
                     coroutines.append(ret)
@@ -447,8 +760,10 @@ class Server:
             for val in results:
                 if isinstance(val, Exception):
                     exc_info = "".join(traceback.format_exception(val))
-                    logging.info(
-                        f"\nError processing callback in event {event}\n{exc_info}",
+                    logger.error(
+                        "Error processing callback in event %s\n%s",
+                        event,
+                        exc_info,
                     )
         if not fut.done():
             fut.set_result(None)
@@ -458,9 +773,27 @@ class Server:
         method_name: str,
         cb: FlexCallback,
     ) -> None:
+        """Register a remote method.
+
+        Parameters
+        ----------
+        method_name : str
+            The method name.
+        cb : FlexCallback
+            The callback function.
+
+        """
         self.klippy_connection.register_remote_method(method_name, cb)
 
-    def get_host_info(self) -> dict[str, Any]:
+    def get_host_info(self) -> HostInfo:
+        """Get host information.
+
+        Returns
+        -------
+        HostInfo
+            A dictionary with host details.
+
+        """
         return {
             "hostname": socket.gethostname(),
             "address": self.host,
@@ -468,20 +801,45 @@ class Server:
             "ssl_port": self.ssl_port,
         }
 
-    def get_klippy_info(self) -> dict[str, Any]:
+    def get_klippy_info(self) -> dict[str, object]:
+        """Get Klippy information.
+
+        Returns
+        -------
+        dict[str, object]
+            A dictionary with Klippy details.
+
+        """
         return self.klippy_connection.klippy_info
 
     def _handle_term_signal(self) -> None:
-        logging.info("Exiting with signal SIGTERM")
+        """Handle the SIGTERM signal."""
+        logger.info("Exiting with signal SIGTERM")
         self.event_loop.register_callback(self._stop_server, "terminate")
 
     def restart(self, delay: float | None = None) -> None:
+        """Restart the server.
+
+        Parameters
+        ----------
+        delay : float or None, optional
+            Delay in seconds before restarting. If None, restart immediately.
+
+        """
         if delay is None:
             self.event_loop.register_callback(self._stop_server)
         else:
             self.event_loop.delay_callback(delay, self._stop_server)
 
     async def _stop_server(self, exit_reason: str = "restart") -> None:
+        """Stop the server.
+
+        Parameters
+        ----------
+        exit_reason : str, optional
+            The reason for stopping. Default is "restart".
+
+        """
         self.server_running = False
         # Call each component's "on_exit" method
         for name, component in self.components.items():
@@ -492,8 +850,9 @@ class Server:
                     if ret is not None:
                         await ret
                 except Exception:
-                    logging.exception(
-                        f"Error executing 'on_exit()' for component: {name}",
+                    logger.exception(
+                        "Error executing 'on_exit()' for component: %s",
+                        name,
                     )
 
         # Sleep for 100ms to allow connected websockets to write out
@@ -503,7 +862,7 @@ class Server:
             await self.moonraker_app.close()
             await self.websocket_manager.close()
         except Exception:
-            logging.exception("Error Closing App")
+            logger.exception("Error closing application")
 
         # Disconnect from Klippy
         try:
@@ -512,7 +871,7 @@ class Server:
                 2.0,
             )
         except Exception:
-            logging.exception("Klippy Disconnect Error")
+            logger.exception("Error disconnecting from Klippy")
 
         # Close all components
         for name, component in self.components.items():
@@ -526,8 +885,9 @@ class Server:
                     if ret is not None:
                         await ret
                 except Exception:
-                    logging.exception(
-                        f"Error executing 'close()' for component: {name}",
+                    logger.exception(
+                        "Error executing 'close()' for component: %s",
+                        name,
                     )
         # Allow cancelled tasks a chance to run in the eventloop
         await asyncio.sleep(0.001)
@@ -537,10 +897,36 @@ class Server:
         self.app_running_evt.set()
 
     async def _handle_server_restart(self, _web_request: WebRequest) -> str:
+        """Handle a server restart request.
+
+        Parameters
+        ----------
+        _web_request : WebRequest
+            The web request.
+
+        Returns
+        -------
+        str
+            Response string.
+
+        """
         self.event_loop.register_callback(self._stop_server)
         return "ok"
 
-    async def _handle_info_request(self, web_request: WebRequest) -> dict[str, Any]:
+    async def _handle_info_request(self, web_request: WebRequest) -> ServerInfo:
+        """Handle an info request.
+
+        Parameters
+        ----------
+        web_request : WebRequest
+            The web request.
+
+        Returns
+        -------
+        ServerInfo
+            The info response.
+
+        """
         raw = web_request.get_boolean("raw", False)
         file_manager: FileManager | None = self.lookup_component("file_manager", None)
         reg_dirs = []
@@ -565,8 +951,21 @@ class Server:
             "api_version_string": ".".join([str(v) for v in API_VERSION]),
         }
 
-    async def _handle_config_request(self, _web_request: WebRequest) -> dict[str, Any]:
-        cfg_file_list: list[dict[str, Any]] = []
+    async def _handle_config_request(self, _web_request: WebRequest) -> ConfigResponse:
+        """Handle a config request.
+
+        Parameters
+        ----------
+        _web_request : WebRequest
+            The web request.
+
+        Returns
+        -------
+        ConfigResponse
+            The config response.
+
+        """
+        cfg_file_list: list[ConfigFile] = []
         cfg_parent = (
             pathlib.Path(
                 self.app_args["config_file"],
@@ -591,15 +990,30 @@ class Server:
 
 async def launch_server(
     log_manager: LogManager,
-    app_args: dict[str, Any],
+    app_args: AppArgs,
 ) -> int | None:
+    """Launch the server.
+
+    Parameters
+    ----------
+    log_manager : LogManager
+        The log manager.
+    app_args : AppArgs
+        Application arguments.
+
+    Returns
+    -------
+    int or None
+        Exit code or None for restart.
+
+    """
     eventloop = EventLoop()
     startup_warnings: list[str] = app_args["startup_warnings"]
     try:
         server = Server(app_args, log_manager, eventloop)
         server.load_components()
     except confighelper.ConfigError as e:
-        logging.exception("Server Config Error")
+        logger.exception("Server configuration error")
         backup_cfg: str | None = app_args["backup_config"]
         if app_args["is_backup_config"] or backup_cfg is None:
             return 1
@@ -611,13 +1025,13 @@ async def launch_server(
         )
         return True
     except Exception:
-        logging.exception("Moonraker Error")
+        logger.exception("Fatal Moonraker error during initialization")
         return 1
     try:
         await server.server_init()
         await server.run_until_exit()
     except Exception:
-        logging.exception("Server Running Error")
+        logger.exception("Fatal error during server execution")
         return 1
     if server.exit_reason == "terminate":
         return 0
@@ -631,6 +1045,15 @@ async def launch_server(
 
 
 def main(from_package: bool = True) -> None:
+    """Enter the main entry point for the Moonraker server.
+
+    Parameters
+    ----------
+    from_package : bool, optional
+        Whether running from a package. Default is True.
+
+    """
+
     def get_env_bool(key: str) -> bool:
         return os.getenv(key, "").lower() in ["y", "yes", "true"]
 
@@ -773,10 +1196,10 @@ def main(from_package: bool = True) -> None:
         estatus = asyncio.run(launch_server(log_manager, app_args))
         if estatus is not None:
             break
-        # Since we are running outside of the the server
+        # Since we are running outside of the server
         # it is ok to use a blocking sleep here
         time.sleep(0.5)
-        logging.info("Attempting Server Restart...")
-    logging.info("Server Shutdown")
+        logger.info("Attempting server restart...")
+    logger.info("Server shutdown")
     log_manager.stop_logging()
     sys.exit(estatus)

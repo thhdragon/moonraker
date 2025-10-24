@@ -21,7 +21,7 @@ _uvl_var = os.getenv("MOONRAKER_ENABLE_UVLOOP", "y").lower()
 _uvl_enabled = False
 if _uvl_var in ["y", "yes", "true"]:
     with contextlib.suppress(ImportError):
-        import uvloop  # type: ignore
+        import uvloop
 
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
         _uvl_enabled = True
@@ -76,7 +76,8 @@ class EventLoop:
             logging.info("Failed to create open eventloop, retrying in .5 seconds...")
             time.sleep(0.5)
         else:
-            raise RuntimeError("Unable to create new open eventloop")
+            msg = "Unable to create new open eventloop"
+            raise RuntimeError(msg)
         asyncio.set_event_loop(new_loop)
         return new_loop
 
@@ -111,7 +112,7 @@ class EventLoop:
             functools.partial(callback, *args, **kwargs),
         )
 
-    def register_timer(self, callback: TimerCallback):
+    def register_timer(self, callback: TimerCallback) -> FlexTimer:
         return FlexTimer(self, callback)
 
     def run_in_thread(
@@ -164,9 +165,10 @@ class EventLoop:
                 # Break explicitly a reference cycle
                 err = None
         else:
-            raise OSError("getaddrinfo returns an empty list")
+            msg = "getaddrinfo returns an empty list"
+            raise OSError(msg)
 
-    def close(self):
+    def close(self) -> None:
         self.aioloop.close()
 
 
@@ -185,7 +187,7 @@ class FlexTimer:
     def in_callback(self) -> bool:
         return self.timer_task is not None and not self.timer_task.done()
 
-    def start(self, delay: float = 0.0):
+    def start(self, delay: float = 0.0) -> None:
         if self.running:
             return
         self.running = True
@@ -194,7 +196,7 @@ class FlexTimer:
         call_time = self.eventloop.get_loop_time() + delay
         self.timer_handle = self.eventloop.call_at(call_time, self._schedule_task)
 
-    def stop(self):
+    def stop(self) -> None:
         if not self.running:
             return
         self.running = False
@@ -207,14 +209,14 @@ class FlexTimer:
             return
         await self.timer_task
 
-    def _schedule_task(self):
+    def _schedule_task(self) -> None:
         self.timer_handle = None
         self.timer_task = self.eventloop.create_task(self._call_wrapper())
 
     def is_running(self) -> bool:
         return self.running
 
-    async def _call_wrapper(self):
+    async def _call_wrapper(self) -> None:
         if not self.running:
             return
         try:
