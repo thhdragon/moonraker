@@ -14,10 +14,6 @@ from ..common import JobEvent, RequestType
 from typing import (
     TYPE_CHECKING,
     Any,
-    Optional,
-    Dict,
-    List,
-    Union,
 )
 
 if TYPE_CHECKING:

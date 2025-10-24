@@ -15,9 +15,7 @@ from ..common import JobEvent, RequestType
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
-    Dict,
     Any,
-    List,
 )
 
 if TYPE_CHECKING:

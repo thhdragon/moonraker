@@ -14,7 +14,7 @@ import datetime
 import contextlib
 from ..utils import async_serial
 from ..common import RequestType
-from typing import Optional, Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper

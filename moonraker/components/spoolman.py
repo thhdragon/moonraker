@@ -13,7 +13,7 @@ import tornado.websocket as tornado_ws
 from tornado import version_info as tornado_version
 from ..common import RequestType, HistoryFieldData
 from ..utils import json_wrapper as jsonw
-from typing import TYPE_CHECKING, Any, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper

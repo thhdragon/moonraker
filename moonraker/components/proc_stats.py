@@ -21,7 +21,6 @@ from ..common import RequestType
 from typing import (
     TYPE_CHECKING,
     Any,
-    Optional,
 )
 from collections.abc import Awaitable, Callable
 

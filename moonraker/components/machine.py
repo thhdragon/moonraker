@@ -26,7 +26,7 @@ from ..utils import json_wrapper as jsonw
 from ..common import RequestType
 
 # Annotation imports
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, cast
 from collections.abc import Awaitable, Callable
 
 if TYPE_CHECKING:
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from dbus_fast.aio.proxy_object import ProxyInterface
     from dbus_fast.signature import Variant
 
-    SudoReturn = Union[Awaitable[tuple[str, bool]], tuple[str, bool]]
+    SudoReturn = Awaitable[tuple[str, bool]] | tuple[str, bool]
     SudoCallback = Callable[[], SudoReturn]
 
 CGROUP_PATH = "/proc/1/cgroup"
@@ -1540,7 +1540,7 @@ EnvironmentFile=%s
 ExecStart=%s $MOONRAKER_ARGS
 Restart=always
 RestartSec=10
-"""  # noqa: E122
+"""
 
 TEMPLATE_NAME = "password_request.html"
 

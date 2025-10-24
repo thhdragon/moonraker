@@ -12,7 +12,6 @@ import tomllib
 import json
 import ast
 from io import StringIO, TextIOBase
-from typing import Dict, List
 from collections.abc import Iterator
 
 MAX_LINE_LENGTH = 88
@@ -22,18 +21,20 @@ INST_PKG_FOOTER = "# *** AUTO GENERATED OS PACKAGE SCRIPT END ***"
 DEPS_HEADER = "# *** SYSTEM DEPENDENCIES START ***"
 DEPS_FOOTER = "# *** SYSTEM DEPENDENCIES END ***"
 
+
 def gen_pkg_list(values: list[str], indent: int = 0) -> Iterator[str]:
     idt = " " * indent
     if not values:
         return
-    current_line = f"{idt}\"{values.pop(0)}\","
+    current_line = f'{idt}"{values.pop(0)}",'
     for val in values:
         if len(current_line) + len(val) + 4 > MAX_LINE_LENGTH:
             yield current_line + "\n"
-            current_line = f"{idt}\"{val}\","
+            current_line = f'{idt}"{val}",'
         else:
-            current_line += f" \"{val}\","
+            current_line += f' "{val}",'
     yield current_line.rstrip(",") + "\n"
+
 
 def write_parser_script(sys_deps: dict[str, list[str]], out_hdl: TextIOBase) -> None:
     parser_file = SCRIPTS_PATH.parent.joinpath("moonraker/utils/sysdeps_parser.py")
@@ -46,14 +47,15 @@ def write_parser_script(sys_deps: dict[str, list[str]], out_hdl: TextIOBase) -> 
     out_hdl.write("system_deps = {\n")
     for distro, packages in sys_deps.items():
         indent = " " * 4
-        out_hdl.write(f"{indent}\"{distro}\": [\n")
+        out_hdl.write(f'{indent}"{distro}": [\n')
         # Write packages
         for line in gen_pkg_list(packages, 8):
             out_hdl.write(line)
         out_hdl.write(f"{indent}],\n")
     out_hdl.write("}\n")
     out_hdl.write(f"{DEPS_FOOTER}\n")
-    out_hdl.writelines("""
+    out_hdl.writelines(
+        """
 parser = SysDepsParser()
 pkgs = parser.parse_dependencies(system_deps)
 if pkgs:
@@ -61,7 +63,9 @@ if pkgs:
 exit(0)
 EOF
 )
-""".lstrip())
+""".lstrip()
+    )
+
 
 def sync_packages() -> int:
     inst_script = SCRIPTS_PATH.joinpath("install-moonraker.sh")
@@ -121,6 +125,7 @@ def sync_packages() -> int:
                 write_parser_script(new_deps, inst_file)
     return 1
 
+
 def check_reqs_changed(reqs_file: pathlib.Path, new_reqs: list[str]) -> bool:
     req_list = []
     for requirement in reqs_file.read_text().splitlines():
@@ -129,6 +134,7 @@ def check_reqs_changed(reqs_file: pathlib.Path, new_reqs: list[str]) -> bool:
             continue
         req_list.append(requirement)
     return set(new_reqs) != set(req_list)
+
 
 def sync_requirements() -> int:
     ret: int = 0
@@ -173,11 +179,14 @@ def sync_requirements() -> int:
         print("Dev requirements match")
     return ret
 
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "filename", default="", nargs="?",
-        help="The name of the dependency file to sync"
+        "filename",
+        default="",
+        nargs="?",
+        help="The name of the dependency file to sync",
     )
     args = parser.parse_args()
     fname: str = args.filename

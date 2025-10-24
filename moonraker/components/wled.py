@@ -17,7 +17,7 @@ from ..utils import json_wrapper as jsonw
 from ..common import RequestType
 
 # Annotation imports
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, cast
 from collections.abc import Coroutine
 
 if TYPE_CHECKING:

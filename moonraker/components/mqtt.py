@@ -18,14 +18,8 @@ from ..utils import json_wrapper as jsonw
 
 # Annotation imports
 from typing import (
-    List,
-    Optional,
     TYPE_CHECKING,
     Any,
-    Dict,
-    Union,
-    Tuple,
-    Deque,
 )
 from collections.abc import Callable, Coroutine, Awaitable
 

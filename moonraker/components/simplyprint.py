@@ -22,8 +22,6 @@ from ..utils import json_wrapper as jsonw
 
 from typing import (
     TYPE_CHECKING,
-    Optional,
-    Union,
     Any,
 )
 from collections.abc import Awaitable, Callable

@@ -12,7 +12,7 @@ import ldap3
 from ldap3.core.exceptions import LDAPExceptionError
 
 # Annotation imports
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper

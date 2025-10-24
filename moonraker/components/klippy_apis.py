@@ -10,7 +10,7 @@ from ..utils import Sentinel
 from ..common import WebRequest, APITransport, RequestType
 
 # Annotation imports
-from typing import TYPE_CHECKING, Any, Union, Optional, Dict, List, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 from collections.abc import Mapping, Callable, Coroutine
 
 if TYPE_CHECKING:

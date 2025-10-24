@@ -11,7 +11,6 @@ import dataclasses
 import inspect
 import logging
 import re
-import sys
 import time
 from abc import ABCMeta, abstractmethod
 from collections.abc import Awaitable, Callable, Coroutine
@@ -22,10 +21,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     ClassVar,
-    Generic,
-    Optional,
     TypeVar,
-    Union,
 )
 
 from typing import Self
@@ -46,10 +42,10 @@ if TYPE_CHECKING:
 
     _C = TypeVar("_C", str, bool, float, int)
     _F = TypeVar("_F", bound="ExtendedFlag")
-    ConvType = Union[str, bool, float, int]
-    ArgVal = Union[None, int, float, bool, str]
+    ConvType = str | bool | float | int
+    ArgVal = None | int | float | bool | str
     RPCCallback = Callable[..., Coroutine]
-    AuthComp = Optional[Authorization]
+    AuthComp = Authorization | None
 
 _T = TypeVar("_T")
 ENDPOINT_PREFIXES = ["printer", "server", "machine", "access", "api", "debug"]
@@ -75,7 +71,6 @@ class ExtendedFlag(Flag):
     @classmethod
     def all(cls) -> Self:
         return ~cls(0)
-
 
 
 class RequestType(ExtendedFlag):
@@ -995,7 +990,7 @@ class BasicTracker(FieldTracker[Any]):
         return isinstance(self.tracked_value, (int, float))
 
 
-class DeltaTracker(FieldTracker[Union[int, float]]):
+class DeltaTracker(FieldTracker[int | float]):
     def __init__(
         self,
         value: float = 0,
@@ -1026,7 +1021,7 @@ class DeltaTracker(FieldTracker[Union[int, float]]):
         return True
 
 
-class CumulativeTracker(FieldTracker[Union[int, float]]):
+class CumulativeTracker(FieldTracker[int | float]):
     def __init__(
         self,
         value: float = 0,

@@ -16,9 +16,7 @@ from ..common import RequestType, HistoryFieldData
 # Annotation imports
 from typing import (
     Any,
-    Optional,
     TYPE_CHECKING,
-    Union,
 )
 from collections.abc import Callable
 

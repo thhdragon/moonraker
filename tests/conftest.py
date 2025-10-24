@@ -9,7 +9,7 @@ import sys
 import shlex
 import tempfile
 import subprocess
-from typing import Dict, Any
+from typing import Any
 from collections.abc import Iterator, AsyncIterator
 from moonraker.server import Server
 from moonraker.eventloop import EventLoop
@@ -21,18 +21,21 @@ ASSETS = pathlib.Path(__file__).parent.joinpath("assets")
 
 need_klippy_restart = pytest.StashKey[bool]()
 
+
 def pytest_addoption(parser: pytest.Parser, pluginmanager):
     parser.addoption("--klipper-path", action="store", dest="klipper_path")
     parser.addoption("--klipper-exec", action="store", dest="klipper_exec")
 
-def interpolate_config(source_path: pathlib.Path,
-                       dest_path: pathlib.Path,
-                       keys: dict[str, Any]
-                       ) -> None:
+
+def interpolate_config(
+    source_path: pathlib.Path, dest_path: pathlib.Path, keys: dict[str, Any]
+) -> None:
     def interp(match):
         return str(keys[match.group(1)])
+
     sub_data = re.sub(r"\${([^}]+)}", interp, source_path.read_text())
     dest_path.write_text(sub_data)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def ssl_certs() -> Iterator[dict[str, pathlib.Path]]:
@@ -53,6 +56,7 @@ def ssl_certs() -> Iterator[dict[str, pathlib.Path]]:
             "ssl_key_path": key_path,
         }
 
+
 @pytest.fixture(scope="class")
 def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
     loop = asyncio.get_event_loop_policy().new_event_loop()
@@ -61,8 +65,9 @@ def event_loop() -> Iterator[asyncio.AbstractEventLoop]:
 
 
 @pytest.fixture(scope="session")
-def session_args(ssl_certs: dict[str, pathlib.Path]
-                 ) -> Iterator[dict[str, pathlib.Path]]:
+def session_args(
+    ssl_certs: dict[str, pathlib.Path],
+) -> Iterator[dict[str, pathlib.Path]]:
     mconf_asset = ASSETS.joinpath("moonraker/base_server.conf")
     secrets_asset = ASSETS.joinpath("moonraker/secrets.ini")
     pcfg_asset = ASSETS.joinpath("klipper/base_printer.cfg")
@@ -101,12 +106,14 @@ def session_args(ssl_certs: dict[str, pathlib.Path]
         interpolate_config(pcfg_asset, pcfg_dest, dest_paths)
         yield dest_paths
 
+
 @pytest.fixture(scope="session")
-def klippy_session(session_args: dict[str, pathlib.Path],
-                   pytestconfig: pytest.Config) -> Iterator[KlippyProcess]:
+def klippy_session(
+    session_args: dict[str, pathlib.Path], pytestconfig: pytest.Config
+) -> Iterator[KlippyProcess]:
     pytestconfig.stash[need_klippy_restart] = False
-    kpath = pytestconfig.getoption('klipper_path', "~/klipper")
-    kexec = pytestconfig.getoption('klipper_exec', None)
+    kpath = pytestconfig.getoption("klipper_path", "~/klipper")
+    kexec = pytestconfig.getoption("klipper_exec", None)
     if kexec is None:
         kexec = sys.executable
     exec = pathlib.Path(kexec).expanduser()
@@ -117,19 +124,21 @@ def klippy_session(session_args: dict[str, pathlib.Path],
     yield kproc
     kproc.stop()
 
+
 @pytest.fixture(scope="class")
-def klippy(klippy_session: KlippyProcess,
-           pytestconfig: pytest.Config):
+def klippy(klippy_session: KlippyProcess, pytestconfig: pytest.Config):
     if pytestconfig.stash[need_klippy_restart]:
         pytestconfig.stash[need_klippy_restart] = False
         klippy_session.restart()
     return klippy_session
 
+
 @pytest.fixture(scope="class")
-def path_args(request: pytest.FixtureRequest,
-              session_args: dict[str, pathlib.Path],
-              pytestconfig: pytest.Config
-              ) -> Iterator[dict[str, pathlib.Path]]:
+def path_args(
+    request: pytest.FixtureRequest,
+    session_args: dict[str, pathlib.Path],
+    pytestconfig: pytest.Config,
+) -> Iterator[dict[str, pathlib.Path]]:
     path_marker = request.node.get_closest_marker("run_paths")
     paths: dict[str, Any] = {
         "moonraker_conf": "base_server.conf",
@@ -149,10 +158,10 @@ def path_args(request: pytest.FixtureRequest,
         tmp_uds = tmp_path.joinpath(paths["klippy_uds"])
         session_args["klippy_uds_path"] = tmp_uds
     if (
-        not mconf_asset.samefile(session_args["mconf_asset"]) or
-        paths["klippy_uds"] is not None
+        not mconf_asset.samefile(session_args["mconf_asset"])
+        or paths["klippy_uds"] is not None
     ):
-        session_args['mconf_asset'] = mconf_asset
+        session_args["mconf_asset"] = mconf_asset
         interpolate_config(mconf_asset, mconf_dest, session_args)
     if not pcfg_asset.samefile(session_args["pcfg_asset"]):
         pcfg_dest = session_args["printer.cfg"]
@@ -161,13 +170,12 @@ def path_args(request: pytest.FixtureRequest,
         pytestconfig.stash[need_klippy_restart] = True
     if paths["secrets"] != session_args["secrets_path"].name:
         secrets_asset = ASSETS.joinpath(f"moonraker/{paths['secrets']}")
-        secrets_dest = tmp_path.joinpath(paths['secrets'])
+        secrets_dest = tmp_path.joinpath(paths["secrets"])
         shutil.copy(secrets_asset, secrets_dest)
         session_args["secrets_path"] = secrets_dest
     if "moonraker_log" in paths:
         log_path = session_args["log_path"]
-        session_args['moonraker.log'] = log_path.joinpath(
-            paths["moonraker_log"])
+        session_args["moonraker.log"] = log_path.joinpath(paths["moonraker_log"])
     bkp_dest: pathlib.Path = cfg_path.joinpath(".moonraker.conf.bkp")
     if "moonraker_bkp" in paths:
         bkp_source = ASSETS.joinpath("moonraker/base_server.conf")
@@ -192,15 +200,16 @@ def path_args(request: pytest.FixtureRequest,
         # restore the original uds path
         interpolate_config(mconf_asset, mconf_dest, session_args)
 
+
 @pytest.fixture(scope="class")
-def base_server(path_args: dict[str, pathlib.Path],
-                event_loop: asyncio.AbstractEventLoop
-                ) -> Iterator[Server]:
+def base_server(
+    path_args: dict[str, pathlib.Path], event_loop: asyncio.AbstractEventLoop
+) -> Iterator[Server]:
     evtloop = EventLoop()
     args = {
-        'config_file': str(path_args['moonraker.conf']),
-        'log_file': str(path_args.get("moonraker.log", "")),
-        'software_version': "moonraker-pytest"
+        "config_file": str(path_args["moonraker.conf"]),
+        "log_file": str(path_args.get("moonraker.log", "")),
+        "software_version": "moonraker-pytest",
     }
     ql = logger = None
     if args["log_file"]:
@@ -211,22 +220,25 @@ def base_server(path_args: dict[str, pathlib.Path],
     if ql is not None:
         ql.stop()
 
+
 @pytest_asyncio.fixture(scope="class")
 async def full_server(base_server: Server) -> AsyncIterator[Server]:
     base_server.load_components()
     ret = base_server.server_init(start_server=False)
-    await asyncio.wait_for(ret, 4.)
+    await asyncio.wait_for(ret, 4.0)
     yield base_server
     if base_server.event_loop.aioloop.is_running():
         await base_server._stop_server(exit_reason="terminate")
 
+
 @pytest_asyncio.fixture(scope="class")
 async def ready_server(full_server: Server, klippy: KlippyProcess):
     ret = full_server.start_server(connect_to_klippy=False)
-    await asyncio.wait_for(ret, 4.)
+    await asyncio.wait_for(ret, 4.0)
     ret = full_server.klippy_connection.connect()
-    await asyncio.wait_for(ret, 4.)
+    await asyncio.wait_for(ret, 4.0)
     yield full_server
+
 
 @pytest_asyncio.fixture(scope="class")
 async def http_client() -> AsyncIterator[HttpClient]:
@@ -234,9 +246,11 @@ async def http_client() -> AsyncIterator[HttpClient]:
     yield client
     client.close()
 
+
 @pytest_asyncio.fixture(scope="class")
-async def websocket_client(request: pytest.FixtureRequest
-                           ) -> AsyncIterator[WebsocketClient]:
+async def websocket_client(
+    request: pytest.FixtureRequest,
+) -> AsyncIterator[WebsocketClient]:
     conn_marker = request.node.get_closest_marker("no_ws_connect")
     client = WebsocketClient()
     if conn_marker is None:

@@ -11,9 +11,6 @@ import logging
 from typing import (
     TYPE_CHECKING,
     Any,
-    Optional,
-    Dict,
-    List,
 )
 from ..common import JobEvent, KlippyState
 

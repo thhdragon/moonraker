@@ -12,7 +12,7 @@ import logging
 import email.utils
 import xml.etree.ElementTree as etree
 from ..common import RequestType
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 from collections.abc import Awaitable
 
 if TYPE_CHECKING:

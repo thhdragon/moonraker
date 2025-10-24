@@ -16,7 +16,7 @@ import asyncio
 import shlex
 from ..common import RequestType
 from ..utils import json_wrapper as jsonw
-from typing import TYPE_CHECKING, Union, Optional, Any
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper

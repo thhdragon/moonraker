@@ -19,7 +19,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     TypeVar,
-    Union,
     cast,
 )
 
@@ -45,7 +44,7 @@ if TYPE_CHECKING:
     from ..machine import Machine
     from ..shell_command import ShellCommandFactory as SCMDComp
 
-    JsonType = Union[list[Any], dict[str, Any]]
+    JsonType = list[Any] | dict[str, Any]
     _T = TypeVar("_T")
 
 # Check To see if Updates are necessary each hour

@@ -288,7 +288,7 @@ class Server:
 
     def load_components(self) -> None:
         config = self.config
-        cfg_sections = set([s.split()[0] for s in config.sections()])
+        cfg_sections = {s.split()[0] for s in config.sections()}
         cfg_sections.remove("server")
 
         # load database to initialize saved state
@@ -298,8 +298,7 @@ class Server:
         # load core components
         for component in CORE_COMPONENTS:
             self.load_component(config, component)
-            if component in cfg_sections:
-                cfg_sections.remove(component)
+            cfg_sections.discard(component)
 
         # load remaining optional components
         for section in cfg_sections:
@@ -317,13 +316,15 @@ class Server:
         if component_name in self.components:
             return self.components[component_name]
         if self.is_configured():
+            msg = "Cannot load components after configuration"
             raise self.error(
-                "Cannot load components after configuration",
+                msg,
                 500,
             )
         if component_name in self.failed_components:
+            msg = f"Component {component_name} previously failed to load"
             raise self.error(
-                f"Component {component_name} previously failed to load",
+                msg,
                 500,
             )
         full_name = f"moonraker.components.{component_name}"
@@ -342,9 +343,8 @@ class Server:
                 isinstance(e, ModuleNotFoundError)
                 and full_name != e.name
                 and component_name not in ucomps
-            ):
-                if self.try_pip_recovery(e.name or "unknown"):
-                    return self.load_component(config, component_name, default)
+            ) and self.try_pip_recovery(e.name or "unknown"):
+                return self.load_component(config, component_name, default)
             msg = f"Unable to load component: ({component_name})"
             logging.exception(msg)
             if component_name not in self.failed_components:
@@ -393,7 +393,8 @@ class Server:
     ) -> _T | Any:
         component = self.components.get(component_name, default)
         if component is Sentinel.MISSING:
-            raise ServerError(f"Component ({component_name}) not found")
+            msg = f"Component ({component_name}) not found"
+            raise ServerError(msg)
         return component
 
     def set_failed_component(self, component_name: str) -> None:
@@ -402,7 +403,8 @@ class Server:
 
     def register_component(self, component_name: str, component: Any) -> None:
         if component_name in self.components:
-            raise self.error(f"Component '{component_name}' already registered")
+            msg = f"Component '{component_name}' already registered"
+            raise self.error(msg)
         self.components[component_name] = component
 
     def register_notification(
@@ -761,7 +763,7 @@ def main(from_package: bool = True) -> None:
     else:
         app_args["log_file"] = str(data_path.joinpath("logs/moonraker.log"))
     app_args["python_version"] = sys.version.replace("\n", " ")
-    app_args["launch_args"] = " ".join([sys.executable] + sys.argv).strip()
+    app_args["launch_args"] = " ".join([sys.executable, *sys.argv]).strip()
     app_args["msgspec_enabled"] = json_wrapper.MSGSPEC_ENABLED
     app_args["uvloop_enabled"] = EventLoop.UVLOOP_ENABLED
     log_manager = LogManager(app_args, startup_warnings)

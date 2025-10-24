@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 SYS_MOD_PATHS = glob.glob("/usr/lib/python3*/dist-packages")
 SYS_MOD_PATHS += glob.glob("/usr/lib/python3*/site-packages")
 SYS_MOD_PATHS += glob.glob("/usr/lib/*-linux-gnu/python3*/site-packages")
-IPAddress = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
+IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 try:
     KERNEL_VERSION = tuple([int(part) for part in platform.release().split(".")[:2]])

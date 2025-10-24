@@ -9,32 +9,37 @@ from moonraker.server import Server
 from moonraker.utils import ServerError
 from moonraker.components import gpio
 from mocks import MockGpiod
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from confighelper import ConfigHelper
+
 
 @pytest.fixture(scope="class")
 def config(base_server: Server) -> ConfigHelper:
     base_server.load_component(base_server.config, "secrets")
     return base_server.config
 
+
 @pytest.fixture(scope="class")
-def test_config(config: ConfigHelper,
-                path_args: dict[str, pathlib.Path]
-                ) -> ConfigHelper:
-    assets = path_args['asset_path']
+def test_config(
+    config: ConfigHelper, path_args: dict[str, pathlib.Path]
+) -> ConfigHelper:
+    assets = path_args["asset_path"]
     sup_cfg_path = assets.joinpath("moonraker/supplemental.conf")
     if not sup_cfg_path.exists():
         pytest.fail("Supplemental config not found")
     cfg = config.read_supplemental_config(str(sup_cfg_path))
     return cfg["test_options"]
 
+
 @pytest.fixture(scope="function")
-def gpio_config(test_config: ConfigHelper,
-                monkeypatch: pytest.MonkeyPatch
-                ) -> ConfigHelper:
+def gpio_config(
+    test_config: ConfigHelper, monkeypatch: pytest.MonkeyPatch
+) -> ConfigHelper:
     def load_gpio_mock(name: str) -> MockGpiod:
         return MockGpiod()
+
     monkeypatch.setattr(gpio, "load_system_module", load_gpio_mock)
     yield test_config
     server = test_config.get_server()
@@ -42,6 +47,7 @@ def gpio_config(test_config: ConfigHelper,
     if gpio_comp is not None:
         gpio_comp.close()
         gpio_comp.reserved_gpios = {}
+
 
 class TestConfigGeneric:
     def test_get_server(self, config: ConfigHelper):
@@ -68,14 +74,14 @@ class TestConfigGeneric:
     def test_get_name(self, config: ConfigHelper):
         assert config.get_name() == "server"
 
-    def test_get_options(self,
-                         config: ConfigHelper,
-                         path_args: dict[str, pathlib.Path]):
+    def test_get_options(
+        self, config: ConfigHelper, path_args: dict[str, pathlib.Path]
+    ):
         expected = {
             "host": "0.0.0.0",
             "port": "7010",
             "ssl_port": "7011",
-            "klippy_uds_address": str(path_args["klippy_uds_path"])
+            "klippy_uds_address": str(path_args["klippy_uds_path"]),
         }
         assert expected == config.get_options()
 
@@ -88,13 +94,16 @@ class TestConfigGeneric:
         cfg_hash = config.get_hash().hexdigest()
         assert cfg_hash == expected_hash.hexdigest()
 
+
 def test_missing_supplemental_config(config: ConfigHelper):
     no_file = pathlib.Path("nofile")
     with pytest.raises(ConfigError):
         config.read_supplemental_config(no_file)
 
-def test_error_supplemental_config(config: ConfigHelper,
-                                   path_args: dict[str, pathlib.Path]):
+
+def test_error_supplemental_config(
+    config: ConfigHelper, path_args: dict[str, pathlib.Path]
+):
     assets = path_args["asset_path"]
     invalid_cfg = assets.joinpath("moonraker/invalid_config.conf")
     if not invalid_cfg.exists():
@@ -102,10 +111,12 @@ def test_error_supplemental_config(config: ConfigHelper,
     with pytest.raises(ConfigError):
         config.read_supplemental_config(invalid_cfg)
 
+
 def test_prefix_sections(test_config: ConfigHelper):
     prefix = test_config.get_prefix_sections("prefix_sec")
     expected = ["prefix_sec one", "prefix_sec two", "prefix_sec three"]
     assert prefix == expected
+
 
 class TestGetString:
     def test_get_str_exists(self, test_config: ConfigHelper):
@@ -128,6 +139,7 @@ class TestGetString:
             "at https://moonraker.readthedocs.io/en/latest/configuration"
         )
         assert expected in server.warnings
+
 
 class TestGetInt:
     def test_get_int_exists(self, test_config: ConfigHelper):
@@ -158,8 +170,7 @@ class TestGetInt:
             test_config.getint("test_int", maxval=0)
 
     def test_get_int_pass_all(self, test_config: ConfigHelper):
-        val = test_config.getint("test_int", above=0, below=2,
-                                 minval=1, maxval=1)
+        val = test_config.getint("test_int", above=0, below=2, minval=1, maxval=1)
         assert val == 1
 
     def test_get_int_deprecate(self, test_config: ConfigHelper):
@@ -171,6 +182,7 @@ class TestGetInt:
             "at https://moonraker.readthedocs.io/en/latest/configuration"
         )
         assert expected in server.warnings
+
 
 class TestGetFloat:
     def test_get_float_exists(self, test_config: ConfigHelper):
@@ -201,8 +213,9 @@ class TestGetFloat:
             test_config.getfloat("test_float", maxval=3.45)
 
     def test_get_float_pass_all(self, test_config: ConfigHelper):
-        val = test_config.getfloat("test_float", above=3.45, below=3.55,
-                                   minval=3, maxval=4)
+        val = test_config.getfloat(
+            "test_float", above=3.45, below=3.55, minval=3, maxval=4
+        )
         assert 3.5 == pytest.approx(val)
 
     def test_get_float_deprecate(self, test_config: ConfigHelper):
@@ -214,6 +227,7 @@ class TestGetFloat:
             "at https://moonraker.readthedocs.io/en/latest/configuration"
         )
         assert expected in server.warnings
+
 
 class TestGetBoolean:
     def test_get_boolean_exists(self, test_config: ConfigHelper):
@@ -237,6 +251,7 @@ class TestGetBoolean:
         )
         assert expected in server.warnings
 
+
 class TestGetList:
     def test_get_list_exists(self, test_config: ConfigHelper):
         val = test_config.getlist("test_list")
@@ -258,8 +273,9 @@ class TestGetList:
         assert val == pytest.approx([1.5, 2.8, 3.2])
 
     def test_get_multi_list(self, test_config: ConfigHelper):
-        val = test_config.getlists("test_multi_list", list_type=int,
-                                   separators=("\n", ","))
+        val = test_config.getlists(
+            "test_multi_list", list_type=int, separators=("\n", ",")
+        )
         assert val == [[1, 2, 3], [4, 5, 6]]
 
     def test_get_list_deprecate(self, test_config: ConfigHelper):
@@ -271,6 +287,7 @@ class TestGetList:
             "at https://moonraker.readthedocs.io/en/latest/configuration"
         )
         assert expected in server.warnings
+
 
 class TestGetDict:
     def test_get_dict_exists(self, test_config: ConfigHelper):
@@ -285,8 +302,7 @@ class TestGetDict:
         assert test_config.getdict("invalid_option", None) is None
 
     def test_get_dict_empty_fields(self, test_config: ConfigHelper):
-        val = test_config.getdict("test_dict_empty_field",
-                                  allow_empty_fields=True)
+        val = test_config.getdict("test_dict_empty_field", allow_empty_fields=True)
         assert val == {"one": "test", "two": None, "three": None}
 
     def test_get_dict_empty_fields_fail(self, test_config: ConfigHelper):
@@ -302,6 +318,7 @@ class TestGetDict:
             "at https://moonraker.readthedocs.io/en/latest/configuration"
         )
         assert expected in server.warnings
+
 
 class TestGetTemplate:
     def test_get_template_exists(self, test_config: ConfigHelper):
@@ -335,7 +352,8 @@ class TestGetTemplate:
 
     def test_load_template_default(self, test_config: ConfigHelper):
         templ = test_config.load_template(
-            "invalid_option", "{secrets.mqtt_credentials.password}")
+            "invalid_option", "{secrets.mqtt_credentials.password}"
+        )
         val = templ.render()
         assert val == "mqttpass"
 
@@ -349,52 +367,51 @@ class TestGetTemplate:
         )
         assert expected in server.warnings
 
+
 class TestGetGpioOut:
     def test_get_gpio_exists(self, gpio_config: ConfigHelper):
         val: gpio.GpioOutputPin = gpio_config.getgpioout("test_gpio")
         assert (
-            val.orig == "gpiochip0/gpio26" and
-            val.name == "gpiochip0:gpio26" and
-            val.inverted is False and
-            val.value == 0
+            val.orig == "gpiochip0/gpio26"
+            and val.name == "gpiochip0:gpio26"
+            and val.inverted is False
+            and val.value == 0
         )
 
     def test_get_gpio_no_chip(self, gpio_config: ConfigHelper):
         val: gpio.GpioOutputPin = gpio_config.getgpioout("test_gpio_no_chip")
         assert (
-            val.orig == "gpio26" and
-            val.name == "gpiochip0:gpio26" and
-            val.inverted is False and
-            val.value == 0
+            val.orig == "gpio26"
+            and val.name == "gpiochip0:gpio26"
+            and val.inverted is False
+            and val.value == 0
         )
 
     def test_get_gpio_invert(self, gpio_config: ConfigHelper):
         val: gpio.GpioOutputPin = gpio_config.getgpioout("test_gpio_invert")
         assert (
-            val.orig == "!gpiochip0/gpio26" and
-            val.name == "gpiochip0:gpio26" and
-            val.inverted is True and
-            val.value == 0
+            val.orig == "!gpiochip0/gpio26"
+            and val.name == "gpiochip0:gpio26"
+            and val.inverted is True
+            and val.value == 0
         )
 
     def test_get_gpio_no_chip_invert(self, gpio_config: ConfigHelper):
-        val: gpio.GpioOutputPin = gpio_config.getgpioout(
-            "test_gpio_no_chip_invert")
+        val: gpio.GpioOutputPin = gpio_config.getgpioout("test_gpio_no_chip_invert")
         assert (
-            val.orig == "!gpio26" and
-            val.name == "gpiochip0:gpio26" and
-            val.inverted is True and
-            val.value == 0
+            val.orig == "!gpio26"
+            and val.name == "gpiochip0:gpio26"
+            and val.inverted is True
+            and val.value == 0
         )
 
     def test_get_gpio_initial_value(self, gpio_config: ConfigHelper):
-        val: gpio.GpioOutputPin = gpio_config.getgpioout(
-            "test_gpio", initial_value=1)
+        val: gpio.GpioOutputPin = gpio_config.getgpioout("test_gpio", initial_value=1)
         assert (
-            val.orig == "gpiochip0/gpio26" and
-            val.name == "gpiochip0:gpio26" and
-            val.inverted is False and
-            val.value == 1
+            val.orig == "gpiochip0/gpio26"
+            and val.name == "gpiochip0:gpio26"
+            and val.inverted is False
+            and val.value == 1
         )
 
     def test_get_gpio_fail(self, gpio_config: ConfigHelper):
@@ -404,8 +421,9 @@ class TestGetGpioOut:
     def test_get_gpio_default(self, gpio_config: ConfigHelper):
         assert gpio_config.getgpioout("invalid_option", None) is None
 
-    @pytest.mark.parametrize("opt", ["pullup", "pullup_no_chip",
-                                     "pulldown", "pulldown_no_chip"])
+    @pytest.mark.parametrize(
+        "opt", ["pullup", "pullup_no_chip", "pulldown", "pulldown_no_chip"]
+    )
     def test_get_gpio_invalid(self, gpio_config: ConfigHelper, opt: str):
         option = f"test_gpio_{opt}"
         if not gpio_config.has_option(option):
@@ -423,6 +441,7 @@ class TestGetGpioOut:
         )
         assert expected in server.warnings
 
+
 class TestGetConfiguration:
     def test_get_config_no_exist(self, base_server: Server):
         fake_path = pathlib.Path("no_exist")
@@ -433,10 +452,9 @@ class TestGetConfiguration:
         with pytest.raises(ConfigError):
             confighelper.get_configuration(base_server, args)
 
-    def test_get_config_no_access(self,
-                                  base_server: Server,
-                                  path_args: dict[str, pathlib.Path]
-                                  ):
+    def test_get_config_no_access(
+        self, base_server: Server, path_args: dict[str, pathlib.Path]
+    ):
         cfg_path = path_args["config_path"]
         test_cfg = cfg_path.joinpath("test.conf")
         shutil.copy(path_args["moonraker.conf"], test_cfg)
@@ -446,11 +464,10 @@ class TestGetConfiguration:
         with pytest.raises(ConfigError):
             confighelper.get_configuration(base_server, args)
 
-    def test_get_config_no_server(self,
-                                  base_server: Server,
-                                  path_args: dict[str, pathlib.Path]
-                                  ):
-        assets = path_args['asset_path']
+    def test_get_config_no_server(
+        self, base_server: Server, path_args: dict[str, pathlib.Path]
+    ):
+        assets = path_args["asset_path"]
         sup_cfg_path = assets.joinpath("moonraker/supplemental.conf")
         if not sup_cfg_path.exists():
             pytest.fail("Supplemental config not found")
@@ -458,6 +475,7 @@ class TestGetConfiguration:
         args["config_file"] = str(sup_cfg_path)
         with pytest.raises(ConfigError):
             confighelper.get_configuration(base_server, args)
+
 
 class TestBackupConfig:
     def test_find_backup_fail(self):

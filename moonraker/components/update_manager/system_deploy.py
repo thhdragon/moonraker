@@ -16,7 +16,6 @@ from collections.abc import Awaitable
 from typing import (
     TYPE_CHECKING,
     Any,
-    Union,
 )
 
 from ...thirdparty.packagekit import enums as PkEnum
@@ -32,7 +31,7 @@ if TYPE_CHECKING:
     from ..shell_command import ShellCommandFactory as SCMDComp
     from .update_manager import CommandHelper
 
-    JsonType = Union[list[Any], dict[str, Any]]
+    JsonType = list[Any] | dict[str, Any]
 
 
 class PackageDeploy(BaseDeploy):
@@ -424,7 +423,7 @@ class PackageKitTransaction:
         status_code: int,
         percent_complete: int,
     ) -> None:
-        status = PkEnum.Status.from_index(status_code)  # noqa: F841
+        PkEnum.Status.from_index(status_code)
         # NOTE: This signal doesn't seem to fire predictably,
         # nor does it seem to provide a consistent "percent complete"
         # parameter.

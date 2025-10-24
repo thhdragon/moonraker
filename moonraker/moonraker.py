@@ -5,6 +5,11 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license
 
+"""Legacy entry point for Moonraker.
+
+This module serves as the main entry point for starting the Moonraker server
+when executed directly.
+"""
 
 if __name__ == "__main__":
     import importlib
@@ -15,4 +20,4 @@ if __name__ == "__main__":
     sys.path.pop(0)
     sys.path.insert(0, str(pkg_parent))
     svr = importlib.import_module(".server", "moonraker")
-    svr.main(False)  # type: ignore
+    svr.main(False)  # noqa: FBT003

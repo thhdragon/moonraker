@@ -3,14 +3,13 @@ import json
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPError
 from tornado.httputil import HTTPHeaders
 from tornado.escape import url_escape
-from typing import Dict, Any, Optional
+from typing import Any
+
 
 class HttpClient:
     error = HTTPError
-    def __init__(self,
-                 type: str = "http",
-                 port: int = 7010
-                 ) -> None:
+
+    def __init__(self, type: str = "http", port: int = 7010) -> None:
         self.client = AsyncHTTPClient()
         assert type in ["http", "https"]
         self.prefix = f"{type}://127.0.0.1:{port}/"
@@ -19,14 +18,16 @@ class HttpClient:
     def get_response_headers(self) -> HTTPHeaders:
         return self.last_response_headers
 
-    async def _do_request(self,
-                          method: str,
-                          endpoint: str,
-                          args: dict[str, Any] = {},
-                          headers: dict[str, str] | None = None
-                          ) -> dict[str, Any]:
-        ep = "/".join([url_escape(part, plus=False) for part in
-                       endpoint.lstrip("/").split("/")])
+    async def _do_request(
+        self,
+        method: str,
+        endpoint: str,
+        args: dict[str, Any] = {},
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        ep = "/".join(
+            [url_escape(part, plus=False) for part in endpoint.lstrip("/").split("/")]
+        )
         url = self.prefix + ep
         method = method.upper()
         body: str | None = "" if method == "POST" else None
@@ -47,31 +48,35 @@ class HttpClient:
                 if headers is None:
                     headers = {}
                 headers["Content-Type"] = "application/json"
-        request = HTTPRequest(url, method, headers, body=body,
-                              request_timeout=2., connect_timeout=2.)
+        request = HTTPRequest(
+            url, method, headers, body=body, request_timeout=2.0, connect_timeout=2.0
+        )
         ret = await self.client.fetch(request)
         self.last_response_headers = HTTPHeaders(ret.headers)
         return json.loads(ret.body)
 
-    async def get(self,
-                  endpoint: str,
-                  args: dict[str, Any] = {},
-                  headers: dict[str, str] | None = None
-                  ) -> dict[str, Any]:
+    async def get(
+        self,
+        endpoint: str,
+        args: dict[str, Any] = {},
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         return await self._do_request("GET", endpoint, args, headers)
 
-    async def post(self,
-                   endpoint: str,
-                   args: dict[str, Any] = {},
-                   headers: dict[str, str] | None = None,
-                   ) -> dict[str, Any]:
+    async def post(
+        self,
+        endpoint: str,
+        args: dict[str, Any] = {},
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         return await self._do_request("POST", endpoint, args, headers)
 
-    async def delete(self,
-                     endpoint: str,
-                     args: dict[str, Any] = {},
-                     headers: dict[str, str] | None = None
-                     ) -> dict[str, Any]:
+    async def delete(
+        self,
+        endpoint: str,
+        args: dict[str, Any] = {},
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         return await self._do_request("DELETE", endpoint, args, headers)
 
     def close(self):

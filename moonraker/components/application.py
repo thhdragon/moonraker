@@ -38,7 +38,7 @@ from streaming_form_data import StreamingFormDataParser, ParseFailedException
 from streaming_form_data.targets import FileTarget, ValueTarget, SHA256Target
 
 # Annotation imports
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any
 from collections.abc import Callable, Coroutine, AsyncGenerator
 
 if TYPE_CHECKING:
@@ -85,9 +85,7 @@ class MutableRouter(RuleRouter):
             return self.application.get_handler_delegate(
                 request, target, **target_params
             )
-        return super().get_target_delegate(
-            target, request, **target_params
-        )
+        return super().get_target_delegate(target, request, **target_params)
 
     def has_rule(self, pattern: str) -> bool:
         return pattern in self.pattern_to_rule

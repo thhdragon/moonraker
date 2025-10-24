@@ -15,7 +15,6 @@ from dbus_fast.constants import BusType
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
-    Optional,
     Any,
 )
 

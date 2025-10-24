@@ -10,8 +10,8 @@ import subprocess
 import shlex
 import json
 import shutil
-from datetime import datetime, timezone, UTC
-from typing import Dict, Any, TYPE_CHECKING
+from datetime import datetime, UTC
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pdm.backend.hooks.base import Context
@@ -19,37 +19,39 @@ if TYPE_CHECKING:
 __package_name__ = "moonraker"
 __dependencies__ = "scripts/system-dependencies.json"
 
+
 def _run_git_command(cmd: str) -> str:
     prog = shlex.split(cmd)
-    process = subprocess.Popen(
-        prog, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
+    process = subprocess.Popen(prog, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     ret, err = process.communicate()
     retcode = process.wait()
     if retcode == 0:
         return ret.strip().decode()
     return ""
 
+
 def get_commit_sha(source_path: pathlib.Path) -> str:
     cmd = f"git -C {source_path} rev-parse HEAD"
     return _run_git_command(cmd)
+
 
 def retrieve_git_version(source_path: pathlib.Path) -> str:
     cmd = f"git -C {source_path} describe --always --tags --long --dirty"
     return _run_git_command(cmd)
 
+
 def pdm_build_initialize(context: Context) -> None:
     context.ensure_build_dir()
-    proj_name: str = context.config.metadata['name']
+    proj_name: str = context.config.metadata["name"]
     build_dir = pathlib.Path(context.build_dir)
     pkg_path = build_dir.joinpath(__package_name__)
     pkg_path.mkdir(parents=True, exist_ok=True)
     rinfo_path: pathlib.Path = pkg_path.joinpath("release_info")
     rinfo_data: str = ""
     if context.root.joinpath(".git").exists():
-        build_ver: str = context.config.metadata['version']
+        build_ver: str = context.config.metadata["version"]
         build_time = datetime.now(UTC)
-        urls: dict[str, str] = context.config.metadata['urls']
+        urls: dict[str, str] = context.config.metadata["urls"]
         release_info: dict[str, Any] = {
             "project_name": proj_name,
             "package_name": __package_name__,
@@ -57,7 +59,7 @@ def pdm_build_initialize(context: Context) -> None:
             "package_version": build_ver,
             "git_version": retrieve_git_version(context.root),
             "commit_sha": get_commit_sha(context.root),
-            "build_time": datetime.isoformat(build_time, timespec="seconds")
+            "build_time": datetime.isoformat(build_time, timespec="seconds"),
         }
         if __dependencies__:
             deps = pathlib.Path(context.root).joinpath(__dependencies__)

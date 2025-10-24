@@ -6,7 +6,7 @@ import copy
 from inspect import isawaitable
 from moonraker.server import Server
 from moonraker.utils import ServerError
-from typing import TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Any
 from collections.abc import AsyncIterator, Iterator
 
 if TYPE_CHECKING:
@@ -16,94 +16,55 @@ if TYPE_CHECKING:
 
 TEST_DB: dict[str, dict[str, Any]] = {
     "automobiles": {
-        "chevy": {
-            "camaro": "silver",
-            "silverado": {
-                "1500": 3,
-                "2500": 1
-            }
-        },
+        "chevy": {"camaro": "silver", "silverado": {"1500": 3, "2500": 1}},
         "ford": {
             "mustang": "red",
             "f-series": {
                 "f150": [150, "black"],
                 "f350": {
                     "platinum": 10000,
-                }
-            }
-        }
+                },
+            },
+        },
     },
     "fruits": {
-        "apples": {
-            "granny_smith": 10,
-            "red_delicious": 8
-        },
+        "apples": {"granny_smith": 10, "red_delicious": 8},
         "oranges": 50,
-        "bananas": True
+        "bananas": True,
     },
-    "vegetables": {
-        "tomato": "nope"
-    },
-    "books": {
-        "fantasy": {
-            "lotr": "Gandalf"
-        },
-        "science_fiction": "dune"
-    },
+    "vegetables": {"tomato": "nope"},
+    "books": {"fantasy": {"lotr": "Gandalf"}, "science_fiction": "dune"},
     "planets": {
-        "earth": {
-            "biosphere": True,
-            "color": "blue"
-        },
-        "venus": {
-            "hot": True
-        },
-        "mars": {
-            "color": "red"
-        },
-        "jupiter": {
-            "gas_giant": True,
-            "europa": {
-                "diameter": 3121.6
-            },
-            "io": "closest"
-        },
-        "saturn": {
-            "has_rings": True
-        },
-        "pluto": "Don't unplanet me!"
-    }
+        "earth": {"biosphere": True, "color": "blue"},
+        "venus": {"hot": True},
+        "mars": {"color": "red"},
+        "jupiter": {"gas_giant": True, "europa": {"diameter": 3121.6}, "io": "closest"},
+        "saturn": {"has_rings": True},
+        "pluto": "Don't unplanet me!",
+    },
 }
 
 TEST_RECORD = {
-    "debian": {
-        "ubuntu": 10,
-        "mint": True
-    },
+    "debian": {"ubuntu": 10, "mint": True},
     "arch": 100,
-    "redhat": {
-        "centos": False
-    }
+    "redhat": {"centos": False},
 }
 
 TEST_OVERWRITE = {
-    "vegetables": {
-        "celery": "ranch",
-        "lettuce": 100,
-        "spinich": "popeye"
-    },
-    "oses": TEST_RECORD
+    "vegetables": {"celery": "ranch", "lettuce": 100, "spinich": "popeye"},
+    "oses": TEST_RECORD,
 }
+
 
 @pytest_asyncio.fixture(scope="class")
 async def base_db(base_server: Server) -> AsyncIterator[MoonrakerDatabase]:
-    db: MoonrakerDatabase = base_server.load_component(
-        base_server.config, "database")
+    db: MoonrakerDatabase = base_server.load_component(base_server.config, "database")
     for ns, record in TEST_DB.items():
         for record_name, value in record.items():
             db.insert_item(ns, record_name, value)
     yield db
     await db.close()
+
 
 @pytest_asyncio.fixture(scope="class")
 async def running_db(base_server: Server) -> AsyncIterator[MoonrakerDatabase]:
@@ -117,15 +78,14 @@ async def running_db(base_server: Server) -> AsyncIterator[MoonrakerDatabase]:
     yield db
     await base_server._stop_server("terminate")
 
+
 # check_future() only resolves futures that are complete.  This
 # is done to test database behavior in __init__() methods, where
 # it is not possible to await a result.  We can't make this method
 # async, as we need to check the future immediately.  Using an
 # async would cause it to be scheduled on the event loop, with
 # a thread potentially resolving a future before we can check it.
-def check_future(fut: asyncio.Future,
-                 db: MoonrakerDatabase
-                 ) -> Any:
+def check_future(fut: asyncio.Future, db: MoonrakerDatabase) -> Any:
     server = db.server
     if server.is_running():
         if fut.done():
@@ -135,11 +95,13 @@ def check_future(fut: asyncio.Future,
         pytest.fail("Future not ready before server start")
     return fut.result()
 
+
 @pytest.mark.asyncio
 class BaseTest:
     @pytest.fixture(scope="class")
     def db(self, base_db):
         return base_db
+
 
 @pytest.mark.asyncio
 class ThreadedTest:
@@ -147,12 +109,12 @@ class ThreadedTest:
     def db(self, running_db):
         return running_db
 
+
 class TestInstantiation:
     @pytest.fixture(scope="class")
-    def db(self,
-           base_server: Server,
-           event_loop: asyncio.AbstractEventLoop
-           ) -> Iterator[MoonrakerDatabase]:
+    def db(
+        self, base_server: Server, event_loop: asyncio.AbstractEventLoop
+    ) -> Iterator[MoonrakerDatabase]:
         db: MoonrakerDatabase
         db = base_server.load_component(base_server.config, "database")
         yield db
@@ -160,15 +122,10 @@ class TestInstantiation:
 
     def test_initial_state(self, db: MoonrakerDatabase):
         mrdb = db.get_item("moonraker").result()
-        assert (
-            list(db.namespaces.keys()) == ["moonraker"] and
-            mrdb == {
-                "database_version": 1,
-                "database": {
-                    "unsafe_shutdowns": 1
-                }
-            }
-        )
+        assert list(db.namespaces.keys()) == ["moonraker"] and mrdb == {
+            "database_version": 1,
+            "database": {"unsafe_shutdowns": 1},
+        }
 
     def test_wrap_invalid_namespace(self, db: MoonrakerDatabase):
         expected = "Namespace 'invalid' not found"
@@ -187,48 +144,44 @@ class TestInstantiation:
         with pytest.raises(ServerError, match="Error decoding value"):
             db._decode_value(b"invalid")
 
+
 class TestCoreServerLoaded:
     @pytest.fixture(scope="class")
-    def db(self,
-           base_server: Server,
-           event_loop: asyncio.AbstractEventLoop
-           ) -> Iterator[MoonrakerDatabase]:
+    def db(
+        self, base_server: Server, event_loop: asyncio.AbstractEventLoop
+    ) -> Iterator[MoonrakerDatabase]:
         base_server.load_components()
         db: MoonrakerDatabase
         db = base_server.lookup_component("database")
         yield db
-        event_loop.run_until_complete(
-            base_server._stop_server("terminate"))
+        event_loop.run_until_complete(base_server._stop_server("terminate"))
 
     def test_core_state(self, db: MoonrakerDatabase):
         mrdb = db.get_item("moonraker").result()
         expected_ns = ["gcode_metadata", "moonraker"]
-        assert (
-            sorted(db.namespaces.keys()) == expected_ns and
-            mrdb == {
-                "database_version": 1,
-                "database": {
-                    "protected_namespaces": expected_ns,
-                    "unsafe_shutdowns": 1
-                },
-                "file_manager": {
-                    "metadata_version": 3
-                }
-            }
-        )
+        assert sorted(db.namespaces.keys()) == expected_ns and mrdb == {
+            "database_version": 1,
+            "database": {"protected_namespaces": expected_ns, "unsafe_shutdowns": 1},
+            "file_manager": {"metadata_version": 3},
+        }
+
 
 @pytest.mark.run_paths(database="bare_db.cdb")
 class TestCoreServerPreloaded(TestCoreServerLoaded):
     def test_core_state(self, db: MoonrakerDatabase):
         expected_ns = [
-            "moonraker", "gcode_metadata", "update_manager",
-            "authorized_users", "history"
+            "moonraker",
+            "gcode_metadata",
+            "update_manager",
+            "authorized_users",
+            "history",
         ]
         mrdb = db.get_item("moonraker").result()
         assert (
-            sorted(db.namespaces.keys()) == sorted(expected_ns) and
-            mrdb["database"]["unsafe_shutdowns"] == 2
+            sorted(db.namespaces.keys()) == sorted(expected_ns)
+            and mrdb["database"]["unsafe_shutdowns"] == 2
         )
+
 
 class TestUnallowedMethods:
     def test_register_error(self, running_db: MoonrakerDatabase):
@@ -238,6 +191,7 @@ class TestUnallowedMethods:
     def test_wrap_namespace(self, running_db: MoonrakerDatabase):
         with pytest.raises(ServerError):
             running_db.wrap_namespace("fruits")
+
 
 class TestInsertItem(BaseTest):
     async def test_insert_record(self, db: MoonrakerDatabase):
@@ -249,8 +203,7 @@ class TestInsertItem(BaseTest):
         assert result == TEST_RECORD
 
     async def test_insert_nested(self, db: MoonrakerDatabase):
-        db.insert_item(
-            "oses", "windows.eleven.feburary.2022", "ok")
+        db.insert_item("oses", "windows.eleven.feburary.2022", "ok")
         fut = db.get_item("oses", "windows.eleven.feburary.2022")
         result = check_future(fut, db)
         if isawaitable(result):
@@ -267,8 +220,9 @@ class TestInsertItem(BaseTest):
             ret = db.insert_item("oses", "linux.arch.february.2022", True)
             await ret
 
-    async def test_overwrite_record(self, db: MoonrakerDatabase,
-                                    caplog: pytest.LogCaptureFixture):
+    async def test_overwrite_record(
+        self, db: MoonrakerDatabase, caplog: pytest.LogCaptureFixture
+    ):
         db.insert_item("oses", "ios", 10)
         db.insert_item("oses", ["ios", "15.3"], True)
         fut = db.get_item("oses", "ios")
@@ -279,13 +233,13 @@ class TestInsertItem(BaseTest):
         result = check_future(fut, db)
         if isawaitable(result):
             result = await result
-        assert (
-            result == {"15.3": True} and
-            expected_log in caplog.messages
-        )
+        assert result == {"15.3": True} and expected_log in caplog.messages
+
 
 class TestInsertItemThreaded(ThreadedTest, TestInsertItem):
     pass
+
+
 class TestGetItem(BaseTest):
     async def test_get_record(self, db: MoonrakerDatabase):
         fut = db.get_item("automobiles", "chevy")
@@ -338,8 +292,7 @@ class TestGetItem(BaseTest):
         assert result == "suv"
 
     async def test_get_nested(self, db: MoonrakerDatabase):
-        fut = db.get_item(
-            "automobiles", "ford.f-series.f350.platinum")
+        fut = db.get_item("automobiles", "ford.f-series.f350.platinum")
         result = check_future(fut, db)
         if isawaitable(result):
             result = await result
@@ -351,8 +304,7 @@ class TestGetItem(BaseTest):
             await ret
 
     async def test_get_nested_no_key_default(self, db: MoonrakerDatabase):
-        fut = db.get_item(
-            "automobiles", "ford.f-series.f350.superduty", "success")
+        fut = db.get_item("automobiles", "ford.f-series.f350.superduty", "success")
         result = check_future(fut, db)
         if isawaitable(result):
             result = await result
@@ -376,16 +328,14 @@ class TestGetItem(BaseTest):
             result = await result
         assert result == 1
 
+
 class TestGetItemThreaded(ThreadedTest, TestGetItem):
     pass
 
+
 class TestUpdateItem(BaseTest):
     async def test_update_record(self, db: MoonrakerDatabase):
-        update_val = {
-            "granny_smith": 1000,
-            "jazz": 10.8,
-            "gala": {"bland": True}
-        }
+        update_val = {"granny_smith": 1000, "jazz": 10.8, "gala": {"bland": True}}
         db.update_item("fruits", "apples", update_val)
         fut = db.get_item("fruits", "apples")
         result = check_future(fut, db)
@@ -395,7 +345,7 @@ class TestUpdateItem(BaseTest):
             "granny_smith": 1000,
             "red_delicious": 8,
             "jazz": 10.8,
-            "gala": {"bland": True}
+            "gala": {"bland": True},
         }
 
     async def test_update_nested(self, db: MoonrakerDatabase):
@@ -407,11 +357,7 @@ class TestUpdateItem(BaseTest):
             result = await result
         assert result == {
             "camaro": "silver",
-            "silverado": {
-                "1500": 3,
-                "2500": None,
-                "3500": {"color": "green"}
-            }
+            "silverado": {"1500": 3, "2500": None, "3500": {"color": "green"}},
         }
 
     async def test_update_replace_nested(self, db: MoonrakerDatabase):
@@ -424,7 +370,7 @@ class TestUpdateItem(BaseTest):
             "granny_smith": 1000,
             "red_delicious": 8,
             "jazz": 10.8,
-            "gala": {"bland": "ok"}
+            "gala": {"bland": "ok"},
         }
 
     async def test_update_replace_nested_dict(self, db: MoonrakerDatabase):
@@ -435,10 +381,7 @@ class TestUpdateItem(BaseTest):
             result = await result
         assert result == {
             "mustang": "red",
-            "f-series": {
-                "f150": [150, "black"],
-                "f350": "tow"
-            }
+            "f-series": {"f150": [150, "black"], "f350": "tow"},
         }
 
     async def test_update_namespace_fail(self, db: MoonrakerDatabase):
@@ -479,14 +422,14 @@ class TestUpdateItem(BaseTest):
             ret = db.update_item("automobiles", "chevy.corvette.z06", 10)
             await ret
 
+
 class TestUpdateItemThreaded(ThreadedTest, TestUpdateItem):
     pass
 
 
 class TestDeleteItem(BaseTest):
     async def test_delete_nested_item(self, db: MoonrakerDatabase):
-        del_fut = db.delete_item(
-            "automobiles", "ford.f-series.f350.platinum")
+        del_fut = db.delete_item("automobiles", "ford.f-series.f350.platinum")
         del_result = check_future(del_fut, db)
         if isawaitable(del_result):
             del_result = await del_result
@@ -494,20 +437,13 @@ class TestDeleteItem(BaseTest):
         result = check_future(fut, db)
         if isawaitable(result):
             result = await result
-        assert (
-            del_result == 10000 and
-            result == {
-                "mustang": "red",
-                "f-series": {
-                    "f150": [150, "black"],
-                    "f350": {}
-                }
-            }
-        )
+        assert del_result == 10000 and result == {
+            "mustang": "red",
+            "f-series": {"f150": [150, "black"], "f350": {}},
+        }
 
     async def test_delete_nested_dict(self, db: MoonrakerDatabase):
-        del_fut = db.delete_item(
-            "automobiles", "ford.f-series.f350")
+        del_fut = db.delete_item("automobiles", "ford.f-series.f350")
         del_result = check_future(del_fut, db)
         if isawaitable(del_result):
             del_result = await del_result
@@ -515,15 +451,12 @@ class TestDeleteItem(BaseTest):
         result = check_future(fut, db)
         if isawaitable(result):
             result = await result
-        assert (
-            del_result == {} and
-            result == {
-                "mustang": "red",
-                "f-series": {
-                    "f150": [150, "black"],
-                }
-            }
-        )
+        assert del_result == {} and result == {
+            "mustang": "red",
+            "f-series": {
+                "f150": [150, "black"],
+            },
+        }
 
     async def test_delete_fail(self, db: MoonrakerDatabase):
         with pytest.raises(ServerError):
@@ -539,10 +472,7 @@ class TestDeleteItem(BaseTest):
         result = check_future(fut, db)
         if isawaitable(result):
             result = await result
-        assert (
-            del_result is True and
-            result is None
-        )
+        assert del_result is True and result is None
 
     async def test_delete_last_nested(self, db: MoonrakerDatabase):
         del_fut = db.delete_item("books", "fantasy.lotr")
@@ -556,8 +486,7 @@ class TestDeleteItem(BaseTest):
         assert del_result == "Gandalf" and result is None
 
     async def test_drop_db(self, db: MoonrakerDatabase):
-        del_fut = db.delete_item("vegetables", "tomato",
-                                 drop_empty_db=True)
+        del_fut = db.delete_item("vegetables", "tomato", drop_empty_db=True)
         del_result = check_future(del_fut, db)
         if isawaitable(del_result):
             del_result = await del_result
@@ -567,8 +496,10 @@ class TestDeleteItem(BaseTest):
             result = await result
         assert del_result == "nope" and result is None
 
+
 class TestDeleteItemThreaded(ThreadedTest, TestDeleteItem):
     pass
+
 
 class TestInsertBatch(BaseTest):
     async def test_insert_batch(self, db: MoonrakerDatabase):
@@ -589,8 +520,10 @@ class TestInsertBatch(BaseTest):
             result = await result
         assert result == expected
 
+
 class TestInsertBatchThreaded(ThreadedTest, TestInsertBatch):
     pass
+
 
 class TestGetBatch(BaseTest):
     async def test_get_batch(self, db: MoonrakerDatabase):
@@ -620,15 +553,16 @@ class TestGetBatch(BaseTest):
             result = await result
         assert result == {}
 
+
 class TestGetBatchThreaded(ThreadedTest, TestGetBatch):
     pass
+
 
 class TestMoveBatch(BaseTest):
     async def test_move_batch(self, db: MoonrakerDatabase):
         source_keys = list(TEST_DB["fruits"].keys())
         dest_keys = [f"super_{key}" for key in source_keys]
-        expected = {dk: TEST_DB["fruits"][sk] for dk, sk in
-                    zip(dest_keys, source_keys)}
+        expected = {dk: TEST_DB["fruits"][sk] for dk, sk in zip(dest_keys, source_keys)}
         db.move_batch("fruits", source_keys, dest_keys)
         fut = db.get_item("fruits")
         result = check_future(fut, db)
@@ -639,8 +573,8 @@ class TestMoveBatch(BaseTest):
     async def test_move_batch_invalid_namespace(self, db: MoonrakerDatabase):
         with pytest.raises(ServerError):
             fut = db.move_batch(
-                "invalid_ns", ["super_banana", "super_apple"],
-                ["banana", "apple"])
+                "invalid_ns", ["super_banana", "super_apple"], ["banana", "apple"]
+            )
             await fut
 
     async def test_move_batch_invalid_key(self, db: MoonrakerDatabase):
@@ -656,8 +590,7 @@ class TestMoveBatch(BaseTest):
         assert result == expected
 
     async def test_move_batch_no_valid_keys(self, db: MoonrakerDatabase):
-        db.move_batch("vegetables", ["celery", "peas"],
-                      ["no_celery", "no_peas"])
+        db.move_batch("vegetables", ["celery", "peas"], ["no_celery", "no_peas"])
         fut = db.get_item("vegetables")
         result = check_future(fut, db)
         if isawaitable(result):
@@ -666,12 +599,15 @@ class TestMoveBatch(BaseTest):
 
     async def test_move_batch_mismatch_key_length(self, db: MoonrakerDatabase):
         with pytest.raises(ServerError):
-            ret = db.move_batch("books", ["science_fiction"],
-                                ["science_fiction", "fantasy"])
+            ret = db.move_batch(
+                "books", ["science_fiction"], ["science_fiction", "fantasy"]
+            )
             await ret
+
 
 class TestMoveBatchThreaded(ThreadedTest, TestMoveBatch):
     pass
+
 
 class TestDeleteBatch(BaseTest):
     async def test_delete_batch(self, db: MoonrakerDatabase):
@@ -687,7 +623,7 @@ class TestDeleteBatch(BaseTest):
         assert result == expected
 
     async def test_delete_batch_all_keys(self, db: MoonrakerDatabase):
-        del_keys = (TEST_DB["automobiles"].keys())
+        del_keys = TEST_DB["automobiles"].keys()
         db.delete_batch("automobiles", del_keys)
         fut = db.get_item("automobiles")
         result = check_future(fut, db)
@@ -718,8 +654,10 @@ class TestDeleteBatch(BaseTest):
             result = await result
         assert result == TEST_DB["fruits"]
 
+
 class TestDeleteBatchThreaded(ThreadedTest, TestDeleteBatch):
     pass
+
 
 class TestUpdateNamespace(BaseTest):
     async def test_update_namespace(self, db: MoonrakerDatabase):
@@ -727,7 +665,7 @@ class TestUpdateNamespace(BaseTest):
             "venus": {"hot": True},
             "pluto": {"dwarf": True},
             "uranus": "klignons",
-            "mercury": [1, 2, 3]
+            "mercury": [1, 2, 3],
         }
         db.update_namespace("planets", update_val)
         fut = db.get_item("planets")
@@ -743,8 +681,10 @@ class TestUpdateNamespace(BaseTest):
             ret = db.update_namespace("invalid", {"hello": False})
             await ret
 
+
 class TestUpdateNamespaceThreaded(ThreadedTest, TestUpdateNamespace):
     pass
+
 
 class TestClearNamespace(BaseTest):
     async def test_clear_namespace(self, db: MoonrakerDatabase):
@@ -762,22 +702,22 @@ class TestClearNamespace(BaseTest):
             result = await result
         assert "books" not in db.namespaces
 
-
     async def test_clear_namespace_invalid(self, db: MoonrakerDatabase):
         with pytest.raises(ServerError):
             fut = db.clear_namespace("invalid")
             await fut
 
+
 class TestClearNamespaceThreaded(ThreadedTest, TestClearNamespace):
     pass
+
 
 class TestSyncNamespace(BaseTest):
     async def test_sync_namespace(self, db: MoonrakerDatabase):
         synced = copy.deepcopy(TEST_DB["planets"])
         del synced["mars"]
         del synced["pluto"]
-        synced.update({"mercury": "close", "neptune": "far",
-                      "venus": "cloudy"})
+        synced.update({"mercury": "close", "neptune": "far", "venus": "cloudy"})
         db.sync_namespace("planets", synced)
         fut = db.get_item("planets")
         result = check_future(fut, db)
@@ -814,8 +754,10 @@ class TestSyncNamespace(BaseTest):
             fut = db.sync_namespace("invalid", {"no": "key"})
             await fut
 
+
 class TestSyncNamespaceThreaded(ThreadedTest, TestSyncNamespace):
     pass
+
 
 class TestNamespaceLength(BaseTest):
     async def test_ns_length(self, db: MoonrakerDatabase):
@@ -831,8 +773,10 @@ class TestNamespaceLength(BaseTest):
             fut = db.ns_length("invalid")
             await fut
 
+
 class TestNamespaceLengthThreaded(ThreadedTest, TestNamespaceLength):
     pass
+
 
 class TestNamespaceKeys(BaseTest):
     async def test_ns_keys(self, db: MoonrakerDatabase):
@@ -848,13 +792,16 @@ class TestNamespaceKeys(BaseTest):
             fut = db.ns_keys("invalid")
             await fut
 
+
 class TestNamespaceKeysThreaded(ThreadedTest, TestNamespaceKeys):
     pass
 
+
 class TestNamespaceValues(BaseTest):
     async def test_ns_values(self, db: MoonrakerDatabase):
-        expected = [i[1] for i in sorted(TEST_DB["planets"].items(),
-                    key=lambda d: d[0])]
+        expected = [
+            i[1] for i in sorted(TEST_DB["planets"].items(), key=lambda d: d[0])
+        ]
         fut = db.ns_values("planets")
         result = check_future(fut, db)
         if isawaitable(result):
@@ -866,8 +813,10 @@ class TestNamespaceValues(BaseTest):
             fut = db.ns_values("invalid")
             await fut
 
+
 class TestNamespaceValuesThreaded(ThreadedTest, TestNamespaceValues):
     pass
+
 
 class TestNamespaceItems(BaseTest):
     async def test_ns_items(self, db: MoonrakerDatabase):
@@ -883,8 +832,10 @@ class TestNamespaceItems(BaseTest):
             fut = db.ns_items("invalid")
             await fut
 
+
 class TestNamespaceItemsThreaded(ThreadedTest, TestNamespaceItems):
     pass
+
 
 class TestNamespaceContains(BaseTest):
     async def test_ns_contains_record(self, db: MoonrakerDatabase):
@@ -920,25 +871,26 @@ class TestNamespaceContains(BaseTest):
             fut = db.ns_contains("invalid", "nokey")
             await fut
 
+
 class TestNamespaceConainsThreaded(ThreadedTest, TestNamespaceContains):
     pass
 
+
 class WrapperTest(BaseTest):
     @pytest.fixture(scope="class")
-    def wrapped(self,
-                request: pytest.FixtureRequest,
-                db: MoonrakerDatabase
-                ) -> NamespaceWrapper:
+    def wrapped(
+        self, request: pytest.FixtureRequest, db: MoonrakerDatabase
+    ) -> NamespaceWrapper:
         parse = not request.cls.__name__.endswith("NoParse")
         return db.wrap_namespace("planets", parse_keys=parse)
+
 
 @pytest.mark.asyncio
 class WrapperTestThreaded:
     @pytest_asyncio.fixture(scope="class")
-    async def wrapped(self,
-                      request: pytest.FixtureRequest,
-                      base_server: Server
-                      ) -> AsyncIterator[MoonrakerDatabase]:
+    async def wrapped(
+        self, request: pytest.FixtureRequest, base_server: Server
+    ) -> AsyncIterator[MoonrakerDatabase]:
         base_server.load_components()
         db: MoonrakerDatabase = base_server.lookup_component("database")
         for ns, record in TEST_DB.items():
@@ -987,10 +939,7 @@ class TestNamespaceWrapper(WrapperTest):
         result = check_future(fut, wrapped.db)
         if isawaitable(result):
             result = await result
-        assert (
-            del_result == TEST_RECORD and
-            result == TEST_DB["planets"]
-        )
+        assert del_result == TEST_RECORD and result == TEST_DB["planets"]
 
     async def test_wrapped_nested_insert(self, wrapped: NamespaceWrapper):
         expected = copy.deepcopy(TEST_DB["planets"])
@@ -1021,10 +970,7 @@ class TestNamespaceWrapper(WrapperTest):
         result = check_future(fut, wrapped.db)
         if isawaitable(result):
             result = await result
-        assert (
-            del_result == TEST_RECORD and
-            result == TEST_DB["planets"]
-        )
+        assert del_result == TEST_RECORD and result == TEST_DB["planets"]
 
     async def test_update_child(self, wrapped: NamespaceWrapper):
         expected = copy.deepcopy(TEST_DB["planets"])
@@ -1167,8 +1113,9 @@ class TestNamespaceWrapper(WrapperTest):
         assert result == sorted(TEST_DB["planets"].keys())
 
     async def test_values_method(self, wrapped: NamespaceWrapper):
-        expected = [TEST_DB["planets"][key] for key in
-                    sorted(TEST_DB["planets"].keys())]
+        expected = [
+            TEST_DB["planets"][key] for key in sorted(TEST_DB["planets"].keys())
+        ]
         fut = wrapped.values()
         result = check_future(fut, wrapped.db)
         if isawaitable(result):
@@ -1210,26 +1157,31 @@ class TestNamespaceWrapper(WrapperTest):
             result = await result
         assert result == {}
 
+
 class TestNamespaceWrapperNoParse(TestNamespaceWrapper):
     async def test_update_child_nested(self, wrapped: NamespaceWrapper):
         with pytest.raises(ServerError):
             ret = wrapped.update_child("pluto.type", "planet")
             await ret
 
+
 class TestNamespaceWrapperThreaded(WrapperTestThreaded, TestNamespaceWrapper):
     pass
+
 
 class TestNamespaceWrapperThreadedNoParse(
     WrapperTestThreaded, TestNamespaceWrapperNoParse
 ):
     pass
 
+
 def endpoint_result(req_args: dict[str, Any], expected: Any) -> dict[str, Any]:
     return {
         "namespace": req_args["namespace"],
         "key": req_args.get("key"),
-        "value": expected
+        "value": expected,
     }
+
 
 @pytest.mark.asyncio
 class EndpointTest:
@@ -1250,6 +1202,7 @@ class EndpointTest:
     @pytest.fixture(scope="class")
     def db(self, server: Server) -> MoonrakerDatabase:
         return server.lookup_component("database")
+
 
 class TestHttpEndpoints(EndpointTest):
     async def test_list_dbs(self, http_client: HttpClient):
@@ -1289,10 +1242,12 @@ class TestHttpEndpoints(EndpointTest):
             args = {"namespace": "fruits", "key": "apples"}
             await http_client.get("/server/database/item", args)
 
-    async def test_post_item(self, http_client: HttpClient,
-                             db: MoonrakerDatabase):
-        args = {"namespace": "breakfast", "key": "cereal.sweet",
-                "value": "Count Chocula"}
+    async def test_post_item(self, http_client: HttpClient, db: MoonrakerDatabase):
+        args = {
+            "namespace": "breakfast",
+            "key": "cereal.sweet",
+            "value": "Count Chocula",
+        }
         ret = await http_client.post("/server/database/item", args)
         check = await db.get_item("breakfast", "cereal.sweet")
         assert ret["result"] == args and check == "Count Chocula"
@@ -1309,28 +1264,29 @@ class TestHttpEndpoints(EndpointTest):
 
     async def test_post_item_protected(self, http_client: HttpClient):
         with pytest.raises(http_client.error, match="HTTP 403:"):
-            args = {"namespace": "planets", "key": "jupiter.gas_giant",
-                    "value": "biggest"}
+            args = {
+                "namespace": "planets",
+                "key": "jupiter.gas_giant",
+                "value": "biggest",
+            }
             await http_client.post("/server/database/item", args)
 
     async def test_post_item_forbidden(self, http_client: HttpClient):
         with pytest.raises(http_client.error, match="HTTP 403:"):
-            args = {"namespace": "fruits", "key": "cherries.color",
-                    "value": "red"}
+            args = {"namespace": "fruits", "key": "cherries.color", "value": "red"}
             await http_client.post("/server/database/item", args)
 
-    async def test_delete_item(self, http_client: HttpClient,
-                               db: MoonrakerDatabase):
+    async def test_delete_item(self, http_client: HttpClient, db: MoonrakerDatabase):
         args = {"namespace": "automobiles", "key": "ford.f-series.f150"}
         ret = await http_client.delete("/server/database/item", args)
         check = await db.get_item("automobiles", "ford.f-series")
-        assert (
-            ret["result"] == endpoint_result(args, [150, "black"])
-            and check == {"f350": {"platinum": 10000}}
-        )
+        assert ret["result"] == endpoint_result(args, [150, "black"]) and check == {
+            "f350": {"platinum": 10000}
+        }
 
-    async def test_delete_item_drop(self, http_client: HttpClient,
-                                    db: MoonrakerDatabase):
+    async def test_delete_item_drop(
+        self, http_client: HttpClient, db: MoonrakerDatabase
+    ):
         args = {"namespace": "vegetables", "key": "tomato"}
         ret = await http_client.delete("/server/database/item", args)
         assert (
@@ -1342,6 +1298,7 @@ class TestHttpEndpoints(EndpointTest):
         with pytest.raises(http_client.error, match="HTTP 404: Not Found"):
             args = {"namespace": "automobiles", "key": "ford.pinto"}
             await http_client.delete("/server/database/item", args)
+
 
 class TestWebsocketEndpoints(EndpointTest):
     async def test_list_dbs(self, websocket_client: WebsocketClient):
@@ -1356,8 +1313,7 @@ class TestWebsocketEndpoints(EndpointTest):
         ret = await websocket_client.request("server.database.get_item", args)
         assert ret == endpoint_result(args, TEST_DB["automobiles"])
 
-    async def test_get_namespace_not_exist(self,
-                                           websocket_client: WebsocketClient):
+    async def test_get_namespace_not_exist(self, websocket_client: WebsocketClient):
         expected = "Namespace 'cities' not found"
         with pytest.raises(websocket_client.error, match=expected):
             args = {"namespace": "cities"}
@@ -1368,32 +1324,31 @@ class TestWebsocketEndpoints(EndpointTest):
         ret = await websocket_client.request("server.database.get_item", args)
         assert ret == endpoint_result(args, "red")
 
-    async def test_get_item_not_exist(self,
-                                      websocket_client: WebsocketClient):
-        expected = (
-            "Key 'ford.mustang.year' in namespace 'automobiles' not found"
-        )
+    async def test_get_item_not_exist(self, websocket_client: WebsocketClient):
+        expected = "Key 'ford.mustang.year' in namespace 'automobiles' not found"
         with pytest.raises(websocket_client.error, match=expected):
             args = {"namespace": "automobiles", "key": "ford.mustang.year"}
             await websocket_client.request("server.database.get_item", args)
 
-    async def test_get_item_protected_ns(self,
-                                         websocket_client: WebsocketClient):
+    async def test_get_item_protected_ns(self, websocket_client: WebsocketClient):
         args = {"namespace": "planets", "key": "jupiter.gas_giant"}
         ret = await websocket_client.request("server.database.get_item", args)
         assert ret == endpoint_result(args, True)
 
-    async def test_get_item_forbidden_ns(self,
-                                         websocket_client: WebsocketClient):
+    async def test_get_item_forbidden_ns(self, websocket_client: WebsocketClient):
         expected = "Read/Write access to namespace 'fruits' is forbidden"
         with pytest.raises(websocket_client.error, match=expected):
             args = {"namespace": "fruits", "key": "apples"}
             await websocket_client.request("server.database.get_item", args)
 
-    async def test_post_item(self, websocket_client: WebsocketClient,
-                             db: MoonrakerDatabase):
-        args = {"namespace": "breakfast", "key": "cereal.sweet",
-                "value": "Count Chocula"}
+    async def test_post_item(
+        self, websocket_client: WebsocketClient, db: MoonrakerDatabase
+    ):
+        args = {
+            "namespace": "breakfast",
+            "key": "cereal.sweet",
+            "value": "Count Chocula",
+        }
         ret = await websocket_client.request("server.database.post_item", args)
         check = await db.get_item("breakfast", "cereal.sweet")
         assert ret == args and check == "Count Chocula"
@@ -1410,45 +1365,42 @@ class TestWebsocketEndpoints(EndpointTest):
             args = {"namespace": "breakfast", "key": "pancakes"}
             await websocket_client.request("server.database.post_item", args)
 
-    async def test_post_item_protected(self,
-                                       websocket_client: WebsocketClient):
+    async def test_post_item_protected(self, websocket_client: WebsocketClient):
         expected = "Write access to namespace 'planets' is forbidden"
         with pytest.raises(websocket_client.error, match=expected):
-            args = {"namespace": "planets", "key": "jupiter.gas_giant",
-                    "value": "biggest"}
+            args = {
+                "namespace": "planets",
+                "key": "jupiter.gas_giant",
+                "value": "biggest",
+            }
             await websocket_client.request("server.database.post_item", args)
 
-    async def test_post_item_forbidden(self,
-                                       websocket_client: WebsocketClient):
+    async def test_post_item_forbidden(self, websocket_client: WebsocketClient):
         expected = "Read/Write access to namespace 'fruits' is forbidden"
         with pytest.raises(websocket_client.error, match=expected):
-            args = {"namespace": "fruits", "key": "cherries.color",
-                    "value": "red"}
+            args = {"namespace": "fruits", "key": "cherries.color", "value": "red"}
             await websocket_client.request("server.database.post_item", args)
 
-    async def test_delete_item(self, websocket_client: WebsocketClient,
-                               db: MoonrakerDatabase):
+    async def test_delete_item(
+        self, websocket_client: WebsocketClient, db: MoonrakerDatabase
+    ):
         args = {"namespace": "automobiles", "key": "ford.f-series.f150"}
-        ret = await websocket_client.request(
-            "server.database.delete_item", args)
+        ret = await websocket_client.request("server.database.delete_item", args)
         check = await db.get_item("automobiles", "ford.f-series")
-        assert (
-            ret == endpoint_result(args, [150, "black"])
-            and check == {"f350": {"platinum": 10000}}
-        )
+        assert ret == endpoint_result(args, [150, "black"]) and check == {
+            "f350": {"platinum": 10000}
+        }
 
-    async def test_delete_item_drop(self, websocket_client: WebsocketClient,
-                                    db: MoonrakerDatabase):
+    async def test_delete_item_drop(
+        self, websocket_client: WebsocketClient, db: MoonrakerDatabase
+    ):
         args = {"namespace": "vegetables", "key": "tomato"}
-        ret = await websocket_client.request(
-            "server.database.delete_item", args)
+        ret = await websocket_client.request("server.database.delete_item", args)
         assert (
-            ret == endpoint_result(args, "nope")
-            and "vegetables" not in db.namespaces
+            ret == endpoint_result(args, "nope") and "vegetables" not in db.namespaces
         )
 
-    async def test_delete_item_not_found(self,
-                                         websocket_client: WebsocketClient):
+    async def test_delete_item_not_found(self, websocket_client: WebsocketClient):
         expected = "Key 'ford.pinto' in namespace 'automobiles' not found"
         with pytest.raises(websocket_client.error, match=expected):
             args = {"namespace": "automobiles", "key": "ford.pinto"}

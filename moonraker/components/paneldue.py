@@ -16,7 +16,6 @@ from ..utils import json_wrapper as jsonw
 from typing import (
     TYPE_CHECKING,
     Any,
-    Optional,
 )
 from collections.abc import Callable, Coroutine
 

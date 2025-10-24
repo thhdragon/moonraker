@@ -92,7 +92,7 @@ class PkFlag(Flag):
                 val = 1 << i
                 if val & self._value_ == val:
                     yield self.__class__(val)
-'''  # noqa: E122
+''' 
 
 FILTER_PKSTRING = \
 '''    @property
@@ -105,7 +105,7 @@ FILTER_PKSTRING = \
         if pks[:4] == "NOT_":
             pks = "~" + pks[4:]
         return pks.lower().replace("_", "-")
-'''  # noqa: E122
+'''
 
 ERROR_PROPS = \
 '''    @property
@@ -113,7 +113,7 @@ ERROR_PROPS = \
         if self == Error.UPDATE_FAILED_DUE_TO_RUNNING_PROCESS:
             return "failed-due-to-running-process"
         return super().pkstring
-'''  # noqa: E122
+'''
 
 ALIASES = {
     "Error.OOM": "OUT_OF_MEMORY"

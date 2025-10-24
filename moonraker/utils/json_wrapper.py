@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
 
-    def dumps(obj: Any) -> bytes: ...  # type: ignore
+    def dumps(obj: Any) -> bytes: ...
     def loads(data: str | bytes | bytearray) -> Any: ...
 
 
@@ -30,9 +30,9 @@ if _msgspc_var in ["y", "yes", "true"]:
         MSGSPEC_ENABLED = True
 if not MSGSPEC_ENABLED:
     import json
-    from json import JSONDecodeError  # type: ignore # noqa: F401
+    from json import JSONDecodeError  # noqa: F401
 
-    loads = json.loads  # type: ignore
+    loads = json.loads
 
-    def dumps(obj) -> bytes:  # type: ignore
+    def dumps(obj) -> bytes:
         return json.dumps(obj).encode("utf-8")

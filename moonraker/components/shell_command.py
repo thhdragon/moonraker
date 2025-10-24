@@ -13,7 +13,7 @@ import asyncio
 from ..utils import ServerError
 
 # Annotation imports
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, cast
 from collections.abc import Awaitable, Callable, Coroutine
 
 if TYPE_CHECKING:

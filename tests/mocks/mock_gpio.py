@@ -1,10 +1,11 @@
 from __future__ import annotations
 import os
 import logging
-from typing import Dict, Optional, List, Tuple
+
 
 class GpioException(Exception):
     pass
+
 
 class MockGpiod:
     LINE_REQ_DIR_OUT = 3
@@ -40,8 +41,10 @@ class MockGpiod:
             raise GpioException(f"Unable to find chip {chip_id}")
         return self.chips[chip_id].find_line(pin_id)
 
+
 class MockChipWrapper:
     OPEN_BY_NAME = 2
+
     def __init__(self, gpiod: MockGpiod) -> None:
         self.mock_gpiod = gpiod
 
@@ -52,12 +55,9 @@ class MockChipWrapper:
         self.mock_gpiod.add_chip(chip)
         return chip
 
+
 class MockChip:
-    def __init__(self,
-                 chip_name: str,
-                 flags: int,
-                 mock_gpiod: MockGpiod
-                 ) -> None:
+    def __init__(self, chip_name: str, flags: int, mock_gpiod: MockGpiod) -> None:
         self.name = chip_name
         self.flags = flags
         self.mock_gpiod = mock_gpiod
@@ -84,12 +84,9 @@ class MockChip:
         self.requested_lines = {}
         self.mock_gpiod.pop_chip(self.name)
 
+
 class MockLine:
-    def __init__(self,
-                 chip: MockChip,
-                 name: str,
-                 mock_gpiod: MockGpiod
-                 ) -> None:
+    def __init__(self, chip: MockChip, name: str, mock_gpiod: MockGpiod) -> None:
         self.mock_gpiod = mock_gpiod
         self.chip = chip
         self.name = name
@@ -101,13 +98,14 @@ class MockLine:
         self.write_pipe: int | None = None
         self.bias = "not_configured"
 
-    def request(self,
-                consumer: str,
-                type: int,
-                flags: int = 0,
-                default_vals: list[int] | None = None,
-                default_val: int | None = None
-                ) -> None:
+    def request(
+        self,
+        consumer: str,
+        type: int,
+        flags: int = 0,
+        default_vals: list[int] | None = None,
+        default_val: int | None = None,
+    ) -> None:
         self.consumer_name = consumer
         version = self.mock_gpiod.version_tuple()
         if type == MockGpiod.LINE_REQ_DIR_OUT:
@@ -118,8 +116,7 @@ class MockLine:
                 self.value = default_vals[0]
             elif default_val is not None:
                 if version < (1, 3):
-                    raise GpioException(
-                        "default_val not available in gpiod < 1.3")
+                    raise GpioException("default_val not available in gpiod < 1.3")
                 self.value = default_val
         elif type == MockGpiod.LINE_REQ_EV_BOTH_EDGES:
             self.is_event = True
@@ -183,9 +180,11 @@ class MockLine:
         except Exception:
             pass
 
+
 class MockLineEvent:
     RISING_EDGE = 1
     FALLING_EDGE = 2
+
     def __init__(self, value: int) -> None:
         if value == 1:
             self.type = self.RISING_EDGE

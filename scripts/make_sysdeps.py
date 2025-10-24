@@ -9,7 +9,7 @@ import argparse
 import pathlib
 import json
 import re
-from typing import List, Dict
+
 
 def make_sysdeps(input: str, output: str, distro: str, truncate: bool) -> None:
     sysdeps: dict[str, list[str]] = {}
@@ -31,27 +31,31 @@ def make_sysdeps(input: str, output: str, distro: str, truncate: bool) -> None:
 
 if __name__ == "__main__":
     def_path = pathlib.Path(__file__).parent
-    desc = (
-        "make_sysdeps - generate system dependency json file from an install script"
-    )
+    desc = "make_sysdeps - generate system dependency json file from an install script"
     parser = argparse.ArgumentParser(description=desc)
     parser.add_argument(
-        "-i", "--input", metavar="<install script>",
+        "-i",
+        "--input",
+        metavar="<install script>",
         help="path of the install script to read",
-        default=f"{def_path}/install-moonraker.sh"
+        default=f"{def_path}/install-moonraker.sh",
     )
     parser.add_argument(
-        "-o", "--output", metavar="<output file>",
+        "-o",
+        "--output",
+        metavar="<output file>",
         help="path of the system dependency file to write",
-        default=f"{def_path}/system-dependencies.json"
+        default=f"{def_path}/system-dependencies.json",
     )
     parser.add_argument(
-        "-d", "--distro", metavar="<linux distro>",
-        help="linux distro for dependencies", default="debian"
+        "-d",
+        "--distro",
+        metavar="<linux distro>",
+        help="linux distro for dependencies",
+        default="debian",
     )
     parser.add_argument(
-        "-t", "--truncate", action="store_true",
-        help="truncate output file"
+        "-t", "--truncate", action="store_true", help="truncate output file"
     )
     args = parser.parse_args()
     make_sysdeps(args.input, args.output, args.distro, args.truncate)

@@ -207,7 +207,8 @@ class LogManager:
         result: dict[str, Any] = {"rolled_over": [], "failed": {}}
         if app is not None:
             if app not in log_apps:
-                raise self.server.error(f"Unknown application {app}")
+                msg = f"Unknown application {app}"
+                raise self.server.error(msg)
             log_apps = [app]
         if "moonraker" in log_apps:
             try:

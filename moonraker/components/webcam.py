@@ -13,7 +13,6 @@ import logging
 from ..common import RequestType
 from typing import (
     TYPE_CHECKING,
-    Optional,
     Any,
 )
 

@@ -16,7 +16,7 @@ from ..utils import json_wrapper as jsonw
 from ..common import KlippyState, RequestType
 
 # Annotation imports
-from typing import TYPE_CHECKING, Any, Optional, Dict, List, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any
 from collections.abc import Awaitable, Callable, Coroutine
 
 if TYPE_CHECKING:

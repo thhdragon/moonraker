@@ -14,9 +14,7 @@ from ..common import RequestType
 from typing import (
     TYPE_CHECKING,
     Any,
-    Optional,
 )
-from collections import deque
 
 if TYPE_CHECKING:
     from ..confighelper import ConfigHelper

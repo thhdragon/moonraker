@@ -6,15 +6,16 @@ import time
 import pathlib
 import shlex
 
-from typing import Dict, Optional
+
 
 class KlippyProcess:
-    def __init__(self,
-                 base_cmd: str,
-                 path_args: dict[str, pathlib.Path],
-                 ) -> None:
+    def __init__(
+        self,
+        base_cmd: str,
+        path_args: dict[str, pathlib.Path],
+    ) -> None:
         self.base_cmd = base_cmd
-        self.config_path = path_args['printer.cfg']
+        self.config_path = path_args["printer.cfg"]
         self.orig_config = self.config_path
         self.dict_path = path_args["klipper.dict"]
         self.pty_path = path_args["klippy_pty_path"]
@@ -35,13 +36,12 @@ class KlippyProcess:
         for _ in range(250):
             if self.pty_path.exists():
                 try:
-                    self.fd = os.open(
-                        str(self.pty_path), os.O_RDWR | os.O_NONBLOCK)
+                    self.fd = os.open(str(self.pty_path), os.O_RDWR | os.O_NONBLOCK)
                 except Exception:
                     pass
                 else:
                     break
-            time.sleep(.01)
+            time.sleep(0.01)
         else:
             self.stop()
             pytest.fail("Unable to start Klippy process")
@@ -67,7 +67,7 @@ class KlippyProcess:
         if self.proc is not None:
             self.proc.terminate()
             try:
-                self.proc.wait(2.)
+                self.proc.wait(2.0)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
             self.proc = None

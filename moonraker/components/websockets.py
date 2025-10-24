@@ -21,7 +21,6 @@ from ..utils import ServerError, parse_ip_address
 from typing import (
     TYPE_CHECKING,
     Any,
-    Optional,
 )
 from collections.abc import Callable, Coroutine
 

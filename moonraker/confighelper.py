@@ -24,7 +24,6 @@ from typing import (
     Any,
     TextIO,
     TypeVar,
-    Union,
 )
 
 from .common import RenderableTemplate

@@ -26,8 +26,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     TypeVar,
-    Optional,
-    Union,
 )
 from collections.abc import Callable, Sequence, Generator
 
