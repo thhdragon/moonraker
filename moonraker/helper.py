@@ -1,21 +1,26 @@
-# Configuration Helper
+# Log Management
 #
-# Copyright (C) 2020 Eric Callahan <arksine.code@gmail.com>
+# Copyright (C) 2023 Eric Callahan <arksine.code@gmail.com>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license
 
 from __future__ import annotations
 
+import asyncio
 import configparser
 import copy
 import hashlib
 import logging
+import logging.handlers
 import os
 import pathlib
+import platform
 import re
+import sys
 import threading
-from collections.abc import Awaitable, Callable
+import time
 from io import StringIO
+from queue import SimpleQueue as Queue
 
 # Annotation imports
 from typing import (
@@ -26,21 +31,236 @@ from typing import (
     TypeVar,
 )
 
-from .common import RenderableTemplate
+from .common import RenderableTemplate, RequestType
 from .utils import Sentinel
+from .utils import json_wrapper as jsonw
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from .common import WebRequest
     from .components.gpio import (
         GpioEvent,
         GpioEventCallback,
         GpioFactory,
         GpioOutputPin,
     )
+    from .components.klippy_connection import KlippyConnection
     from .components.template import TemplateFactory
     from .server import Server
 
     _T = TypeVar("_T")
     ConfigVal = None | int | float | bool | str | dict | list
+
+
+class StructuredFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        record.message = record.getMessage()
+        record.asctime = self.formatTime(record, self.datefmt)
+        msg = record.message
+        if record.exc_info:
+            # Cache the traceback text to avoid converting it multiple times
+            # (it's constant anyway)
+            if not record.exc_text:
+                record.exc_text = self.formatException(record.exc_info)
+        if record.exc_text:
+            if msg[-1:] != "\n":
+                msg += "\n"
+            msg += record.exc_text
+        if record.stack_info:
+            if msg[-1:] != "\n":
+                msg += "\n"
+            msg += self.formatStack(record.stack_info)
+        data = {
+            "time": record.asctime,
+            "level": record.levelname,
+            "file": record.filename,
+            "function": record.funcName,
+            "line": record.lineno,
+            "message": msg.strip(),
+        }
+        return jsonw.dumps(data).decode()
+
+
+# Coroutine friendly QueueHandler courtesy of Martjin Pieters:
+# https://www.zopatista.com/python/2019/05/11/asyncio-logging/
+class LocalQueueHandler(logging.handlers.QueueHandler):
+    def emit(self, record: logging.LogRecord) -> None:
+        # Removed the call to self.prepare(), handle task cancellation
+        try:
+            self.enqueue(record)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            self.handleError(record)
+
+
+# Timed Rotating File Handler, based on Klipper's implementation
+class MoonrakerLoggingHandler(logging.handlers.TimedRotatingFileHandler):
+    def __init__(self, app_args: dict[str, Any], **kwargs) -> None:
+        super().__init__(app_args["log_file"], **kwargs)
+        self.app_args = app_args
+        self.rollover_info: dict[str, str] = {}
+
+    def set_rollover_info(self, name: str, item: str) -> None:
+        self.rollover_info[name] = item
+
+    def doRollover(self) -> None:
+        super().doRollover()
+        self.write_header()
+
+    def write_header(self) -> None:
+        if self.stream is None:
+            return
+        if self.app_args["structured_logging"]:
+            self._write_structured_header()
+            return
+        strtime = time.asctime(time.gmtime())
+        header = f"{'-' * 20} Log Start | {strtime} {'-' * 20}\n"
+        self.stream.write(header)
+        self.stream.write(f"platform: {platform.platform(terse=True)}\n")
+        app_section = "\n".join([f"{k}: {v}" for k, v in self.app_args.items()])
+        self.stream.write(app_section + "\n")
+        if self.rollover_info:
+            lines = [line for line in self.rollover_info.values() if line]
+            self.stream.write("\n".join(lines) + "\n")
+
+    def _write_structured_header(self) -> None:
+        msg_parts = [f"platform: {platform.platform(terse=True)}"]
+        msg_parts.extend([f"{k}: {v}" for k, v in self.app_args.items()])
+        if self.rollover_info:
+            msg_parts.extend([line for line in self.rollover_info.values() if line])
+        msg = "\n".join(msg_parts)
+        record = logging.LogRecord(
+            "root",
+            logging.INFO,
+            __file__,
+            93,
+            msg,
+            None,
+            None,
+            func="write_header",
+        )
+        self.emit(record)
+
+
+class LogManager:
+    def __init__(
+        self,
+        app_args: dict[str, Any],
+        startup_warnings: list[str],
+    ) -> None:
+        root_logger = logging.getLogger()
+        while root_logger.hasHandlers():
+            root_logger.removeHandler(root_logger.handlers[0])
+        queue: Queue = Queue()
+        queue_handler = LocalQueueHandler(queue)
+        root_logger.addHandler(queue_handler)
+        root_logger.setLevel(logging.INFO)
+        stdout_hdlr = logging.StreamHandler(sys.stdout)
+        stdout_fmt = logging.Formatter("[%(filename)s:%(funcName)s()] - %(message)s")
+        stdout_hdlr.setFormatter(stdout_fmt)
+        app_args_str = f"platform: {platform.platform(terse=True)}\n"
+        app_args_str += "\n".join([f"{k}: {v}" for k, v in app_args.items()])
+        sys.stdout.write(f"\nApplication Info:\n{app_args_str}\n")
+        self.file_hdlr: MoonrakerLoggingHandler | None = None
+        self.listener: logging.handlers.QueueListener | None = None
+        log_file: str = app_args.get("log_file", "")
+        if log_file:
+            try:
+                self.file_hdlr = MoonrakerLoggingHandler(
+                    app_args,
+                    when="midnight",
+                    backupCount=2,
+                )
+                if app_args["structured_logging"]:
+                    formatter: logging.Formatter = StructuredFormatter()
+                else:
+                    formatter = logging.Formatter(
+                        "%(asctime)s [%(filename)s:%(funcName)s()] - %(message)s",
+                    )
+                self.file_hdlr.setFormatter(formatter)
+                self.listener = logging.handlers.QueueListener(
+                    queue,
+                    self.file_hdlr,
+                    stdout_hdlr,
+                )
+                self.file_hdlr.write_header()
+            except Exception:
+                log_file = os.path.normpath(log_file)
+                dir_name = os.path.dirname(log_file)
+                startup_warnings.append(
+                    f"Unable to create log file at '{log_file}'. "
+                    f"Make sure that the folder '{dir_name}' exists "
+                    "and Moonraker has Read/Write access to the folder. ",
+                )
+        if self.listener is None:
+            self.listener = logging.handlers.QueueListener(queue, stdout_hdlr)
+        self.listener.start()
+
+    def set_server(self, server: Server) -> None:
+        self.server = server
+        self.server.register_endpoint(
+            "/server/logs/rollover",
+            RequestType.POST,
+            self._handle_log_rollover,
+        )
+
+    def set_rollover_info(self, name: str, item: str) -> None:
+        if self.file_hdlr is not None:
+            self.file_hdlr.set_rollover_info(name, item)
+
+    def rollover_log(self) -> Awaitable[None]:
+        if self.file_hdlr is None:
+            msg = "File Logging Disabled"
+            raise self.server.error(msg)
+        eventloop = self.server.get_event_loop()
+        return eventloop.run_in_thread(self.file_hdlr.doRollover)
+
+    def stop_logging(self):
+        if self.listener is not None:
+            self.listener.stop()
+
+    async def _handle_log_rollover(
+        self,
+        web_request: WebRequest,
+    ) -> dict[str, Any]:
+        log_apps = ["moonraker", "klipper"]
+        app = web_request.get_str("application", None)
+        result: dict[str, Any] = {"rolled_over": [], "failed": {}}
+        if app is not None:
+            if app not in log_apps:
+                msg = f"Unknown application {app}"
+                raise self.server.error(msg)
+            log_apps = [app]
+        if "moonraker" in log_apps:
+            try:
+                ret = self.rollover_log()
+                if ret is not None:
+                    await ret
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                result["failed"]["moonraker"] = str(e)
+            else:
+                result["rolled_over"].append("moonraker")
+        if "klipper" in log_apps:
+            kconn: KlippyConnection
+            kconn = self.server.lookup_component("klippy_connection")
+            try:
+                await kconn.rollover_log()
+            except self.server.error as e:
+                result["failed"]["klipper"] = str(e)
+            else:
+                result["rolled_over"].append("klipper")
+        return result
+
+
+# Configuration Helper
+#
+# Copyright (C) 2020 Eric Callahan <arksine.code@gmail.com>
+#
+# This file may be distributed under the terms of the GNU GPLv3 license
 
 DOCS_URL = "https://moonraker.readthedocs.io/en/latest"
 CFG_ERROR_KEY = "__CONFIG_ERROR__"
@@ -102,14 +322,14 @@ class ConfigHelper:
         return dict(self.config[self.section])
 
     def get_hash(self) -> hashlib._Hash:
-        hash = hashlib.sha256()
+        hash_ = hashlib.sha256()
         section = self.section
         if self.section not in self.config:
-            return hash
+            return hash_
         for option, val in self.config[section].items():
-            hash.update(option.encode())
-            hash.update(val.encode())
-        return hash
+            hash_.update(option.encode())
+            hash_.update(val.encode())
+        return hash_
 
     def get_prefix_sections(self, prefix: str) -> list[str]:
         return [s for s in self.sections() if s.startswith(prefix)]
@@ -153,9 +373,12 @@ class ConfigHelper:
             section = self.section
         except Exception as e:
             self.parsed[self.section][CFG_ERROR_KEY] = True
-            raise ConfigError(
+            msg = (
                 f"[{self.section}]: Option '{option}' encountered the following "
-                f"error while parsing: {e}",
+                f"error while parsing: {e}"
+            )
+            raise ConfigError(
+                msg,
             ) from e
         else:
             if deprecate:
@@ -191,24 +414,36 @@ class ConfigHelper:
         maxval: float | None,
     ) -> None:
         if above is not None and value <= above:
-            raise self.error(
+            msg = (
                 f"Config Error: Section [{self.section}], Option "
-                f"'{option}: {value}': value is not above {above}",
+                f"'{option}: {value}': value is not above {above}"
+            )
+            raise self.error(
+                msg,
             )
         if below is not None and value >= below:
-            raise self.error(
+            msg = (
                 f"Config Error: Section [{self.section}], Option "
-                f"'{option}: {value}': value is not below {below}",
+                f"'{option}: {value}': value is not below {below}"
+            )
+            raise self.error(
+                msg,
             )
         if minval is not None and value < minval:
-            raise self.error(
+            msg = (
                 f"Config Error: Section [{self.section}], Option "
-                f"'{option}: {value}': value is below minimum value {minval}",
+                f"'{option}: {value}': value is below minimum value {minval}"
+            )
+            raise self.error(
+                msg,
             )
         if maxval is not None and value > maxval:
-            raise self.error(
+            msg = (
                 f"Config Error: Section [{self.section}], Option "
-                f"'{option}: {value}': value is above maximum value {minval}",
+                f"'{option}: {value}': value is above maximum value {minval}"
+            )
+            raise self.error(
+                msg,
             )
 
     def get(
@@ -292,10 +527,13 @@ class ConfigHelper:
             result = result.lower()
         if result not in choices:
             items = list(choices.keys()) if isinstance(choices, dict) else choices
-            raise ConfigError(
+            msg = (
                 f"Section [{self.section}], Option '{option}: Value "
                 f"{result} is not a vailid choice.  Must be one of the "
-                f"following {items}",
+                f"following {items}"
+            )
+            raise ConfigError(
+                msg,
             )
         if isinstance(choices, dict):
             return choices[result]
@@ -311,9 +549,12 @@ class ConfigHelper:
         deprecate: bool = False,
     ) -> list[Any] | _T:
         if count is not None and len(count) != len(separators):
-            raise ConfigError(
+            msg = (
                 f"Option '{option}' in section "
-                f"[{self.section}]: length of 'count' argument must ",
+                f"[{self.section}]: length of 'count' argument must "
+            )
+            raise ConfigError(
+                msg,
                 "match length of 'separators' argument",
             )
         if count is None:
@@ -337,8 +578,9 @@ class ConfigHelper:
             else:
                 ret = [ltype(val.strip()) for val in value.split(sep) if val.strip()]
             if cnt is not None and len(ret) != cnt:
+                msg = f"List length mismatch, expected {cnt}, parsed {len(ret)}"
                 raise ConfigError(
-                    f"List length mismatch, expected {cnt}, parsed {len(ret)}",
+                    msg,
                 )
             return ret
 
@@ -410,15 +652,16 @@ class ConfigHelper:
         deprecate: bool = False,
     ) -> dict[str, Any] | _T:
         if len(separators) != 2:
+            msg = "The `separators` argument of getdict() must be a Tupleof length of 2"
             raise ConfigError(
-                "The `separators` argument of getdict() must be a Tupleof length of 2",
+                msg,
             )
 
         def getdict_wrapper(sec: str, opt: str) -> dict[str, Any]:
             val = self.config.get(sec, opt)
             ret: dict[str, Any] = {}
-            for line in val.split(separators[0]):
-                line = line.strip()
+            for raw_line in val.split(separators[0]):
+                line = raw_line.strip()
                 if not line:
                     continue
                 parts = line.split(separators[1], 1)
@@ -426,7 +669,8 @@ class ConfigHelper:
                     if allow_empty_fields:
                         ret[parts[0].strip()] = None
                     else:
-                        raise ConfigError(f"Failed to parse dictionary field, {line}")
+                        msg = f"Failed to parse dictionary field, {line}"
+                        raise ConfigError(msg)
                 else:
                     ret[parts[0].strip()] = dict_type(parts[1].strip())
             return ret
@@ -443,9 +687,12 @@ class ConfigHelper:
         try:
             gpio: GpioFactory = self.server.load_component(self, "gpio")
         except Exception:
-            raise ConfigError(
+            msg = (
                 f"Section [{self.section}], option '{option}', "
-                "GPIO Component not available",
+                "GPIO Component not available"
+            )
+            raise ConfigError(
+                msg,
             )
 
         def getgpio_wrapper(sec: str, opt: str) -> GpioOutputPin:
@@ -464,9 +711,12 @@ class ConfigHelper:
         try:
             gpio: GpioFactory = self.server.load_component(self, "gpio")
         except Exception:
-            raise ConfigError(
+            msg = (
                 f"Section [{self.section}], option '{option}', "
-                "GPIO Component not available",
+                "GPIO Component not available"
+            )
+            raise ConfigError(
+                msg,
             )
 
         def getgpioevent_wrapper(sec: str, opt: str) -> GpioEvent:
@@ -490,9 +740,12 @@ class ConfigHelper:
         try:
             template: TemplateFactory = self.server.load_component(self, "template")
         except Exception:
-            raise ConfigError(
+            msg = (
                 f"Section [{self.section}], option '{option}': "
-                "Failed to load 'template' component.",
+                "Failed to load 'template' component."
+            )
+            raise ConfigError(
+                msg,
             )
 
         def gettemplate_wrapper(sec: str, opt: str) -> RenderableTemplate:
@@ -535,7 +788,8 @@ class ConfigHelper:
 
     def read_supplemental_dict(self, obj: dict[str, Any]) -> ConfigHelper:
         if not obj:
-            raise ConfigError("Cannot ready Empty Dict")
+            msg = "Cannot ready Empty Dict"
+            raise ConfigError(msg)
         source = DictSourceWrapper()
         source.read_dict(obj)
         sections = source.config.sections()
@@ -663,7 +917,8 @@ class DictSourceWrapper(ConfigSourceWrapper):
         try:
             self.config.read_dict(cfg)
         except Exception as e:
-            raise ConfigError("Error Reading config as dict") from e
+            msg = "Error Reading config as dict"
+            raise ConfigError(msg) from e
 
 
 class FileSourceWrapper(ConfigSourceWrapper):
@@ -696,11 +951,13 @@ class FileSourceWrapper(ConfigSourceWrapper):
 
     def _acquire_save_lock(self) -> None:
         if not self.files:
+            msg = "Can only modify file backed configurations"
             raise ConfigError(
-                "Can only modify file backed configurations",
+                msg,
             )
         if not self.save_lock.acquire(blocking=False):
-            raise ConfigError("Configuration locked, cannot modify")
+            msg = "Configuration locked, cannot modify"
+            raise ConfigError(msg)
 
     def set_option(self, section: str, option: str, value: str) -> None:
         self._acquire_save_lock()
@@ -756,11 +1013,15 @@ class FileSourceWrapper(ConfigSourceWrapper):
             try:
                 test_parser.read_string(updated_cfg)
                 if not test_parser.has_option(section, option):
-                    raise ConfigError("Option not added")
+                    msg = "Option not added"
+                    raise ConfigError(msg)
             except Exception as e:
-                raise ConfigError(
+                msg = (
                     f"Failed to set option '{option}' in section "
-                    f"[{section}], file: {self.files[file_idx]}",
+                    f"[{section}], file: {self.files[file_idx]}"
+                )
+                raise ConfigError(
+                    msg,
                 ) from e
             # Update local configuration/tracking
             self.raw_config_data[file_idx] = updated_cfg
@@ -802,12 +1063,16 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     test_parser = configparser.ConfigParser(interpolation=None)
                     test_parser.read_string(updated_cfg)
                     if test_parser.has_option(section, option):
-                        raise ConfigError("Option still exists")
+                        msg = "Option still exists"
+                        raise ConfigError(msg)
                     pending.append((idx, updated_cfg))
                 except Exception as e:
-                    raise ConfigError(
+                    msg = (
                         f"Failed to remove option '{option}' from section "
-                        f"[{section}], file: {self.files[idx]}",
+                        f"[{section}], file: {self.files[idx]}"
+                    )
+                    raise ConfigError(
+                        msg,
                     ) from e
             # Update configuration/tracking
             for idx, data in pending:
@@ -833,10 +1098,12 @@ class FileSourceWrapper(ConfigSourceWrapper):
                 test_parser = configparser.ConfigParser(interpolation=None)
                 test_parser.read_string(updated_cfg)
                 if not test_parser.has_section(section):
-                    raise ConfigError("Section not added")
+                    msg = "Section not added"
+                    raise ConfigError(msg)
             except Exception as e:
+                msg = f"Failed to add section [{section}], file: {self.files[0]}"
                 raise ConfigError(
-                    f"Failed to add section [{section}], file: {self.files[0]}",
+                    msg,
                 ) from e
             self.updates_pending.add(0)
             self.file_section_map[section] = [0]
@@ -870,11 +1137,13 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     test_parser = configparser.ConfigParser(interpolation=None)
                     test_parser.read_string(updated_cfg)
                     if test_parser.has_section(section):
-                        raise ConfigError("Section still exists")
+                        msg = "Section still exists"
+                        raise ConfigError(msg)
                     pending.append((idx, updated_cfg))
                 except Exception as e:
+                    msg = f"Failed to remove section [{section}], file: {self.files[0]}"
                     raise ConfigError(
-                        f"Failed to remove section [{section}], file: {self.files[0]}",
+                        msg,
                     ) from e
             for idx, data in pending:
                 self.updates_pending.add(idx)
@@ -986,12 +1255,12 @@ class FileSourceWrapper(ConfigSourceWrapper):
         }
         last_option: str = ""
         opt_indent = -1
-        for idx, line in enumerate(file_data):
-            if not line.strip() or line.lstrip()[0] in "#;":
+        for idx, raw_line in enumerate(file_data):
+            if not raw_line.strip() or raw_line.lstrip()[0] in "#;":
                 # skip empty lines, whitespace, and comments
                 continue
-            line = line.expandtabs()
-            line_indent = len(line) - len(line.strip())
+            line = raw_line.expandtabs()
+            line_indent = len(line) - len(line.lstrip())
             if opt_indent != -1 and line_indent > opt_indent:
                 if last_option:
                     options[last_option]["end"] = idx + 1
@@ -1023,7 +1292,8 @@ class FileSourceWrapper(ConfigSourceWrapper):
         if result["start"] != -1:
             return result
         if raise_error:
-            raise ConfigError(f"Unable to find section [{section}]")
+            msg = f"Unable to find section [{section}]"
+            raise ConfigError(msg)
         return {}
 
     def get_file_sections(self) -> dict[str, list[str]]:
@@ -1067,8 +1337,9 @@ class FileSourceWrapper(ConfigSourceWrapper):
             stat = file_path.stat()
             cur_stat = (stat.st_dev, stat.st_ino)
             if cur_stat in visited:
+                msg = f"Recursive include directive detected, {file_path}"
                 raise ConfigError(
-                    f"Recursive include directive detected, {file_path}",
+                    msg,
                 )
             visited.append(cur_stat)
             self.files.append(file_path)
@@ -1078,11 +1349,11 @@ class FileSourceWrapper(ConfigSourceWrapper):
             lines = cfg_data.splitlines()
             last_section = ""
             opt_indent = -1
-            for line in lines:
-                if not line.strip() or line.lstrip()[0] in "#;":
+            for raw_line in lines:
+                if not raw_line.strip() or raw_line.lstrip()[0] in "#;":
                     # ignore lines that contain only whitespace/comments
                     continue
-                line = line.expandtabs(tabsize=4)
+                line = raw_line.expandtabs(tabsize=4)
                 # Search for and remove inline comments
                 cmt_match = re.search(r" +[#;]", line)
                 if cmt_match is not None:
@@ -1102,8 +1373,9 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     if section.startswith("include "):
                         inc_path = section[8:].strip()
                         if not inc_path:
+                            msg = f"Invalid include directive: [{section}]"
                             raise ConfigError(
-                                f"Invalid include directive: [{section}]",
+                                msg,
                             )
                         if inc_path[0] == "/":
                             new_path = pathlib.Path(inc_path).resolve()
@@ -1111,8 +1383,9 @@ class FileSourceWrapper(ConfigSourceWrapper):
                         else:
                             paths = sorted(file_path.parent.glob(inc_path))
                         if not paths:
+                            msg = f"No files matching include directive [{section}]"
                             raise ConfigError(
-                                f"No files matching include directive [{section}]",
+                                msg,
                             )
                         # Write out buffered data to the config before parsing
                         # included files
@@ -1126,8 +1399,9 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     if section not in self.file_section_map:
                         self.file_section_map[section] = []
                     elif file_index in self.file_section_map[section]:
+                        msg = f"Duplicate section [{section}] in file {file_path}"
                         raise ConfigError(
-                            f"Duplicate section [{section}] in file {file_path}",
+                            msg,
                         )
                     self.file_section_map[section].insert(0, file_index)
                 else:
@@ -1138,9 +1412,12 @@ class FileSourceWrapper(ConfigSourceWrapper):
                     if key not in self.file_option_map:
                         self.file_option_map[key] = []
                     elif file_index in self.file_option_map[key]:
-                        raise ConfigError(
+                        msg = (
                             f"Duplicate option '{option}' in section "
-                            f"[{last_section}], file {file_path} ",
+                            f"[{last_section}], file {file_path} "
+                        )
+                        raise ConfigError(
+                            msg,
                         )
                     self.file_option_map[key].insert(0, file_index)
                 buffer.append(line)
@@ -1149,15 +1426,20 @@ class FileSourceWrapper(ConfigSourceWrapper):
             raise
         except Exception as e:
             if not file_path.is_file():
+                msg = f"Configuration File Not Found: '{file_path}''"
                 raise ConfigError(
-                    f"Configuration File Not Found: '{file_path}''",
+                    msg,
                 ) from e
             if not os.access(file_path, os.R_OK):
-                raise ConfigError(
+                msg = (
                     "Moonraker does not have Read/Write permission for "
-                    f"config file at path '{file_path}'",
+                    f"config file at path '{file_path}'"
+                )
+                raise ConfigError(
+                    msg,
                 ) from e
-            raise ConfigError(f"Error Reading Config: '{file_path}'") from e
+            msg = f"Error Reading Config: '{file_path}'"
+            raise ConfigError(msg) from e
 
     def read_file(self, main_conf: pathlib.Path) -> None:
         self.config.clear()
@@ -1166,7 +1448,7 @@ class FileSourceWrapper(ConfigSourceWrapper):
         self.updates_pending.clear()
         self.file_section_map.clear()
         self.file_option_map.clear()
-        self._parse_file(main_conf, [])
+        self._parse_file(main_conf, visited=[])
         size = sum([len(rawcfg) for rawcfg in self.raw_config_data])
         logging.info(
             f"Configuration File '{main_conf}' parsed, total size: {size} B",
@@ -1184,7 +1466,8 @@ def get_configuration(
     source = FileSourceWrapper(server)
     source.read_file(start_path)
     if not source.config.has_section("server"):
-        raise ConfigError("No section [server] in config")
+        msg = "No section [server] in config"
+        raise ConfigError(msg)
     return ConfigHelper(server, source, "server", {})
 
 

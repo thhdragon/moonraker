@@ -45,8 +45,8 @@ if TYPE_CHECKING:
     from tornado.websocket import WebSocketHandler
     from tornado.httputil import HTTPMessageDelegate, HTTPServerRequest
     from ..server import Server
-    from ..eventloop import EventLoop
-    from ..confighelper import ConfigHelper
+    from ..common import EventLoop
+    from ..helper import ConfigHelper
     from ..common import UserInfo
     from .klippy_connection import KlippyConnection as Klippy
     from ..utils import IPAddress

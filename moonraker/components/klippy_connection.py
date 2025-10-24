@@ -21,7 +21,7 @@ from collections.abc import Awaitable, Callable, Coroutine
 
 if TYPE_CHECKING:
     from ..common import WebRequest, APITransport, BaseRemoteConnection
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from .klippy_apis import KlippyAPI
     from .file_manager.file_manager import FileManager
     from .machine import Machine

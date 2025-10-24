@@ -20,7 +20,7 @@ from typing import (
 from collections.abc import Callable, Coroutine
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from .klippy_connection import KlippyConnection
     from .klippy_apis import KlippyAPI as APIComp
     from .file_manager.file_manager import FileManager as FMComp

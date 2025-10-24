@@ -25,7 +25,7 @@ from typing import (
 from collections.abc import Awaitable, Callable
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest
     from .websockets import WebsocketManager
 

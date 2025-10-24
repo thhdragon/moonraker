@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 from collections.abc import Iterator
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest
     from .application import MoonrakerApp
     from .machine import Machine

@@ -19,7 +19,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
 
 STAT_PATH = "/proc/self/stat"
 DOC_URL = (

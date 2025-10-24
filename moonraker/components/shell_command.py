@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, cast
 from collections.abc import Awaitable, Callable, Coroutine
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
 
     OutputCallback = Callable[[bytes], None] | None
 

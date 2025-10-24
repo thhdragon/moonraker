@@ -15,7 +15,7 @@ from ...common import ExtendedEnum
 from ...utils import source_info
 
 if TYPE_CHECKING:
-    from ...confighelper import ConfigHelper
+    from ...helper import ConfigHelper
     from ..klippy_connection import KlippyConnection
 
 BASE_CONFIG: dict[str, dict[str, str]] = {

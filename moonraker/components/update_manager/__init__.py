@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from . import update_manager as um
 
 if TYPE_CHECKING:
-    from ...confighelper import ConfigHelper
+    from ...helper import ConfigHelper
 
 
 def load_component(config: ConfigHelper) -> um.UpdateManager:

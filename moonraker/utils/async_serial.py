@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from serial import Serial, SerialException
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..server import Server
 
 READER_LIMIT = 4 * 1024 * 1024

@@ -25,7 +25,7 @@ from .base_deploy import BaseDeploy
 from .common import AppType, Channel
 
 if TYPE_CHECKING:
-    from ...confighelper import ConfigHelper
+    from ...helper import ConfigHelper
     from ..file_manager.file_manager import FileManager
     from ..klippy_connection import KlippyConnection as Klippy
     from ..machine import Machine

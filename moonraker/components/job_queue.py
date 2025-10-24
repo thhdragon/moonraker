@@ -17,7 +17,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest, UserInfo
     from .klippy_apis import KlippyAPI
     from .file_manager.file_manager import FileManager

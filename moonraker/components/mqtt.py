@@ -24,9 +24,9 @@ from typing import (
 from collections.abc import Callable, Coroutine, Awaitable
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import JsonRPC, APIDefinition
-    from ..eventloop import FlexTimer
+    from ..common import FlexTimer
     from .klippy_apis import KlippyAPI
 
     FlexCallback = Callable[[bytes], Coroutine | None]

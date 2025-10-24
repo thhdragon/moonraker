@@ -17,8 +17,8 @@ from typing import TYPE_CHECKING, Any
 from collections.abc import Awaitable, Callable
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
-    from ..eventloop import EventLoop
+    from ..helper import ConfigHelper
+    from ..common import EventLoop
 
 GpioEventCallback = Callable[[float, float, int], Awaitable[None] | None]
 

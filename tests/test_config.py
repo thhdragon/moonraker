@@ -2,9 +2,9 @@ from __future__ import annotations
 import pathlib
 import pytest
 import hashlib
-import confighelper
+from moonraker import helper as confighelper
 import shutil
-from moonraker.confighelper import ConfigError
+from moonraker.helper import ConfigError
 from moonraker.server import Server
 from moonraker.utils import ServerError
 from moonraker.components import gpio
@@ -12,7 +12,7 @@ from mocks import MockGpiod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from confighelper import ConfigHelper
+    from moonraker.helper import ConfigHelper
 
 
 @pytest.fixture(scope="class")

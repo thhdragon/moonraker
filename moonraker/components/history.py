@@ -20,7 +20,7 @@ from ..common import (
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest, UserInfo
     from .database import MoonrakerDatabase as DBComp
     from .job_state import JobState

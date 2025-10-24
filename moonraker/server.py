@@ -24,13 +24,15 @@ import uuid
 # Annotation imports
 from typing import (
     TYPE_CHECKING,
+    Protocol,
+    TypedDict,
     TypeVar,
 )
 
-from . import confighelper
+from . import helper as confighelper
 from .common import RequestType
-from .eventloop import EventLoop
-from .loghelper import LogManager
+from .common import EventLoop
+from .helper import LogManager
 from .utils import (
     Sentinel,
     ServerError,
@@ -40,8 +42,104 @@ from .utils import (
     source_info,
 )
 
+
+class Component(Protocol):
+    """Protocol for server components.
+
+    Components may optionally implement component_init, on_exit, or close methods.
+    """
+
+    def component_init(self) -> Coroutine[Any, Any, None] | None:
+        """Initialize component asynchronously. Optional method."""
+        ...
+
+    def on_exit(self) -> Coroutine[Any, Any, None] | None:
+        """Handle component exit. Optional method."""
+        ...
+
+    def close(self) -> Coroutine[Any, Any, None] | None:
+        """Close component resources. Optional method."""
+        ...
+
+
+class AppArgs(TypedDict, total=False):
+    """Application arguments passed to the server."""
+
+    data_path: str
+    is_default_data_path: bool
+    config_file: str
+    backup_config: str | None
+    startup_warnings: list[str]
+    verbose: bool
+    debug: bool
+    asyncio_debug: bool
+    is_backup_config: bool
+    is_python_package: bool
+    instance_uuid: str
+    unix_socket_path: str
+    structured_logging: bool
+    log_file: str
+    python_version: str
+    launch_args: str
+    msgspec_enabled: bool
+    uvloop_enabled: bool
+    software_version: str
+    software_branch: str
+    git_version: str
+    git_branch: str
+    official_release: bool
+    unofficial_components: list[str]
+
+
+class HostInfo(TypedDict):
+    """Information about the server host."""
+
+    hostname: str
+    address: str
+    port: int
+    ssl_port: int
+
+
+class KlippyInfo(TypedDict, total=False):
+    """Information about Klippy (dynamically populated with printer objects)."""
+
+    state: str | None
+
+
+class ServerInfo(TypedDict):
+    """Server information response."""
+
+    klippy_connected: bool
+    klippy_state: str
+    components: list[str]
+    failed_components: list[str]
+    registered_directories: list[str]
+    warnings: list[str]
+    websocket_count: int
+    moonraker_version: str
+    missing_klippy_requirements: list[str]
+    api_version: tuple[int, int, int]
+    api_version_string: str
+
+
+class ConfigFile(TypedDict):
+    """Configuration file information."""
+
+    filename: str
+    sections: list[str]
+
+
+class ConfigResponse(TypedDict):
+    """Configuration response."""
+
+    config: dict[str, Any]
+    orig: dict[str, Any]
+    files: list[ConfigFile]
+
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
+    from typing import Any
 
     from .common import WebRequest
     from .components.application import MoonrakerApp
@@ -50,17 +148,10 @@ if TYPE_CHECKING:
     from .components.klippy_connection import KlippyConnection
     from .components.machine import Machine
     from .components.websockets import WebsocketManager
-    from .types import (
-        AppArgs,
-        Component,
-        ConfigFile,
-        ConfigResponse,
-        HostInfo,
-        ServerInfo,
-    )
 
     FlexCallback = Callable[..., Coroutine | None]
     _T = TypeVar("_T", Sentinel, Component)
+
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -314,7 +405,7 @@ class Server:
         self.add_log_rollover_item("config", cfg_item)
         return config
 
-    async def server_init(self, start_server: bool = True) -> None:
+    async def server_init(self, *, start_server: bool = True) -> None:
         """Initialize the server asynchronously.
 
         Parameters
@@ -355,7 +446,7 @@ class Server:
         if not restarting and start_server:
             await self.start_server()
 
-    async def start_server(self, connect_to_klippy: bool = True) -> None:
+    async def start_server(self, *, connect_to_klippy: bool = True) -> None:
         """Start the server.
 
         Parameters
@@ -388,6 +479,7 @@ class Server:
         self,
         name: str,
         item: str,
+        *,
         log: bool = True,
     ) -> None:
         """Add an item to the log rollover.
@@ -410,6 +502,7 @@ class Server:
         self,
         warning: str,
         warn_id: str | None = None,
+        *,
         log: bool = True,
         exc_info: BaseException | None = None,
     ) -> str:
@@ -567,7 +660,7 @@ class Server:
         return component
 
     def try_pip_recovery(self, missing_module: str) -> bool:
-        """Attempt to recover from a missing module by updating pip and installing dependencies.
+        """Try recovery from missing module by updating pip and installing dependencies.
 
         Parameters
         ----------
@@ -927,7 +1020,7 @@ class Server:
             The info response.
 
         """
-        raw = web_request.get_boolean("raw", False)
+        raw = web_request.get_boolean("raw", default=False)
         file_manager: FileManager | None = self.lookup_component("file_manager", None)
         reg_dirs = []
         if file_manager is not None:
@@ -1044,7 +1137,7 @@ async def launch_server(
     return None
 
 
-def main(from_package: bool = True) -> None:
+def main(*, from_package: bool = True) -> None:
     """Enter the main entry point for the Moonraker server.
 
     Parameters
@@ -1203,3 +1296,13 @@ def main(from_package: bool = True) -> None:
     logger.info("Server shutdown")
     log_manager.stop_logging()
     sys.exit(estatus)
+
+
+if __name__ == "__main__":
+    import pathlib
+    import sys
+
+    pkg_parent = pathlib.Path(__file__).parent.parent
+    sys.path.pop(0)
+    sys.path.insert(0, str(pkg_parent))
+    main(False)

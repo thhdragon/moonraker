@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from collections.abc import Mapping, Callable, Coroutine
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import UserInfo
     from .klippy_connection import KlippyConnection as Klippy
 

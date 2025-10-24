@@ -21,7 +21,7 @@ from typing import (
 from collections.abc import Callable
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest
     from .mqtt import MQTTClient
     from .history import History

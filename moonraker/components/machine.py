@@ -20,7 +20,7 @@ import distro
 import tempfile
 import getpass
 import configparser
-from ..confighelper import FileSourceWrapper
+from ..helper import FileSourceWrapper
 from ..utils import source_info, cansocket, sysfs_devs, load_system_module
 from ..utils import json_wrapper as jsonw
 from ..common import RequestType
@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Any, cast
 from collections.abc import Awaitable, Callable
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest
     from .application import MoonrakerApp
     from .klippy_connection import KlippyConnection

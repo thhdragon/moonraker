@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..server import Server
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from .secrets import Secrets
 
 

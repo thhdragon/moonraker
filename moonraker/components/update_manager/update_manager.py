@@ -34,8 +34,8 @@ from .system_deploy import PackageDeploy
 
 if TYPE_CHECKING:
     from ...common import WebRequest
-    from ...confighelper import ConfigHelper
-    from ...eventloop import FlexTimer
+    from ...helper import ConfigHelper
+    from ...common import FlexTimer
     from ...server import Server
     from ..database import MoonrakerDatabase as DBComp
     from ..database import NamespaceWrapper

@@ -18,7 +18,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from ..server import Server
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest
     from .klippy_connection import KlippyConnection as Klippy
 

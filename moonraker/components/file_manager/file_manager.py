@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from inotify_simple import Event as InotifyEvent
 
     from ...common import UserInfo, WebRequest
-    from ...confighelper import ConfigHelper
+    from ...helper import ConfigHelper
     from ..database import MoonrakerDatabase as DBComp
     from ..job_queue import JobQueue
     from ..job_state import JobState

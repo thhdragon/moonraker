@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any, cast
 from collections.abc import Coroutine
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest
     from .http_client import HttpClient
 

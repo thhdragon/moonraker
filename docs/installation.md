@@ -346,7 +346,7 @@ This section is intended for users that need to write their own
 installation script.  Detailed are the command line arguments
 available to Moonraker:
 ```
-usage: moonraker.py [-h] [-d <data path>] [-c <configfile>] [-l <logfile>] [-u <unixsocket>] [-n] [-v] [-g] [-o]
+usage: server.py [-h] [-d <data path>] [-c <configfile>] [-l <logfile>] [-u <unixsocket>] [-n] [-v] [-g] [-o]
 
 Moonraker - Klipper API Server
 
@@ -391,7 +391,7 @@ The default configuration is:
 If is necessary to run Moonraker without logging to a file the
 `-n` option may be used, for example:
 ```
-~/moonraker-env/bin/python ~/moonraker/moonraker/moonraker.py -d ~/printer_data -n
+~/moonraker-env/bin/python ~/moonraker/moonraker/server.py -d ~/printer_data -n
 ```
 
 !!! Tip
@@ -422,7 +422,7 @@ command line arguments and/or environment variables.
 
 The environment file, `moonraker.env`. is created in the data path during
 installation. A default installation's environment file will contain the path
-to `moonraker.py` and the data path option, ie:
+to `server.py` and the data path option, ie:
 
 ```
 MOONRAKER_DATA_PATH="/home/pi/printer_data"
@@ -435,7 +435,7 @@ might contain the following.  Note that this example uses command line
 arguments instead of environment variables, either would be acceptable:
 
 ```
-MOONRAKER_ARGS="/home/pi/moonraker/moonraker/moonraker.py -d /home/pi/printer_data -c /home/pi/klipper_config/moonraker.conf -l /home/pi/klipper_logs/moonraker.log"
+MOONRAKER_ARGS="/home/pi/moonraker/moonraker/server.py -d /home/pi/printer_data -c /home/pi/klipper_config/moonraker.conf -l /home/pi/klipper_logs/moonraker.log"
 ```
 
 Post installation it is simple to customize
@@ -767,7 +767,7 @@ nano ~/printer_data/systemd/moonraker.env
 Once the file is open, append the debug option(s) (`-v` and `-g` in this example) to the
 value of `MOONRAKER_ARGS`:
 ```
-MOONRAKER_ARGS="/home/pi/moonraker/moonraker/moonraker.py -d /home/pi/printer_data -c /home/pi/klipper_config/moonraker.conf -l /home/pi/klipper_logs/moonraker.log -v -g"
+MOONRAKER_ARGS="/home/pi/moonraker/moonraker/server.py -d /home/pi/printer_data -c /home/pi/klipper_config/moonraker.conf -l /home/pi/klipper_logs/moonraker.log -v -g"
 ```
 
 Save the file, exit the text editor, and restart the Moonraker service:

@@ -22,7 +22,7 @@ from collections.abc import Callable
 
 if TYPE_CHECKING:
     from ..server import Server
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from io import BufferedWriter
 
     StrOrPath = Union[str, pathlib.Path]

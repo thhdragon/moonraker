@@ -24,7 +24,7 @@ from .app_deploy import AppDeploy
 from .common import Channel
 
 if TYPE_CHECKING:
-    from ...confighelper import ConfigHelper
+    from ...helper import ConfigHelper
     from ..http_client import HttpClient
     from ..shell_command import ShellCommand
     from .update_manager import CommandHelper

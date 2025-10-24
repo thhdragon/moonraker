@@ -16,7 +16,7 @@ from ..utils import json_wrapper as jsonw
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest
     from .http_client import HttpClient, HttpResponse
     from .database import MoonrakerDatabase

@@ -30,7 +30,7 @@ from typing import (
 from collections.abc import Callable, Sequence, Generator
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest
     from .klippy_connection import KlippyConnection
     from lmdb import Environment as LmdbEnvironment

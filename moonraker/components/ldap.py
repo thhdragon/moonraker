@@ -15,7 +15,7 @@ from ldap3.core.exceptions import LDAPExceptionError
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ldap3.abstract.entry import Entry
 
 

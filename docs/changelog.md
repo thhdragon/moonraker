@@ -258,8 +258,7 @@ The format is based on [Keep a Changelog].
 ### Changed
 
 - Converted Moonraker source into a Python package.
-- The source from `moonraker.py` has been moved to `server.py`.  The remaining code in
-  `moonraker.py` serves as a legacy entry point for launching Moonraker.
+- `moonraker.py` has been merged into `server.py` to consolidate the entry point.
 - **file_manager**: Improved inotify synchronization with API requests.
 - **file_manager**: Endpoint return values are now consistent with their
   respective websocket notifications.

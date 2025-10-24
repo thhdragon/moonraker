@@ -17,7 +17,7 @@ from ..common import RequestType
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest
 
 

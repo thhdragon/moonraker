@@ -15,7 +15,7 @@ from typing import (
 from ..common import JobEvent, KlippyState
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from .klippy_apis import KlippyAPI
 
 

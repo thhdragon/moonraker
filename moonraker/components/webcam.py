@@ -19,7 +19,7 @@ from typing import (
 if TYPE_CHECKING:
     from asyncio import Future
     from ..server import Server
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest
     from .database import MoonrakerDatabase
     from .machine import Machine

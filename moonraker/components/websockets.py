@@ -27,7 +27,7 @@ from collections.abc import Callable, Coroutine
 if TYPE_CHECKING:
     from ..server import Server
     from .klippy_connection import KlippyConnection as Klippy
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from .application import MoonrakerApp
     from .extensions import ExtensionManager
     from .authorization import Authorization

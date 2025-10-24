@@ -21,7 +21,7 @@ from .app_deploy import AppDeploy
 from .common import AppType, Channel
 
 if TYPE_CHECKING:
-    from ...confighelper import ConfigHelper
+    from ...helper import ConfigHelper
     from ..file_manager.file_manager import FileManager
 
 

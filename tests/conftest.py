@@ -12,7 +12,7 @@ import subprocess
 from typing import Any
 from collections.abc import Iterator, AsyncIterator
 from moonraker.server import Server
-from moonraker.eventloop import EventLoop
+from moonraker.common import EventLoop
 from moonraker import utils
 import dbtool
 from fixtures import KlippyProcess, HttpClient, WebsocketClient

@@ -16,7 +16,7 @@ from tornado.escape import url_escape
 import logging.handlers
 import tempfile
 from queue import SimpleQueue
-from ..loghelper import LocalQueueHandler
+from ..helper import LocalQueueHandler
 from ..common import APITransport, JobEvent, KlippyState, UserInfo
 from ..utils import json_wrapper as jsonw
 
@@ -28,7 +28,7 @@ from collections.abc import Awaitable, Callable
 
 if TYPE_CHECKING:
     from .application import InternalTransport
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from .websockets import WebsocketManager
     from ..common import BaseRemoteConnection
     from tornado.websocket import WebSocketClientConnection

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from . import file_manager as fm
 
 if TYPE_CHECKING:
-    from ...confighelper import ConfigHelper
+    from ...helper import ConfigHelper
 
 
 def load_component(config: ConfigHelper) -> fm.FileManager:

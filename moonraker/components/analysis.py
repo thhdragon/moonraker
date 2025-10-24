@@ -19,7 +19,7 @@ from ..utils import json_wrapper as jsonw
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest
     from .update_manager.update_manager import UpdateManager
     from .application import MoonrakerApp

@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from ...utils import pretty_print_time
 
 if TYPE_CHECKING:
-    from ...confighelper import ConfigHelper
+    from ...helper import ConfigHelper
     from ...utils import ServerError
     from .update_manager import CommandHelper
 

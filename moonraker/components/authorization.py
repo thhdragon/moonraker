@@ -29,7 +29,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest
     from .websockets import WebsocketManager
     from tornado.httputil import HTTPServerRequest

@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from dbus_fast import Variant
     from dbus_fast.aio import ProxyInterface
 
-    from ...confighelper import ConfigHelper
+    from ...helper import ConfigHelper
     from ..dbus_manager import DbusManager
     from ..machine import Machine
     from ..shell_command import ShellCommandFactory as SCMDComp

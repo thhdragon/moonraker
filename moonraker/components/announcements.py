@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 from collections.abc import Awaitable
 
 if TYPE_CHECKING:
-    from ..confighelper import ConfigHelper
+    from ..helper import ConfigHelper
     from ..common import WebRequest
     from .http_client import HttpClient
     from .database import MoonrakerDatabase

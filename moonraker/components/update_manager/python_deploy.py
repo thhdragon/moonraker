@@ -22,7 +22,7 @@ from .app_deploy import AppDeploy, Channel
 
 if TYPE_CHECKING:
     from ...components.file_manager.file_manager import FileManager
-    from ...confighelper import ConfigHelper
+    from ...helper import ConfigHelper
     from ...utils.source_info import PackageInfo
 
 
